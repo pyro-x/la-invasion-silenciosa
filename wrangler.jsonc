@@ -1,0 +1,11 @@
+// Cloudflare Workers config (LCHP-19, D-029): static-assets Worker serving
+// the Vite build. SPA fallback handled here (single-page-application), so
+// deep links like /especies resolve client-side.
+{
+  "name": "la-invasion-silenciosa",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
