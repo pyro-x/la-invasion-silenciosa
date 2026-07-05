@@ -1,130 +1,140 @@
-# AGENTS.md — para agentes de IA y humanos que se incorporan al proyecto
+# AGENTS.md — for AI agents and humans joining the project
 
-Lee esto primero. Apunta a todas las fuentes de verdad y explica cómo se
-trabaja aquí.
+Read this first. It points to every source of truth and explains how work
+happens here.
 
-## Qué es este proyecto
+## What this project is
 
-**La Invasión Silenciosa** es un juego de ciencia ciudadana de la
-**A.V. La Chispera** (La Latina, Madrid): una app web mobile-first (PWA)
-donde los vecinos documentan señales visibles de turistificación
-("criaturas") con foto y ubicación aproximada, alimentando un mapa
-colectivo con validación comunitaria.
+**La Invasión Silenciosa** is a citizen-science game by **A.V. La
+Chispera** (La Latina, Madrid): a mobile-first web app (PWA) where
+neighbors document visible signs of touristification ("creatures") with a
+photo and an approximate location, feeding a collective map with
+community validation.
 
-**Invariante de producto — la regla de oro (INNEGOCIABLE):** se documentan
-**criaturas, nunca personas**. Nada de fotos con personas, datos privados
-(nombres, timbres, buzones) ni matrículas. Cualquier feature que toque
-fotos o ubicación debe preservar esta regla. Detalle en
+**Product invariant — the golden rule (NON-NEGOTIABLE):** we document
+**creatures, never people**. No photos with people, private data (names,
+doorbells, mailboxes) or license plates. Any feature touching photos or
+location must preserve this rule. Details in
 `docs/product/reglas-y-especificacion.md` §3.1.
 
-## Fuentes de verdad
+## Sources of truth
 
-| Qué buscas | Dónde |
+| Looking for… | Where |
 |---|---|
-| Reglas del juego, puntos, ciclo de validación, pantallas | `docs/product/reglas-y-especificacion.md` |
-| Arquitectura, stack, modelo de datos, seguridad, roadmap | `docs/architecture/brief-tecnico.md` |
-| Prototipo visual (fuente de verdad de UI y flujo) | `docs/prototype/` (fuentes JSX en `fuentes/`, capturas en `prototipo_en_imagenes/`) |
-| Roadmap y trabajo abierto | [Linear · La Invasión Silenciosa — MVP](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074) |
-| Deuda técnica registrada | `FINDINGS.md` |
-| Por qué se hizo cada cambio | `git log --no-merges` (los cuerpos de commit explican decisiones) |
+| Game rules, points, validation cycle, screens | `docs/product/reglas-y-especificacion.md` *(Spanish — see Languages)* |
+| Architecture, stack, data model, security, roadmap | `docs/architecture/brief-tecnico.md` *(Spanish — see Languages)* |
+| Visual prototype (source of truth for UI and flow) | `docs/prototype/` (JSX sources in `fuentes/`, screenshots in `prototipo_en_imagenes/`) |
+| Roadmap and open work | [Linear · La Invasión Silenciosa — MVP](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074) |
+| Decision log (ADR-lite) | [`docs/DECISIONS.md`](./docs/DECISIONS.md) |
+| Recorded tech debt | `FINDINGS.md` |
+| Why each change was made | `git log --no-merges` (commit bodies explain decisions) |
 
-**No hay carpeta de specs separada (decisión consciente):** los dos
-documentos de `docs/` son los specs vivos. La sección siguiente explica
-cómo se mantienen.
+**There is no separate specs folder (a conscious decision, D-003):** the
+two documents under `docs/` are the living specs. The next section
+explains how they are kept alive.
 
-## Regla de sincronización (la ley de este repo)
+## The sync rule (the law of this repo)
 
-> **Si un PR cambia comportamiento, actualiza el documento correspondiente
-> en el MISMO PR.** La divergencia entre docs y código es un defecto.
+> **If a PR changes behavior, it updates the corresponding document in
+> the SAME PR.** Divergence between docs and code is a defect.
 
-- Los documentos son prescriptivos: la implementación se ajusta a ellos,
-  no al revés. Si la realidad obliga a cambiar el doc, se cambia en el
-  mismo PR explicando por qué.
-- El brief técnico marca secciones como **`Decidido`** (no re-litigar sin
-  hablarlo con David) o **`Explorando`** (abierto, elige y documenta).
+- Documents are prescriptive: the implementation conforms to them, not
+  the other way around. If reality forces a doc change, change it in the
+  same PR explaining why.
+- The technical brief marks sections as **`Decidido`** (don't re-litigate
+  without talking to David) or **`Explorando`** (open — choose and
+  document).
+- **Every non-obvious decision made during implementation** (choosing
+  between alternatives, deviating from a template, resolving a ticket
+  ambiguity) is recorded in [`docs/DECISIONS.md`](./docs/DECISIONS.md)
+  **in the same PR**, with its ticket, commit and discarded alternatives.
 
-## Linear y GitHub — cómo se trabaja
+## Linear and GitHub — how we work
 
-- **Proyecto Linear:** [La Invasión Silenciosa — MVP](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074) · equipo **`av-la-chispera`** (prefijo **`LCHP`**). Milestones M0–M7.
-- **El ticket es el brief autocontenido**: contexto, alcance, fuentes de
-  verdad, incógnitas y checklist de aceptación. Se implementa leyendo el
-  ticket + los docs que enlaza. Si el ticket contradice un doc → pregunta.
-- **1 ticket = 1 rama = 1 PR.**
-  - Rama: `feature/LCHP-N-slug-corto` (p. ej. `feature/LCHP-6-shell-app`).
-  - Commits: `LCHP-N descripción imperativa en minúsculas`, en español,
-    con cuerpo verboso explicando decisiones.
-  - PR: título `LCHP-N: Título`, cuerpo en español con **Resumen / Por qué /
-    Plan de pruebas**, y `Closes LCHP-N` para que la integración
-    Linear↔GitHub cierre el ticket al mergear.
-- **Nada se mergea sin CI en verde** (typecheck, lint, tests, gitleaks).
-- Los hallazgos fuera del alcance del ticket actual van a `FINDINGS.md` y
-  reciben SU PROPIO ticket con etiqueta `deuda` (máx. 2 semanas sin
-  decisión: se programa o se degrada a `post-mvp`).
-- Los spikes (etiqueta `spike`) entregan conocimiento documentado en el
-  brief, no producto.
+- **Linear project:** [La Invasión Silenciosa — MVP](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074) · team **`av-la-chispera`** (prefix **`LCHP`**). Milestones M0–M7. Tickets, milestones and new comments are written in English (D-015).
+- **The ticket is a self-contained brief**: context, scope, sources of
+  truth, unknowns and acceptance checklist. Implement by reading the
+  ticket + the docs it links. If a ticket contradicts a doc → ask.
+- **1 ticket = 1 branch = 1 PR.**
+  - Branch: `feature/LCHP-N-short-slug` (e.g. `feature/LCHP-6-app-shell`).
+  - Commits: `LCHP-N imperative lowercase description`, in English, with
+    a verbose body explaining decisions.
+  - PR: title `LCHP-N: Title`, body in English with **Summary / Why /
+    Test plan**, and `Closes LCHP-N` so the Linear↔GitHub integration
+    closes the ticket on merge.
+- **Nothing merges without green CI** (typecheck, lint, format, tests,
+  gitleaks) — enforced by branch protection on `main`.
+- Findings outside the current ticket's scope go to `FINDINGS.md` and get
+  THEIR OWN ticket with the `tech-debt` label (max 2 weeks without a
+  decision: schedule it or demote it to `post-mvp`).
+- Spikes (`spike` label) deliver knowledge documented in the brief, not
+  product.
 
-### Lo que NUNCA se hace
+### Never do
 
-- ❌ Atribución a IA en commits o PRs (`Co-Authored-By: Claude`, etc.).
-- ❌ `git add -A` / `git add .` — siempre archivos concretos por nombre.
-- ❌ `git commit --amend` salvo petición explícita de David.
-- ❌ Comitear `.env`, claves service-role, o cualquier secreto. La
-  `anon key` de Supabase es pública por diseño; TODO lo demás no.
-- ❌ Tocar el esquema de Supabase a mano en el dashboard: solo migraciones
-  versionadas en `supabase/migrations/`.
+- ❌ AI attribution in commits or PRs (`Co-Authored-By: Claude`, etc.).
+- ❌ `git add -A` / `git add .` — always stage specific files by name.
+- ❌ `git commit --amend` unless David explicitly asks.
+- ❌ Committing `.env`, service-role keys, or any secret. The Supabase
+  `anon key` is public by design; EVERYTHING else is not.
+- ❌ Touching the Supabase schema by hand in the dashboard: only
+  versioned migrations under `supabase/migrations/`.
 
-## Idiomas
+## Languages (D-014, D-015)
 
-| Ámbito | Idioma |
+| Scope | Language |
 |---|---|
-| Código: identificadores, tipos, tablas, columnas | **Inglés** (`Sighting`, `point_events`, `moderation_status`…) |
-| Strings de UI visibles al usuario | **Español** |
-| Comentarios de código, docs, tickets, commits, PRs | **Español** |
+| Code: identifiers, types, tables, columns, comments | **English** (`Sighting`, `point_events`, `moderation_status`…) |
+| Commits, PRs, README, this file, DECISIONS.md, FINDINGS.md, CI | **English** |
+| Linear: tickets, milestones, new comments | **English** — same audience as the repo |
+| Product documents (`reglas-y-especificacion.md`, `brief-tecnico.md`) | **Spanish** — they belong to the neighborhood association |
+| UI strings visible to users | **Spanish** (quote them verbatim in Spanish inside tickets/PRs) |
+| Conversation with David | Spanish |
 
-## Stack — bloqueado, no re-litigar
+## Stack — locked, do not re-litigate
 
-| Tema | Decisión |
+| Topic | Decision |
 |---|---|
-| Frontend | React 19 + TypeScript (estricto, sin `any`) + Vite |
-| Estilos | Tailwind CSS v4 (CSS-first) + shadcn/ui + lucide-react |
-| Datos remotos | TanStack Query; Zustand solo si hace falta estado global |
-| Mapa | MapLibre GL JS + tiles raster OSM (abstracción `tileProvider.ts`) |
-| Backend | Supabase Free: Postgres + RLS + Storage privado + **una única** Edge Function router |
+| Frontend | React 19 + TypeScript (strict, no `any`) + Vite |
+| Styling | Tailwind CSS v4 (CSS-first) + shadcn/ui + lucide-react |
+| Remote data | TanStack Query; Zustand only if global state is needed |
+| Map | MapLibre GL JS + OSM raster tiles (`tileProvider.ts` abstraction) |
+| Backend | Supabase Free: Postgres + RLS + private Storage + **a single** router Edge Function |
 | Hosting | Cloudflare Pages |
-| Distribución | PWA (QR, sin stores); Capacitor solo post-MVP |
-| Gestor de paquetes | pnpm |
-| Descartado para MVP | Next.js, React Native, Redux, backend Node propio, realtime, push, self-hosting |
+| Distribution | PWA (QR, no stores); Capacitor post-MVP only |
+| Package manager | pnpm |
+| Rejected for MVP | Next.js, React Native, Redux, self-managed Node backend, realtime, push, self-hosting |
 
-Justificación de cada elección: brief técnico §7–§8. Si te tienta cambiar
-algo de esta tabla, lee antes la sección correspondiente del brief.
+Rationale for each choice: technical brief §7–§8. If you are tempted to
+change anything in this table, read the corresponding brief section first.
 
-## El spec es el techo, no el suelo (alcance MVP)
+## The spec is the ceiling, not the floor (MVP scope)
 
-El brief técnico contempla fases post-MVP enteras (moderación automática,
-blur, OCR, Turnstile, vector tiles, modo asociación). **No las construyas
-por adelantado.** Regla práctica:
+The technical brief covers entire post-MVP phases (automatic moderation,
+blur, OCR, Turnstile, vector tiles, association mode). **Do not build
+them ahead of time.** Rule of thumb:
 
-- Si un problema lo detectaría un usuario gritando un minuto después de
-  ocurrir → es del MVP.
-- Si solo se manifiesta con abuso masivo, meses de datos o escenarios de
-  recuperación exóticos → post-MVP; como mucho deja el hueco en el esquema
-  o un comentario `// TODO(post-mvp):` apuntando a la sección del brief.
-- El esquema de datos SÍ se crea completo (estados `rejected`/`removed`,
-  `reports`…): es la válvula de escape barata. Lo que no se crea es la UI
-  ni la lógica que los usa.
+- If a problem would be caught by a user screaming one minute after it
+  happens → it belongs to the MVP.
+- If it only manifests under massive abuse, months of data or exotic
+  recovery scenarios → post-MVP; at most leave the slot in the schema or
+  a `// TODO(post-mvp):` comment pointing to the brief section.
+- The data schema IS created in full (`rejected`/`removed` states,
+  `reports`…): it is the cheap escape valve. What is not built is the UI
+  or the logic that uses them.
 
-## Cosas que deben hacerte parar y preguntar
+## Things that must make you stop and ask
 
-- Cualquier cambio en **policies RLS, políticas de Storage o la auth de la
-  Edge Function** → es la zona de seguridad crítica; requiere revisión
-  adversarial en el PR (otro modelo/agente intenta romperlo antes del merge).
-- Cualquier cosa que afecte a la **regla de oro de privacidad** (fotos,
-  EXIF, precisión de ubicación, qué columnas expone una vista pública).
-- Añadir una dependencia que compita con el stack bloqueado.
-- Un ticket que contradiga un doc, o un doc que contradiga otro.
-- Cualquier acción que acerque el proyecto a salir del free tier.
+- Any change to **RLS policies, Storage policies or the Edge Function
+  auth** → this is the security-critical zone; it requires adversarial
+  review on the PR (another model/agent tries to break it before merge).
+- Anything affecting the **privacy golden rule** (photos, EXIF, location
+  precision, which columns a public view exposes).
+- Adding a dependency that competes with the locked stack.
+- A ticket contradicting a doc, or a doc contradicting another.
+- Any action that moves the project closer to leaving the free tier.
 
-## Mantenedor
+## Maintainer
 
-David Monterroso ([@pyro-x](https://github.com/pyro-x)) — conversación en
-español. Proyecto de la A.V. La Chispera.
+David Monterroso ([@pyro-x](https://github.com/pyro-x)) — conversation in
+Spanish. A project of A.V. La Chispera.
