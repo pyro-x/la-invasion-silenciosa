@@ -85,6 +85,7 @@
   <button id="btn-gum-stop" class="sec" disabled>Detener</button>
   <button id="btn-gum-capture" disabled>📸 Capturar foto</button>
   <video id="video" autoplay playsinline muted></video>
+  <img id="captura-preview" alt="Foto capturada" style="display:none;max-width:100%;border:2px solid #2f7d4a;border-radius:8px;margin-top:8px" />
   <div class="out" id="o-gum">Sin iniciar.</div>
 </section>
 
@@ -184,10 +185,14 @@
 
   // ---- 0 · modo de ejecución -------------------------------------------
   (function detectarModo() {
+    // Evaluado UNA VEZA al cargar: si se evaluara tras requestFullscreen,
+    // display-mode:fullscreen daría un falso "instalada".
     const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.matchMedia("(display-mode: fullscreen)").matches ||
-      window.navigator.standalone === true;
+      window.__standaloneAtLoad !== undefined
+        ? window.__standaloneAtLoad
+        : (window.__standaloneAtLoad =
+            window.matchMedia("(display-mode: standalone)").matches ||
+            window.navigator.standalone === true);
     R.modo = standalone ? "PWA instalada (standalone)" : "pestaña de navegador";
     badge("b-modo", standalone ? "pass" : "warn", standalone ? "standalone" : "pestaña");
     $("o-modo").textContent =
@@ -361,6 +366,10 @@
     const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.92));
     if (blob) {
       R.capturaCanvas = "OK · " + c.width + "×" + c.height + " · " + KB(blob.size);
+      const prev = $("captura-preview");
+      prev.src = URL.createObjectURL(blob);
+      prev.style.display = "block";
+      prev.scrollIntoView({ behavior: "smooth", block: "nearest" });
       await procesarFoto(blob, "captura getUserMedia → canvas");
     } else {
       R.capturaCanvas = "FALLO (toBlob null)";
