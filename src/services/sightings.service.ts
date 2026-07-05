@@ -1,6 +1,6 @@
 // Typed fake service (D-007): prototype sightings (data.jsx). Coordinates
 // are prototype canvas coords until MapLibre lands in LCHP-13 (D-016).
-import type { MapSighting } from '@/types/sighting'
+import type { CaptureLocation, MapSighting, NewSighting } from '@/types/sighting'
 
 const SIGHTINGS: MapSighting[] = [
   {
@@ -88,4 +88,33 @@ export async function listMapSightings(): Promise<MapSighting[]> {
 
 export async function listPendingSightings(): Promise<MapSighting[]> {
   return SIGHTINGS.filter((s) => s.status === 'pending')
+}
+
+// Fake approximate location for the capture flow (prototype's hardcoded spot);
+// real geolocation lands in M4 (LCHP-5 spike).
+const APPROX_LOCATION: CaptureLocation = {
+  street: 'Calle de la Cava Baja · La Latina',
+  shortStreet: 'Cava Baja',
+  x: 710,
+  y: 225,
+}
+
+export async function getApproxLocation(): Promise<CaptureLocation> {
+  return APPROX_LOCATION
+}
+
+let nextSightingNumber = 224
+
+/** Fake submit: appends the sighting as pending to the in-memory map data. */
+export async function submitSighting(draft: NewSighting): Promise<MapSighting> {
+  const sighting: MapSighting = {
+    ...draft,
+    id: `A-${nextSightingNumber++}`,
+    reportedBy: 'pyroxine',
+    reportedAgo: 'ahora mismo',
+    status: 'pending',
+    verificationCount: 0,
+  }
+  SIGHTINGS.push(sighting)
+  return sighting
 }

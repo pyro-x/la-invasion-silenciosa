@@ -15,12 +15,23 @@ export type Profile = {
   alias: string
   points: number
   weekRank: number
+  /** Avatar accent color from the prototype data. */
+  color: string
   counts: {
     sightings: number
     verifications: number
     videos: number
   }
   perSpecies: Record<SpeciesId, number>
+}
+
+export type Badge = {
+  id: string
+  /** Glyph shown in the badge tile (prototype BADGES icons). */
+  icon: string
+  /** Spanish label (product copy), e.g. "Primer hallazgo". */
+  label: string
+  earned: boolean
 }
 
 export type RankingEntry = {

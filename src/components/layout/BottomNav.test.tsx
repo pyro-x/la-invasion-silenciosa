@@ -2,11 +2,16 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
+import { Providers } from '@/app/providers'
 import { routes } from '@/app/router'
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
+  render(
+    <Providers>
+      <RouterProvider router={router} />
+    </Providers>,
+  )
   return router
 }
 
@@ -22,7 +27,7 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('link', { name: /ranking/i }))
-    expect(screen.getByText('Top 10 semanal')).toBeInTheDocument()
+    expect(screen.getByText('Ranking semanal')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /ranking/i })).toHaveClass('active')
   })
 
@@ -30,7 +35,8 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('button', { name: 'Cazar' }))
-    expect(screen.getByText('Flujo de captura')).toBeInTheDocument()
+    expect(screen.getByText('Nuevo avistamiento')).toBeInTheDocument()
+    expect(screen.getByText('Captura la criatura')).toBeInTheDocument()
   })
 
   it('the home screen offers «Empezar la misión»', () => {
