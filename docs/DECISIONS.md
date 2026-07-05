@@ -190,3 +190,24 @@ Why / Trail**.
 **Alternatives:** import the prototype `.js` at build time (keeps `docs/` as a runtime dependency and needs an untyped side-effect import) · trim `places` (saves ~3 KB but amputates the asset LCHP-13 may want for labels/geocoding).
 **Why:** the app must not execute files out of `docs/`; a committed typed module is greppable, type-checked and dies with LCHP-13 anyway (MapLibre replaces this dataset in M3).
 **Trail:** LCHP-8 · src/components/map/lalatina-geo.ts · D-016.
+
+## D-026 · 2026-07-05 · Success screen: brief §4 wording overrides the mockup's definitive «+10 pts» (LCHP-9)
+
+**Decision:** the capture-flow success screen keeps the mockup's structure (PixelBurst, popped-in sprite, green chip, display title, muted subtitle, CTA) but corrects the copy: the chip reads «+10 pts pendientes» and the subtitle is the exact product string **«Avistamiento enviado · +10 puntos pendientes de validación»** (asserted verbatim by a unit test), replacing the mockup's «+10 PTS» chip and «Pendiente de validación por la comunidad.» line.
+**Alternatives:** mockup copy verbatim (the D-019 replica default) · dropping the chip entirely.
+**Why:** brief §4/§19 forbids presenting the +10 as definitive before community validation, and LCHP-9 makes this the one sanctioned copy deviation from the replica bar; keeping the chip but qualifying it preserves the mockup's visual rhythm without breaking the product rule.
+**Trail:** LCHP-9 · brief §4, §19 · src/pages/HuntPage.tsx · src/pages/HuntPage.test.tsx.
+
+## D-027 · 2026-07-05 · Prototype StreetMap ported now for the location step (LCHP-9)
+
+**Decision:** the prototype's vector map of La Latina (screens1.jsx `StreetMap` over `lalatina-geo.js`) is ported as `src/components/map/StreetMap.tsx`, with the OSM geometry extracted verbatim to `src/components/map/lalatina-geo.json`, because the capture flow's step 3 previews the new pin on it (captura_11). LCHP-8's map screen can reuse the component; MapLibre replaces it in LCHP-13 (D-016).
+**Alternatives:** a static placeholder for step 3 (fails the D-019 replica bar) · waiting for LCHP-8 to port it (couples this ticket to an unmerged sibling).
+**Why:** the replica requires the real vector render, the component is self-contained, and shared UI belongs to whichever ticket needs it first.
+**Trail:** LCHP-9 · src/components/map/ · D-016, D-019.
+
+## D-028 · 2026-07-05 · Profile ships without «Modo asociación» and the certificate (LCHP-9)
+
+**Decision:** ProfilePage omits the mockup's association-mode entry card and the «Explorador del mes» certificate panel; everything else replicates captures 20–21 (header with level and progress, per-action stats, captures per species, badges grid, points reminder).
+**Alternatives:** render both as decorative dead UI to keep the pixel-perfect replica.
+**Why:** both blocks are explicitly out of LCHP-9's scope (association mode and certificate are post-MVP); dead UI on a build demoable to the association invites taps that go nowhere and misrepresents the MVP's scope.
+**Trail:** LCHP-9 · reglas-y-especificacion.md §4.2 · src/pages/ProfilePage.tsx.

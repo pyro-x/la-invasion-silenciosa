@@ -22,3 +22,24 @@ export type MapSighting = {
   status: SightingStatus
   verificationCount: number
 }
+
+/**
+ * Approximate location offered during the capture flow. Fake data until real
+ * geolocation lands in M4 (LCHP-5 spike); privacy rule: approximate only.
+ */
+export type CaptureLocation = {
+  /** Full label shown in the location step, e.g. "Calle de la Cava Baja · La Latina". */
+  street: string
+  /** Short form used in the review card, e.g. "Cava Baja". */
+  shortStreet: string
+  x: number
+  y: number
+}
+
+/** Payload of a new sighting submitted from the capture flow. */
+export type NewSighting = {
+  speciesId: SpeciesId
+  x: number
+  y: number
+  street: string
+}

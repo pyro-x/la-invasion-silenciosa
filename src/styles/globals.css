@@ -376,6 +376,36 @@ body {
     opacity: 1;
   }
 }
+@keyframes burst0 {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3) rotate(180deg);
+    opacity: 0;
+  }
+}
+@keyframes burst1 {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2) rotate(-120deg);
+    opacity: 0;
+  }
+}
+@keyframes burst2 {
+  0% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4) rotate(90deg);
+    opacity: 0;
+  }
+}
 .floaty {
   animation: floaty 3s ease-in-out infinite;
 }
@@ -389,7 +419,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .floaty,
   .popin,
-  .slidein {
+  .slidein,
+  .burst span {
     animation: none !important;
   }
 }
