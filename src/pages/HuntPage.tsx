@@ -238,13 +238,20 @@ export function HuntPage() {
           <div className="stack" style={{ gap: 12 }}>
             <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3' }}>
               <StreetMap
-                pins={[
+                heat={false}
+                selected={null}
+                onPick={() => {}}
+                sightings={[
                   {
                     id: 'new',
                     speciesId: state.speciesId,
                     x: location?.x ?? 710,
                     y: location?.y ?? 225,
+                    street: '',
+                    reportedBy: '',
+                    reportedAgo: '',
                     status: 'pending',
+                    verificationCount: 0,
                   },
                 ]}
               />

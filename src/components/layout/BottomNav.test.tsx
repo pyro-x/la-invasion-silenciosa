@@ -1,19 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
-import { Providers } from '@/app/providers'
-import { routes } from '@/app/router'
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(
-    <Providers>
-      <RouterProvider router={router} />
-    </Providers>,
-  )
-  return router
-}
+import { renderRoute as renderAt } from '@/test/render'
 
 describe('shell navigation', () => {
   it('renders the 5 destinations of the bottom bar', () => {
@@ -27,7 +14,7 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('link', { name: /ranking/i }))
-    expect(screen.getByText('Ranking semanal')).toBeInTheDocument()
+    expect(screen.getByText('Top 10 semanal')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /ranking/i })).toHaveClass('active')
   })
 
@@ -35,12 +22,11 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('button', { name: 'Cazar' }))
-    expect(screen.getByText('Nuevo avistamiento')).toBeInTheDocument()
-    expect(screen.getByText('Captura la criatura')).toBeInTheDocument()
+    expect(screen.getByText('Flujo de captura')).toBeInTheDocument()
   })
 
   it('the home screen offers «Empezar la misión»', () => {
     renderAt('/')
-    expect(screen.getByRole('link', { name: 'Empezar la misión' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /empezar la misión/i })).toBeInTheDocument()
   })
 })
