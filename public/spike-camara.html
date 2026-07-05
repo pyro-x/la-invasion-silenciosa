@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>Spike LCHP-5 — pruebas de cámara y geolocalización</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 12px 12px 48px;
+    font: 15px/1.45 system-ui, -apple-system, sans-serif;
+    background: #14141c; color: #e8e8f0;
+  }
+  header {
+    background: #7c2d2d; border: 2px dashed #ffb4b4; border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 16px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 18px; }
+  header p { margin: 0; font-size: 13px; color: #ffd9d9; }
+  section {
+    background: #1e1e2a; border: 1px solid #34344a; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 14px;
+  }
+  h2 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  button {
+    font: inherit; font-weight: 600; color: #14141c; background: #ffd166;
+    border: 0; border-radius: 8px; padding: 10px 14px; margin: 4px 6px 4px 0;
+    cursor: pointer;
+  }
+  button.sec { background: #3a3a52; color: #e8e8f0; }
+  button:disabled { opacity: 0.4; }
+  video, canvas.preview, img.preview {
+    width: 100%; max-height: 300px; object-fit: contain;
+    background: #000; border-radius: 8px; margin-top: 8px;
+  }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 700;
+    padding: 2px 8px; border-radius: 99px; background: #3a3a52; color: #cfcfe0;
+  }
+  .badge.pass { background: #1d5c33; color: #b6f7c8; }
+  .badge.fail { background: #6e1f1f; color: #ffc2c2; }
+  .badge.warn { background: #6e5a1f; color: #ffeeb0; }
+  .out {
+    font-family: ui-monospace, monospace; font-size: 12.5px;
+    background: #10101a; border-radius: 8px; padding: 8px 10px;
+    margin-top: 8px; white-space: pre-wrap; word-break: break-word;
+    min-height: 1.4em;
+  }
+  input[type=file] { display: none; }
+  label.filebtn {
+    display: inline-block; font-weight: 600; color: #14141c; background: #8ecae6;
+    border-radius: 8px; padding: 10px 14px; margin: 4px 6px 4px 0; cursor: pointer;
+  }
+  #resumen {
+    font-family: ui-monospace, monospace; font-size: 12px;
+    background: #0b2018; border: 1px solid #1d5c33; border-radius: 8px;
+    padding: 10px; white-space: pre-wrap; word-break: break-word;
+  }
+  #errores:empty { display: none; }
+  #errores { background: #2a1010; border: 1px solid #6e1f1f; border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 14px; font-family: ui-monospace, monospace; font-size: 12px; }
+  .hint { font-size: 12.5px; color: #9a9ab5; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Spike LCHP-5 — página de pruebas, no es la app</h1>
+  <p>Sondeo de cámara + geolocalización en PWA. Esta página se elimina al cerrar el spike.
+     Pulsa los botones en orden y haz captura de pantalla del resumen final.</p>
+</header>
+
+<div id="errores"></div>
+
+<section id="sec-modo">
+  <h2>0 · Modo de ejecución <span class="badge" id="b-modo">…</span></h2>
+  <div class="out" id="o-modo"></div>
+</section>
+
+<section id="sec-gum">
+  <h2>1 · Cámara trasera con getUserMedia <span class="badge" id="b-gum">pendiente</span></h2>
+  <button id="btn-gum-start">Iniciar cámara</button>
+  <button id="btn-gum-stop" class="sec" disabled>Detener</button>
+  <button id="btn-gum-capture" disabled>📸 Capturar foto</button>
+  <video id="video" autoplay playsinline muted></video>
+  <div class="out" id="o-gum">Sin iniciar.</div>
+</section>
+
+<section id="sec-input">
+  <h2>2 · Fallback &lt;input type=file&gt; <span class="badge" id="b-input">pendiente</span></h2>
+  <label class="filebtn">📷 Cámara nativa (capture)
+    <input type="file" id="file-capture" accept="image/*" capture="environment" />
+  </label>
+  <label class="filebtn">🖼️ Elegir de galería
+    <input type="file" id="file-gallery" accept="image/*" />
+  </label>
+  <p class="hint">La foto de galería es la mejor prueba de GPS en EXIF (las fotos de la
+     cámara del sistema suelen llevarlo si la app Cámara tiene permiso de ubicación).</p>
+  <div class="out" id="o-input">Sin foto.</div>
+</section>
+
+<section id="sec-foto">
+  <h2>3 · EXIF + re-codificación <span class="badge" id="b-foto">pendiente</span></h2>
+  <p class="hint">Cada foto (de 1 o 2) pasa por aquí: tamaño original, ¿EXIF?, ¿GPS en EXIF?,
+     re-codificado canvas → JPEG máx. 1280 px q0.8 y comprobación de que el EXIF desaparece.</p>
+  <div class="out" id="o-foto">Sin foto procesada.</div>
+  <img class="preview" id="img-reenc" alt="" hidden />
+</section>
+
+<section id="sec-geo">
+  <h2>4 · Geolocalización <span class="badge" id="b-geo">pendiente</span></h2>
+  <button id="btn-geo">Obtener posición</button>
+  <button id="btn-watch" class="sec">Seguir posición (watch)</button>
+  <div class="out" id="o-geo">Sin solicitar.</div>
+  <div class="out" id="o-watch" hidden></div>
+</section>
+
+<section id="sec-fs">
+  <h2>5 · Pantalla completa <span class="badge" id="b-fs">pendiente</span></h2>
+  <button id="btn-fs">Probar requestFullscreen</button>
+  <button id="btn-fs-exit" class="sec" disabled>Salir</button>
+  <div class="out" id="o-fs">Sin probar.</div>
+</section>
+
+<section id="sec-resumen">
+  <h2>6 · Resumen (haz captura de pantalla de esto)</h2>
+  <pre id="resumen"></pre>
+  <button id="btn-copy" class="sec">Copiar resumen</button>
+</section>
+
+<script>
+"use strict";
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KB = (n) => (n / 1024).toFixed(1) + " KB";
+
+  const R = {
+    modo: "?",
+    getUserMedia: "pendiente",
+    capturaCanvas: "pendiente",
+    inputFile: "pendiente",
+    exifOriginal: "sin foto",
+    gpsOriginal: "sin foto",
+    reencode: "pendiente",
+    exifTrasReencode: "pendiente",
+    geoCurrent: "pendiente",
+    geoWatch: "pendiente",
+    fullscreen: "pendiente",
+  };
+
+  function badge(id, cls, txt) {
+    const b = $(id);
+    b.className = "badge" + (cls ? " " + cls : "");
+    b.textContent = txt;
+  }
+
+  function renderResumen() {
+    const lines = [
+      "=== RESUMEN SPIKE LCHP-5 · " + new Date().toISOString() + " ===",
+      "modo: " + R.modo,
+      "getUserMedia (cámara trasera): " + R.getUserMedia,
+      "captura a canvas: " + R.capturaCanvas,
+      "input file: " + R.inputFile,
+      "EXIF en foto original: " + R.exifOriginal,
+      "GPS en EXIF original: " + R.gpsOriginal,
+      "re-codificado 1280px JPEG q0.8: " + R.reencode,
+      "EXIF tras re-codificar: " + R.exifTrasReencode,
+      "geolocalización (getCurrentPosition): " + R.geoCurrent,
+      "geolocalización (watchPosition): " + R.geoWatch,
+      "requestFullscreen: " + R.fullscreen,
+      "userAgent: " + navigator.userAgent,
+    ];
+    $("resumen").textContent = lines.join("\n");
+  }
+
+  window.addEventListener("error", (e) => {
+    $("errores").textContent += "ERROR JS: " + e.message + "\n";
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    $("errores").textContent += "PROMESA RECHAZADA: " + (e.reason && e.reason.message || e.reason) + "\n";
+  });
+
+  // ---- 0 · modo de ejecución -------------------------------------------
+  (function detectarModo() {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.matchMedia("(display-mode: fullscreen)").matches ||
+      window.navigator.standalone === true;
+    R.modo = standalone ? "PWA instalada (standalone)" : "pestaña de navegador";
+    badge("b-modo", standalone ? "pass" : "warn", standalone ? "standalone" : "pestaña");
+    $("o-modo").textContent =
+      "display-mode standalone: " + window.matchMedia("(display-mode: standalone)").matches +
+      "\nnavigator.standalone (iOS): " + String(window.navigator.standalone) +
+      "\ncontexto seguro (HTTPS): " + window.isSecureContext +
+      "\nuserAgent: " + navigator.userAgent;
+    renderResumen();
+  })();
+
+  // ---- parser EXIF mínimo (solo JPEG; busca APP1/Exif y el puntero al GPS IFD 0x8825)
+  function analizarExif(buffer) {
+    const v = new DataView(buffer);
+    if (v.byteLength < 4 || v.getUint16(0) !== 0xffd8) return { jpeg: false, exif: false, gps: false };
+    let off = 2;
+    while (off + 4 <= v.byteLength) {
+      const marker = v.getUint16(off);
+      if ((marker & 0xff00) !== 0xff00 || marker === 0xffda) break;
+      const size = v.getUint16(off + 2);
+      if (size < 2) break;
+      if (marker === 0xffe1 && off + 4 + size <= v.byteLength + 2 && size >= 16 &&
+          v.getUint32(off + 4) === 0x45786966 && v.getUint16(off + 8) === 0) {
+        const t = off + 10;
+        const bom = v.getUint16(t);
+        const little = bom === 0x4949;
+        if (!little && bom !== 0x4d4d) return { jpeg: true, exif: true, gps: false };
+        const g16 = (o) => v.getUint16(t + o, little);
+        const g32 = (o) => v.getUint32(t + o, little);
+        try {
+          if (g16(2) !== 42) return { jpeg: true, exif: true, gps: false };
+          const ifd0 = g32(4);
+          const n = g16(ifd0);
+          let gps = false;
+          for (let i = 0; i < n; i++) {
+            if (g16(ifd0 + 2 + i * 12) === 0x8825) { gps = true; break; }
+          }
+          return { jpeg: true, exif: true, gps };
+        } catch {
+          return { jpeg: true, exif: true, gps: false };
+        }
+      }
+      off += 2 + size;
+    }
+    return { jpeg: true, exif: false, gps: false };
+  }
+
+  // ---- 3 · pipeline de foto --------------------------------------------
+  async function procesarFoto(blob, origen) {
+    const out = $("o-foto");
+    const buf = await blob.arrayBuffer();
+    const esJpeg = blob.type === "image/jpeg" || new DataView(buf).getUint16(0) === 0xffd8;
+    let lineas = [
+      "origen: " + origen,
+      "tipo: " + (blob.type || "desconocido") + " · tamaño original: " + KB(blob.size),
+    ];
+
+    if (esJpeg) {
+      const exif = analizarExif(buf);
+      R.exifOriginal = exif.exif ? "SÍ" : "NO";
+      R.gpsOriginal = exif.exif ? (exif.gps ? "SÍ ⚠️ (hay que eliminarlo)" : "NO") : "NO (sin EXIF)";
+      lineas.push("EXIF presente: " + (exif.exif ? "SÍ" : "NO") + " · GPS en EXIF: " + (exif.gps ? "SÍ ⚠️" : "NO"));
+    } else {
+      R.exifOriginal = "no analizable (no es JPEG: " + (blob.type || "?") + ")";
+      R.gpsOriginal = R.exifOriginal;
+      lineas.push("No es JPEG (¿HEIC?): el parser EXIF de esta página no aplica; la re-codificación sí.");
+    }
+
+    const t0 = performance.now();
+    let bmp;
+    try {
+      bmp = await createImageBitmap(blob, { imageOrientation: "from-image" });
+    } catch {
+      bmp = await new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => res(img);
+        img.onerror = rej;
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+    const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
+    const escala = Math.min(1, 1280 / Math.max(w0, h0));
+    const w = Math.round(w0 * escala), h = Math.round(h0 * escala);
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
+
+    const jpegBlob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.8));
+    const ms = Math.round(performance.now() - t0);
+    const webpBlob = await new Promise((res) => canvas.toBlob(res, "image/webp", 0.8));
+    const webpOk = webpBlob && webpBlob.type === "image/webp";
+
+    if (!jpegBlob) {
+      R.reencode = "FALLO (canvas.toBlob devolvió null)";
+      badge("b-foto", "fail", "FAIL");
+    } else {
+      const exif2 = analizarExif(await jpegBlob.arrayBuffer());
+      R.reencode = "OK · " + w0 + "×" + h0 + " → " + w + "×" + h + " · " + KB(jpegBlob.size) + " · " + ms + " ms";
+      R.exifTrasReencode = exif2.exif ? "SÍ ⚠️ FALLO DE PRIVACIDAD" : "NO ✅ (eliminado)";
+      lineas.push("re-codificado: " + w0 + "×" + h0 + " → " + w + "×" + h + " · JPEG q0.8: " + KB(jpegBlob.size) + " · " + ms + " ms");
+      lineas.push("WebP q0.8: " + (webpOk ? KB(webpBlob.size) : "no soportado"));
+      lineas.push("EXIF tras re-codificar: " + (exif2.exif ? "SÍ ⚠️" : "NO ✅") + " · GPS: " + (exif2.gps ? "SÍ ⚠️" : "NO ✅"));
+      const objetivo = jpegBlob.size <= 300 * 1024;
+      lineas.push("objetivo 150–300 KB (brief §17): " + (objetivo ? "dentro ✅" : "FUERA ⚠️ (" + KB(jpegBlob.size) + ")"));
+      badge("b-foto", exif2.exif ? "fail" : "pass", exif2.exif ? "FAIL" : "PASS");
+      const img = $("img-reenc");
+      img.src = URL.createObjectURL(jpegBlob);
+      img.hidden = false;
+    }
+    out.textContent = lineas.join("\n");
+    renderResumen();
+  }
+
+  // ---- 1 · getUserMedia -------------------------------------------------
+  let stream = null;
+  const video = $("video");
+
+  $("btn-gum-start").addEventListener("click", async () => {
+    const out = $("o-gum");
+    out.textContent = "Solicitando cámara…";
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("navigator.mediaDevices.getUserMedia no existe");
+      }
+      const t0 = performance.now();
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 } },
+        audio: false,
+      });
+      const ms = Math.round(performance.now() - t0);
+      video.srcObject = stream;
+      await video.play().catch(() => {});
+      const track = stream.getVideoTracks()[0];
+      const s = track.getSettings();
+      const trasera = s.facingMode === "environment";
+      R.getUserMedia = "OK · " + (s.width || "?") + "×" + (s.height || "?") +
+        " · facingMode=" + (s.facingMode || "?") + (trasera ? " (trasera ✅)" : " ⚠️") + " · " + ms + " ms";
+      badge("b-gum", "pass", "PASS");
+      out.textContent = "PASS · permiso concedido en " + ms + " ms" +
+        "\npista: " + track.label +
+        "\nresolución: " + (s.width || "?") + "×" + (s.height || "?") +
+        "\nfacingMode: " + (s.facingMode || "no informado") + (trasera ? " → cámara trasera ✅" : " ⚠️ comprobar visualmente que es la trasera");
+      $("btn-gum-stop").disabled = false;
+      $("btn-gum-capture").disabled = false;
+    } catch (err) {
+      const denegado = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+      R.getUserMedia = "FALLO · " + err.name + ": " + err.message + (denegado ? " (permiso denegado)" : "");
+      badge("b-gum", "fail", "FAIL");
+      out.textContent = "FAIL · " + err.name + ": " + err.message +
+        (denegado ? "\nPermiso denegado → la app tendría que caer al input nativo (sección 2)." : "");
+    }
+    renderResumen();
+  });
+
+  $("btn-gum-stop").addEventListener("click", () => {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+    video.srcObject = null;
+    $("btn-gum-stop").disabled = true;
+    $("btn-gum-capture").disabled = true;
+    $("o-gum").textContent += "\nCámara detenida.";
+  });
+
+  $("btn-gum-capture").addEventListener("click", async () => {
+    if (!video.videoWidth) {
+      $("o-gum").textContent += "\nEl vídeo aún no tiene fotogramas.";
+      return;
+    }
+    const c = document.createElement("canvas");
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext("2d").drawImage(video, 0, 0);
+    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.92));
+    if (blob) {
+      R.capturaCanvas = "OK · " + c.width + "×" + c.height + " · " + KB(blob.size);
+      await procesarFoto(blob, "captura getUserMedia → canvas");
+    } else {
+      R.capturaCanvas = "FALLO (toBlob null)";
+    }
+    renderResumen();
+  });
+
+  // ---- 2 · input file ----------------------------------------------------
+  function onFile(input, etiqueta) {
+    input.addEventListener("change", async () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      R.inputFile = "OK · " + etiqueta + " · " + (f.type || "?") + " · " + KB(f.size);
+      badge("b-input", "pass", "PASS");
+      $("o-input").textContent =
+        "PASS · " + etiqueta + "\nfichero: " + f.name + "\ntipo: " + (f.type || "desconocido") +
+        " · tamaño: " + KB(f.size) + "\nlastModified: " + new Date(f.lastModified).toISOString();
+      await procesarFoto(f, "input file (" + etiqueta + ")");
+      input.value = "";
+    });
+  }
+  onFile($("file-capture"), "capture=environment");
+  onFile($("file-gallery"), "galería");
+
+  // ---- 4 · geolocalización ------------------------------------------------
+  $("btn-geo").addEventListener("click", () => {
+    const out = $("o-geo");
+    if (!("geolocation" in navigator)) {
+      R.geoCurrent = "FALLO · API no disponible";
+      badge("b-geo", "fail", "FAIL");
+      out.textContent = "FAIL · navigator.geolocation no existe";
+      renderResumen();
+      return;
+    }
+    out.textContent = "Solicitando posición…";
+    const t0 = performance.now();
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const ms = Math.round(performance.now() - t0);
+        const c = pos.coords;
+        R.geoCurrent = "OK · ±" + Math.round(c.accuracy) + " m · " + ms + " ms";
+        badge("b-geo", "pass", "PASS");
+        out.textContent = "PASS · lat " + c.latitude.toFixed(6) + " · lng " + c.longitude.toFixed(6) +
+          "\nprecisión: ±" + Math.round(c.accuracy) + " m · latencia: " + ms + " ms";
+        renderResumen();
+      },
+      (err) => {
+        const ms = Math.round(performance.now() - t0);
+        const denegado = err.code === 1;
+        R.geoCurrent = (denegado ? "DENEGADO" : "FALLO") + " · code=" + err.code + " · " + ms + " ms";
+        badge("b-geo", denegado ? "warn" : "fail", denegado ? "DENEGADO" : "FAIL");
+        out.textContent = (denegado
+          ? "PERMISO DENEGADO (gestionado) → la app usaría el fallback: fijar la posición a mano en el mapa."
+          : "FAIL · " + err.message) + "\ncode=" + err.code + " · latencia: " + ms + " ms";
+        renderResumen();
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+
+  let watchId = null, watchN = 0, watchT0 = 0;
+  $("btn-watch").addEventListener("click", () => {
+    const out = $("o-watch");
+    out.hidden = false;
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      $("btn-watch").textContent = "Seguir posición (watch)";
+      out.textContent += "\nwatch detenido tras " + watchN + " actualizaciones.";
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      R.geoWatch = "FALLO · API no disponible";
+      out.textContent = "FAIL · navigator.geolocation no existe";
+      renderResumen();
+      return;
+    }
+    watchN = 0; watchT0 = performance.now();
+    out.textContent = "watch iniciado…";
+    $("btn-watch").textContent = "Detener watch";
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        watchN++;
+        const c = pos.coords;
+        R.geoWatch = "OK · " + watchN + " updates · última ±" + Math.round(c.accuracy) + " m";
+        out.textContent = "update #" + watchN + " (+" + Math.round(performance.now() - watchT0) + " ms)" +
+          "\nlat " + c.latitude.toFixed(6) + " · lng " + c.longitude.toFixed(6) +
+          " · ±" + Math.round(c.accuracy) + " m";
+        renderResumen();
+      },
+      (err) => {
+        R.geoWatch = (err.code === 1 ? "DENEGADO" : "FALLO") + " · code=" + err.code;
+        out.textContent = "watch error · code=" + err.code + " · " + err.message;
+        renderResumen();
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  });
+
+  // ---- 5 · fullscreen -------------------------------------------------------
+  $("btn-fs").addEventListener("click", async () => {
+    const out = $("o-fs");
+    const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!fn) {
+      R.fullscreen = "NO DISPONIBLE (API ausente — esperado en iPhone Safari)";
+      badge("b-fs", "warn", "no disponible");
+      out.textContent = "requestFullscreen no existe en <html>." +
+        "\nfullscreenEnabled: " + String(document.fullscreenEnabled) +
+        "\nEn iPhone solo <video> admite pantalla completa; para la app la vía es la PWA instalada (standalone).";
+      renderResumen();
+      return;
+    }
+    try {
+      await fn.call(el);
+      const activo = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      R.fullscreen = activo ? "OK" : "sin efecto";
+      badge("b-fs", activo ? "pass" : "warn", activo ? "PASS" : "sin efecto");
+      out.textContent = activo ? "PASS · pantalla completa activa." : "La llamada no falló pero no hay elemento fullscreen.";
+      $("btn-fs-exit").disabled = !activo;
+    } catch (err) {
+      R.fullscreen = "FALLO · " + err.name + ": " + err.message;
+      badge("b-fs", "fail", "FAIL");
+      out.textContent = "FAIL · " + err.name + ": " + err.message;
+    }
+    renderResumen();
+  });
+
+  $("btn-fs-exit").addEventListener("click", () => {
+    (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+    $("btn-fs-exit").disabled = true;
+  });
+
+  // ---- 6 · copiar resumen ----------------------------------------------------
+  $("btn-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("resumen").textContent);
+      $("btn-copy").textContent = "Copiado ✅";
+    } catch {
+      $("btn-copy").textContent = "No se pudo copiar (selecciónalo a mano)";
+    }
+    setTimeout(() => { $("btn-copy").textContent = "Copiar resumen"; }, 2000);
+  });
+
+  renderResumen();
+})();
+</script>
+</body>
+</html>
