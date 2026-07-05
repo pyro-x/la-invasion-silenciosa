@@ -148,3 +148,24 @@ Why / Trail**.
 **Alternatives:** keep approximating with Tailwind + lucide (D-017) — produced a "similar but not the same" shell that failed David's review against the deployed mockup.
 **Why:** with the mockup's own CSS, the clone is guaranteed by construction; with a reinterpretation it depends on a judge's eye. Verification bonus: the deployed mockup (demos.ixine.com) is byte-identical (SHA-256) to the handoff zip's offline HTML, and 9/11 embedded sources match `docs/prototype/fuentes/` exactly — the two that differ (`app.jsx`, `screens1.jsx`) only add URL deep-link plumbing, with zero visual delta.
 **Trail:** LCHP-6 · src/styles/globals.css · src/components/pixel/ · PR #4.
+
+## D-023 · 2026-07-05 · Species detail is a route, not in-component state (LCHP-8)
+
+**Decision:** the Pokédex detail card renders at `/especies/:speciesId` (the route LCHP-6 already declared), instead of replicating the prototype's `useState`-based swap inside `PokedexScreen`. The back chip navigates to `/especies`; an unknown id redirects to the list.
+**Alternatives:** keep the prototype's local `open` state (visually identical, but the detail would not be linkable and the existing route would stay dead).
+**Why:** each species card gets a shareable/bookmarkable URL and the screenshot loop can capture details directly (`/especies/candadin`); zero visual delta with the mockup.
+**Trail:** LCHP-8 · src/pages/SpeciesPage.tsx · src/pages/SpeciesDetailPage.tsx.
+
+## D-024 · 2026-07-05 · «Verificar» CTAs ship inert in M1 (LCHP-8)
+
+**Decision:** the map's verify buttons (pin popover and «Cerca de ti» rows) render exactly like the mockup but do nothing when tapped. No toast, no disabled state.
+**Alternatives:** a "coming soon" toast (invents Spanish copy that exists nowhere in the prototype's I18N) · `disabled` attribute (visibly greys the button, diverging from the mockup) · opening the prototype's VerifyModal (that is LCHP-15's scope, M5).
+**Why:** the ticket allows "disabled or simulated"; a no-op is the only option with zero visual divergence and zero invented copy. The community verification flow lands in M5.
+**Trail:** LCHP-8 · src/pages/MapPage.tsx.
+
+## D-025 · 2026-07-05 · Geo data committed as a generated typed TS module, whole dataset (LCHP-8)
+
+**Decision:** `docs/prototype/fuentes/assets/lalatina-geo.js` is converted once (window assignment stripped, shape typed) into `src/components/map/lalatina-geo.ts` and committed, keeping the full dataset including the `places` index that StreetMap does not use yet.
+**Alternatives:** import the prototype `.js` at build time (keeps `docs/` as a runtime dependency and needs an untyped side-effect import) · trim `places` (saves ~3 KB but amputates the asset LCHP-13 may want for labels/geocoding).
+**Why:** the app must not execute files out of `docs/`; a committed typed module is greppable, type-checked and dies with LCHP-13 anyway (MapLibre replaces this dataset in M3).
+**Trail:** LCHP-8 · src/components/map/lalatina-geo.ts · D-016.
