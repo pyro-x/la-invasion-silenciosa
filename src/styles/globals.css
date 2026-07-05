@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/*
+ * Tokens del tema: se extraen del prototipo (docs/prototype/fuentes/pixel.jsx
+ * y el CSS del handoff) en LCHP-6. Hasta entonces, solo la base de Tailwind.
+ */
