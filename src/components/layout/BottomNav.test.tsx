@@ -35,6 +35,6 @@ describe('shell navigation', () => {
 
   it('the home screen offers «Empezar la misión»', () => {
     renderAt('/')
-    expect(screen.getByRole('link', { name: 'Empezar la misión' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /empezar la misión/i })).toBeInTheDocument()
   })
 })
