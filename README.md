@@ -16,9 +16,9 @@ The full roadmap lives in
 [Linear](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074)
 (team `LCHP`).
 
-**Live preview:** https://la-invasion-silenciosa.pages.dev — deployed
-automatically from `main` via Cloudflare Pages; every PR gets its own
-preview URL. Running on sample data until M2+ (see the on-screen ribbon).
+Deployed automatically from `main` via Cloudflare Pages; every PR gets
+its own preview URL (see the PR checks). The app runs on sample data
+until M2+ (on-screen ribbon).
 
 ## Documentation
 
