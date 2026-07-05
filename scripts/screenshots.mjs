@@ -14,12 +14,13 @@ const OUT = '.screenshots'
 const routes = process.argv.slice(2).length ? process.argv.slice(2) : ROUTES
 mkdirSync(OUT, { recursive: true })
 
-const server = await preview({ preview: { port: 4173, strictPort: true } })
+const PORT = Number(process.env.PORT ?? 4173)
+const server = await preview({ preview: { port: PORT, strictPort: true } })
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 2 })
 
 for (const route of routes) {
-  await page.goto(`http://localhost:4173${route}`, { waitUntil: 'networkidle' })
+  await page.goto(`http://localhost:${route}`, { waitUntil: 'networkidle' })
   const name = route === '/' ? 'home' : route.replaceAll('/', '-').replace(/^-/, '')
   await page.screenshot({ path: `${OUT}/${name}.png` })
   console.log(`✓ ${route} → ${OUT}/${name}.png`)
