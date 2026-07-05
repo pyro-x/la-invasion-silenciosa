@@ -6,7 +6,7 @@ import { chromium } from 'playwright'
 import { preview } from 'vite'
 import { mkdirSync } from 'node:fs'
 
-const ROUTES = ['/']
+const ROUTES = ['/', '/mapa', '/especies', '/ranking', '/perfil', '/cazar']
 
 const VIEWPORT = { width: 412, height: 892 }
 const OUT = '.screenshots'
