@@ -120,3 +120,24 @@ Why / Trail**.
 **Alternatives:** keep Linear in Spanish as D-014 originally set (assumed "team management" audience).
 **Why:** tickets, scope and milestones are managed by developers and agents — the same audience as the repo. They quote code, schema and endpoints; a Spanish wrapper around English content served no reader. Applying D-014's own audience principle consistently lands Linear on the English side.
 **Trail:** LCHP-20 · AGENTS.md §Languages · Linear (milestones + all 20 tickets translated).
+
+## D-016 · 2026-07-05 · Spanish route paths; prototype canvas coords until M3 (LCHP-6)
+
+**Decision:** URL paths are user-visible, so they are Spanish (`/mapa`, `/especies`, `/cazar`, `/ranking`, `/perfil`); code identifiers stay English. The fake sightings service serves the prototype's canvas coordinates (1000×527 space over `lalatina-geo.js`) — they become real lat/lng when MapLibre lands (LCHP-13).
+**Alternatives:** English paths (consistent with code, opaque to neighbors) · converting mock data to lat/lng now (pointless before MapLibre exists).
+**Why:** the address bar is UI; the coordinate swap belongs to the ticket that changes the map engine.
+**Trail:** LCHP-6 · src/app/router.tsx · src/types/sighting.ts.
+
+## D-017 · 2026-07-05 · lucide icons for navigation; pixel sprites only for creatures (LCHP-6)
+
+**Decision:** the bottom bar uses `lucide-react` icons (Map, BookOpen, Camera, Trophy, User). The prototype's pixel-art sprites are ported only for the creatures (they are product identity), arriving with the screens in LCHP-8.
+**Alternatives:** port the prototype's pixel `NavIcon` sprites for the nav too.
+**Why:** lucide is the locked icon library; nav icons are utilitarian while creature sprites are the game's soul. Halves the pixel-porting surface without losing recognizability (validated against captura_03 side by side).
+**Trail:** LCHP-6 · src/components/layout/BottomNav.tsx.
+
+## D-018 · 2026-07-05 · Self-hosted fonts; single "chispera" theme (LCHP-6)
+
+**Decision:** fonts self-hosted via Fontsource (Space Grotesk body, Space Mono mono, Archivo Black display) — no Google Fonts CDN. Only the prototype's default theme ships (`chispera`, the brand palette); the other four prototype themes (neon, verbena, pop, campo) were design-exploration variants and are dropped.
+**Alternatives:** Google Fonts links (what the prototype HTML used) · shipping the theme switcher.
+**Why:** GDPR (Google Fonts CDN transfers visitor IPs; sanctioned in the EU) + the future PWA must work offline; one theme = one brand, and the tweaks panel was a design tool, not product.
+**Trail:** LCHP-6 · src/styles/globals.css · package.json (@fontsource/*).

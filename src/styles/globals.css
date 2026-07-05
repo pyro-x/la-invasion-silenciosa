@@ -1,6 +1,68 @@
 @import 'tailwindcss';
 
+/* Self-hosted fonts (D-018): no Google Fonts CDN — GDPR + future PWA offline */
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/space-grotesk/700.css';
+@import '@fontsource/space-mono/400.css';
+@import '@fontsource/space-mono/700.css';
+@import '@fontsource/archivo-black/400.css';
+
 /*
- * Theme tokens: extracted from the prototype (docs/prototype/fuentes/pixel.jsx
- * and the handoff CSS) in LCHP-6. Until then, only the Tailwind base.
+ * Theme tokens — "chispera" palette, the prototype's default
+ * (docs/prototype/fuentes + handoff CSS, .app-root[data-theme="chispera"]).
+ * The other prototype themes (neon, verbena, pop, campo) were dev-tool
+ * variants; only the brand palette ships.
  */
+@theme {
+  --color-canvas: #f5edde;
+  --color-canvas-2: #ece0c8;
+  --color-card: #fffdf8;
+  --color-card-2: #f7ecd7;
+  --color-ink: #2a1410;
+  --color-ink-dim: #927a66;
+  --color-line: #ddccaf;
+  --color-accent: #a00000;
+  --color-on-accent: #fff5ea;
+  --color-accent-2: #105016;
+  --color-accent-3: #ff8000;
+  --color-good: #2f7d4a;
+  --color-warn: #e07a16;
+
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --font-display: 'Archivo Black', 'Archivo', system-ui, sans-serif;
+
+  --radius-app: 18px;
+}
+
+:root {
+  /* Non-color primitives from the chispera theme */
+  --bw: 2px;
+  --shadow-app: 0 5px 16px rgba(74, 22, 12, 0.13);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+/* Pending-sighting marker pulse (prototype: blinkdot 1.4s infinite) */
+@keyframes blinkdot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
