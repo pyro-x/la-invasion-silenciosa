@@ -1,14 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
-import { routes } from '@/app/router'
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return router
-}
+import { renderRoute as renderAt } from '@/test/render'
 
 describe('shell navigation', () => {
   it('renders the 5 destinations of the bottom bar', () => {
