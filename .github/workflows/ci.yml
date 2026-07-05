@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   gitleaks:
-    name: Escaneo de secretos (gitleaks)
+    name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -21,8 +21,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  calidad:
-    name: Calidad (build · lint · format · tests)
+  quality:
+    name: Quality (build · lint · format · test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

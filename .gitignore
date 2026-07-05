@@ -1,22 +1,25 @@
-# Dependencias y builds
+# Dependencies and builds
 node_modules/
 dist/
 dist-ssr/
 *.local
 
-# Entorno y secretos — NUNCA comitear
+# Environment and secrets — NEVER commit
 .env
 .env.*
 !.env.example
 
-# Supabase local
+# Local Supabase
 .supabase/
 supabase/.temp/
 
-# Bundles del prototipo (las fuentes extraídas viven en docs/prototype/fuentes/)
+# Prototype bundles (extracted sources live in docs/prototype/fuentes/)
 docs/prototype/*.zip
 
-# Sistema y editores
+# Visual verification loop screenshots (scripts/screenshots.mjs)
+.screenshots/
+
+# System and editors
 .DS_Store
 *.log
 .idea/

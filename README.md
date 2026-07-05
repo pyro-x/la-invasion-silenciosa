@@ -1,43 +1,47 @@
 # La Invasión Silenciosa
 
-**Cazadores de turistificación · La Latina, Madrid** — una iniciativa de la
+**Touristification hunters · La Latina, Madrid** — an initiative by
 **A.V. La Chispera**.
 
-Juego de ciencia ciudadana en forma de app web mobile-first (PWA): los vecinos
-documentan las señales visibles de la turistificación del barrio —representadas
-como **criaturas**— con foto y ubicación aproximada, alimentando un mapa
-colectivo. Se documentan **criaturas, nunca personas**: la privacidad es la
-regla de oro del proyecto.
+A citizen-science game as a mobile-first web app (PWA): neighbors
+document the visible signs of touristification in their neighborhood —
+represented as **creatures** — with a photo and an approximate location,
+feeding a collective map. We document **creatures, never people**:
+privacy is the project's golden rule.
 
-## Estado
+## Status
 
-En desarrollo — fase de bootstrap (M0). El roadmap completo vive en
+In development — bootstrap phase. The full roadmap lives in
 [Linear](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074)
-(equipo `LCHP`).
+(team `LCHP`).
 
-## Documentación
+## Documentation
 
-| Qué buscas | Dónde está |
+| Looking for… | Where |
 |---|---|
-| Reglas del juego, puntos, pantallas | [`docs/product/reglas-y-especificacion.md`](docs/product/reglas-y-especificacion.md) |
-| Arquitectura técnica y decisiones | [`docs/architecture/brief-tecnico.md`](docs/architecture/brief-tecnico.md) |
-| Prototipo visual (fuente de verdad de UI) | [`docs/prototype/`](docs/prototype/claude-design-handoff.md) |
-| Cómo trabajar en este repo (humanos y agentes) | [`AGENTS.md`](AGENTS.md) |
-| Deuda técnica y hallazgos | [`FINDINGS.md`](FINDINGS.md) |
+| Game rules, points, screens *(Spanish)* | [`docs/product/reglas-y-especificacion.md`](docs/product/reglas-y-especificacion.md) |
+| Technical architecture and decisions *(Spanish)* | [`docs/architecture/brief-tecnico.md`](docs/architecture/brief-tecnico.md) |
+| Visual prototype (source of truth for UI) | [`docs/prototype/`](docs/prototype/claude-design-handoff.md) |
+| How to work in this repo (humans and agents) | [`AGENTS.md`](AGENTS.md) |
+| Decision log | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
+| Tech debt and findings | [`FINDINGS.md`](FINDINGS.md) |
 
-## Cómo arrancar
+Product documents are written in Spanish for the neighborhood
+association; developer-facing artifacts are in English (see
+`docs/DECISIONS.md`, D-014).
 
-Todavía no hay aplicación que arrancar — el scaffold llega con
-[LCHP-2](https://linear.app/ixine/issue/LCHP-2). Cuando exista:
+## Getting started
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev        # dev server
+pnpm test       # unit tests (Vitest)
+pnpm build      # typecheck + production build
 ```
 
-## Stack (resumen)
+## Stack (summary)
 
-React 19 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui + MapLibre GL JS,
-sobre Supabase (Postgres + RLS + Storage privado + Edge Function) y Cloudflare
-Pages. Coste cero / free-tier first. Detalle y justificación en el
-[brief técnico](docs/architecture/brief-tecnico.md).
+React 19 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui + MapLibre GL
+JS, on Supabase (Postgres + RLS + private Storage + Edge Function) and
+Cloudflare Pages. Zero-cost / free-tier first. Details and rationale in
+the [technical brief](docs/architecture/brief-tecnico.md).
