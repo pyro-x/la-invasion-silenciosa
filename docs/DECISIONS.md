@@ -216,4 +216,11 @@ Why / Trail**.
 **Decision:** deploy as a **Workers static-assets project** (`wrangler.jsonc`: assets directory `./dist`, `single-page-application` not-found handling) instead of classic Pages. Production URL becomes `la-invasion-silenciosa.<account>.workers.dev`; per-branch preview URLs come from "Builds for non-production branches".
 **Alternatives:** classic Pages (what D-008 assumed) — its creation flow no longer appears in David's dashboard; Cloudflare is steering new projects to Workers.
 **Why:** same capabilities we wanted from Pages (git builds, PR previews, free tier), on the platform Cloudflare actively develops. The `public/_redirects` file stays (harmless; Pages-specific) but the SPA fallback that actually applies is the wrangler `not_found_handling`.
-**Trail:** LCHP-19 · wrangler.jsonc · D-008.
+**Trail:** LCHP-19 · wrangler.jsonc · D-008. *(Reversed by D-030 — merged by mistake after the plan was already discarded.)*
+
+## D-030 · 2026-07-06 · Classic Cloudflare Pages after all (reverses D-029)
+
+**Decision:** the deploy is **classic Cloudflare Pages** (David found the Pages flow in the dashboard after D-029 was drafted): production at https://la-invasion-silenciosa.pages.dev, build `pnpm run build` → `dist`, per-PR preview URLs, SPA fallback via `public/_redirects` — exactly D-008's original plan. `wrangler.jsonc` removed.
+**Alternatives:** keep the Workers static-assets setup (D-029) — drafted while the Pages flow seemed unavailable; its PR was accidentally merged after the plan had been discarded.
+**Why:** Pages was already working (first deploy green, externally verified: root + deep links 200) before the stray merge; one platform, one config.
+**Trail:** LCHP-19 · PR #12 (accidental) reverted here · README (live URL).
