@@ -1,17 +1,34 @@
 // Map screen ported from the prototype (screens1.jsx MapScreen): SVG street
-// map with Sightings/Heatmap toggle, blinking pending pins, pin popover and
-// the «Cerca de ti» pending list. «Verificar» is simulated — the community
-// verification flow arrives in M5.
-import { useState } from 'react'
+// map with Sightings/Heatmap toggle, blinking pending pins, pin popover, the
+// «Cerca de ti» pending list and the static verification modal (LCHP-23) —
+// Confirmar only shows the mockup's «+5» toast; the real transaction is M5.
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { StreetMap } from '@/components/map/StreetMap'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
+import { VerifyModal } from '@/components/sightings/VerifyModal'
+import { Toast } from '@/components/ui/Toast'
 import { listMapSightings } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
+import type { MapSighting } from '@/types/sighting'
 
 export function MapPage() {
   const [heat, setHeat] = useState(false)
   const [sel, setSel] = useState<string | null>(null)
+  const [verify, setVerify] = useState<MapSighting | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2200)
+  }
+
+  const confirmVerify = () => {
+    setVerify(null)
+    showToast('+5 · verificación')
+  }
   const { data: sightings = [] } = useQuery({
     queryKey: ['sightings', 'map'],
     queryFn: listMapSightings,
@@ -120,7 +137,12 @@ export function MapPage() {
               </span>
             </div>
             {selS.status === 'pending' && (
-              <button type="button" className="btn btn-accent" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="btn btn-accent"
+                style={{ marginTop: 12 }}
+                onClick={() => setVerify(selS)}
+              >
                 ✔ Verificar
               </button>
             )}
@@ -149,6 +171,7 @@ export function MapPage() {
             key={s.id}
             type="button"
             className="panel pad"
+            onClick={() => setVerify(s)}
             style={{
               padding: 12,
               display: 'flex',
@@ -170,6 +193,16 @@ export function MapPage() {
           </button>
         ))}
       </div>
+
+      {verify && (
+        <VerifyModal
+          sighting={verify}
+          speciesName={speciesName(verify.speciesId)}
+          onClose={() => setVerify(null)}
+          onConfirm={confirmVerify}
+        />
+      )}
+      <Toast message={toast} />
     </div>
   )
 }
