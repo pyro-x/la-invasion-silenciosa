@@ -112,4 +112,11 @@ Why / Trail**.
 **Decision:** with the repo now public — **English** for developer-facing artifacts: commits, PRs, code comments, README, AGENTS.md, this log, FINDINGS.md, CI. **Spanish** for the two product documents (`reglas-y-especificacion.md`, `brief-tecnico.md`), Linear (team management) and all UI strings. Pre-existing Spanish commits/PRs in history stay as they are.
 **Alternatives:** everything in English including product docs (the association loses readability of its own rulebook) · Spanish everywhere (external contributors and tooling lose readability) · split by platform (GitHub EN / Linear ES) regardless of audience.
 **Why:** the real readers decide the language. Developers and agents read commits/PRs/technical docs → English. Neighbors and the association read the game rules and the brief → Spanish. Agents handle the mix without any confusion; the split cost is zero for them.
-**Trail:** LCHP-20 · AGENTS.md §Languages.
+**Trail:** LCHP-20 · AGENTS.md §Languages. *(Linear scope revised by D-015.)*
+
+## D-015 · 2026-07-05 · Linear moves to English too (revises D-014)
+
+**Decision:** Linear tickets, milestones and new comments are written in **English**. Spanish remains only for business/product material: the two product documents, UI strings, and the Linear project description (the product pitch). Existing Spanish comments stay as history. The `deuda` label is superseded by `tech-debt`.
+**Alternatives:** keep Linear in Spanish as D-014 originally set (assumed "team management" audience).
+**Why:** tickets, scope and milestones are managed by developers and agents — the same audience as the repo. They quote code, schema and endpoints; a Spanish wrapper around English content served no reader. Applying D-014's own audience principle consistently lands Linear on the English side.
+**Trail:** LCHP-20 · AGENTS.md §Languages · Linear (milestones + all 20 tickets translated).

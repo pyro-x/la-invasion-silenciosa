@@ -65,7 +65,7 @@ explains how they are kept alive.
 - **Nothing merges without green CI** (typecheck, lint, format, tests,
   gitleaks) — enforced by branch protection on `main`.
 - Findings outside the current ticket's scope go to `FINDINGS.md` and get
-  THEIR OWN ticket with the `deuda` label (max 2 weeks without a
+  THEIR OWN ticket with the `tech-debt` label (max 2 weeks without a
   decision: schedule it or demote it to `post-mvp`).
 - Spikes (`spike` label) deliver knowledge documented in the brief, not
   product.
@@ -80,15 +80,15 @@ explains how they are kept alive.
 - ❌ Touching the Supabase schema by hand in the dashboard: only
   versioned migrations under `supabase/migrations/`.
 
-## Languages (D-014)
+## Languages (D-014, D-015)
 
 | Scope | Language |
 |---|---|
 | Code: identifiers, types, tables, columns, comments | **English** (`Sighting`, `point_events`, `moderation_status`…) |
 | Commits, PRs, README, this file, DECISIONS.md, FINDINGS.md, CI | **English** |
+| Linear: tickets, milestones, new comments | **English** — same audience as the repo |
 | Product documents (`reglas-y-especificacion.md`, `brief-tecnico.md`) | **Spanish** — they belong to the neighborhood association |
-| Linear (tickets, comments) | **Spanish** — team management |
-| UI strings visible to users | **Spanish** |
+| UI strings visible to users | **Spanish** (quote them verbatim in Spanish inside tickets/PRs) |
 | Conversation with David | Spanish |
 
 ## Stack — locked, do not re-litigate
