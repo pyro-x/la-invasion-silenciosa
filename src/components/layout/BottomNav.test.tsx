@@ -22,15 +22,15 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('link', { name: /ranking/i }))
-    expect(screen.getByRole('heading', { name: 'Ranking' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /ranking/i })).toHaveClass('text-accent')
+    expect(screen.getByText('Top 10 semanal')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /ranking/i })).toHaveClass('active')
   })
 
   it('the central button opens the hunt flow', async () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('button', { name: 'Cazar' }))
-    expect(screen.getByRole('heading', { name: 'Flujo de captura' })).toBeInTheDocument()
+    expect(screen.getByText('Flujo de captura')).toBeInTheDocument()
   })
 
   it('the home screen offers «Empezar la misión»', () => {

@@ -10,11 +10,14 @@
 @import '@fontsource/archivo-black/400.css';
 
 /*
- * Theme tokens — "chispera" palette, the prototype's default
- * (docs/prototype/fuentes + handoff CSS, .app-root[data-theme="chispera"]).
- * The other prototype themes (neon, verbena, pop, campo) were dev-tool
- * variants; only the brand palette ships.
+ * ============ PROTOTYPE STYLESHEET, PORTED VERBATIM (D-019) ============
+ * The M1 bar is a 100% visual replica of the Claude Design mockup, so the
+ * mockup's CSS ships as-is with its class names (.panel, .chip, .tabbar…),
+ * resolved to the "chispera" theme (the default; the other four themes were
+ * design-tool variants). Source: docs/prototype handoff HTML <style>.
+ * Tailwind utilities remain available for layout around these classes.
  */
+
 @theme {
   --color-canvas: #f5edde;
   --color-canvas-2: #ece0c8;
@@ -33,23 +36,327 @@
   --font-body: 'Space Grotesk', system-ui, sans-serif;
   --font-mono: 'Space Mono', monospace;
   --font-display: 'Archivo Black', 'Archivo', system-ui, sans-serif;
-
-  --radius-app: 18px;
 }
 
 :root {
-  /* Non-color primitives from the chispera theme */
+  /* chispera theme tokens (prototype names, used by the ported classes) */
+  --bg: #f5edde;
+  --bg2: #ece0c8;
+  --card: #fffdf8;
+  --card2: #f7ecd7;
+  --ink: #2a1410;
+  --ink-dim: #927a66;
+  --line: #ddccaf;
+  --accent: #a00000;
+  --on-accent: #fff5ea;
+  --accent2: #105016;
+  --accent3: #ff8000;
+  --good: #2f7d4a;
+  --warn: #e07a16;
   --bw: 2px;
-  --shadow-app: 0 5px 16px rgba(74, 22, 12, 0.13);
+  --radius: 18px;
+  --shadow: 0 5px 16px rgba(74, 22, 12, 0.13);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-body);
 }
 
-/* Pending-sighting marker pulse (prototype: blinkdot 1.4s infinite) */
+/* app frame */
+.app-root {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ============ LAYOUT ============ */
+.screen {
+  position: absolute;
+  inset: 0;
+  bottom: 76px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg);
+  -webkit-overflow-scrolling: touch;
+}
+.screen::-webkit-scrollbar {
+  width: 0;
+}
+.pad {
+  padding: 16px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+
+/* typography */
+.display {
+  font-family: var(--font-display);
+}
+.eyebrow {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* panel / card */
+.panel {
+  background: var(--card);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.panel-2 {
+  background: var(--card2);
+}
+
+/* buttons */
+.btn {
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.5;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.06s ease,
+    box-shadow 0.06s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 transparent;
+}
+.btn-accent {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--line);
+}
+.btn-cta {
+  background: var(--accent3);
+  color: #2a1410;
+}
+
+/* chips */
+.chip {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--card2);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.chip-accent {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--line);
+}
+.chip-good {
+  background: var(--good);
+  color: #06281a;
+  border-color: var(--line);
+}
+.chip-warn {
+  background: var(--warn);
+  color: #3a2400;
+  border-color: var(--line);
+}
+.chip-ghost {
+  background: transparent;
+  color: var(--ink-dim);
+}
+
+/* progress bar */
+.bar {
+  height: 16px;
+  border: var(--bw) solid var(--line);
+  border-radius: 999px;
+  background: var(--bg2);
+  overflow: hidden;
+  position: relative;
+}
+.bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent3);
+  border-radius: 999px;
+}
+
+/* tab bar */
+.tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 76px;
+  z-index: 40;
+  background: var(--bg2);
+  border-top: var(--bw) solid var(--line);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  padding: 0 6px;
+}
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--ink-dim);
+  border: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-top: 8px;
+}
+.tab .glyph {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tab.active {
+  color: var(--accent);
+}
+.tab.cta {
+  transform: translateY(-14px);
+}
+
+.fab {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: var(--bw) solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+/* header */
+.scr-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.scr-title {
+  font-family: var(--font-display);
+  line-height: 1.15;
+}
+
+.divline {
+  height: var(--bw);
+  background: var(--line);
+  border: none;
+  opacity: 0.5;
+}
+
+/* generic */
+.muted {
+  color: var(--ink-dim);
+}
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+/* image placeholder */
+.photo-ph {
+  background-color: var(--bg2);
+  background-image: repeating-linear-gradient(45deg, var(--line) 0 2px, transparent 2px 11px);
+  border: var(--bw) dashed var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes popin {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
 @keyframes blinkdot {
   0%,
   100% {
@@ -59,10 +366,30 @@ body {
     opacity: 0.25;
   }
 }
+@keyframes slidein {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.floaty {
+  animation: floaty 3s ease-in-out infinite;
+}
+.popin {
+  animation: popin 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.slidein {
+  animation: slidein 0.3s ease both;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  .floaty,
+  .popin,
+  .slidein {
+    animation: none !important;
   }
 }

@@ -1,8 +1,5 @@
-/**
- * Temporary screen body used while each screen is ported from the
- * prototype (LCHP-7/8/9). Keeps the eyebrow/title structure so the shell
- * is navigable and screenshot-able from day 0.
- */
+// Temporary screen body (replaced by LCHP-7/8/9), using the prototype's
+// exact classes so typography and spacing already match the mockup.
 export function PagePlaceholder({
   eyebrow,
   title,
@@ -13,20 +10,19 @@ export function PagePlaceholder({
   ticket: string
 }) {
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <div>
-        <p className="font-mono text-[10px] font-bold tracking-widest text-ink-dim uppercase">
-          {eyebrow}
-        </p>
-        <h1 className="font-display text-xl text-ink">{title}</h1>
-      </div>
-      <div
-        className="rounded-app border-2 border-line bg-card p-4"
-        style={{ boxShadow: 'var(--shadow-app)' }}
-      >
-        <p className="text-sm text-ink-dim">
-          Pantalla en construcción — llega con el ticket {ticket}.
-        </p>
+    <div className="screen">
+      <div className="pad stack" style={{ gap: 12 }}>
+        <div>
+          <div className="eyebrow">{eyebrow}</div>
+          <div className="scr-title" style={{ fontSize: 26 }}>
+            {title}
+          </div>
+        </div>
+        <div className="panel pad">
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            Pantalla en construcción — llega con el ticket {ticket}.
+          </p>
+        </div>
       </div>
     </div>
   )

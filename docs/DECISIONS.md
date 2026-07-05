@@ -133,7 +133,7 @@ Why / Trail**.
 **Decision:** the bottom bar uses `lucide-react` icons (Map, BookOpen, Camera, Trophy, User). The prototype's pixel-art sprites are ported only for the creatures (they are product identity), arriving with the screens in LCHP-8.
 **Alternatives:** port the prototype's pixel `NavIcon` sprites for the nav too.
 **Why:** lucide is the locked icon library; nav icons are utilitarian while creature sprites are the game's soul. Halves the pixel-porting surface without losing recognizability (validated against captura_03 side by side).
-**Trail:** LCHP-6 · src/components/layout/BottomNav.tsx.
+**Trail:** LCHP-6 · src/components/layout/BottomNav.tsx. *(Reversed by D-019.)*
 
 ## D-018 · 2026-07-05 · Self-hosted fonts; single "chispera" theme (LCHP-6)
 
@@ -141,3 +141,10 @@ Why / Trail**.
 **Alternatives:** Google Fonts links (what the prototype HTML used) · shipping the theme switcher.
 **Why:** GDPR (Google Fonts CDN transfers visitor IPs; sanctioned in the EU) + the future PWA must work offline; one theme = one brand, and the tweaks panel was a design tool, not product.
 **Trail:** LCHP-6 · src/styles/globals.css · package.json (@fontsource/*).
+
+## D-019 · 2026-07-05 · The M1 bar is a 100% visual replica; prototype CSS and sprites ship verbatim (reverses D-017)
+
+**Decision:** David set the M1 acceptance bar explicitly: the app must be a visual clone of the Claude Design mockup, not an interpretation. Consequences: the prototype's stylesheet is ported **verbatim** (its class names — `.panel`, `.chip`, `.btn`, `.tabbar`, `.tab`, `.fab`, `.eyebrow`, `.scr-title`… — resolved to the chispera theme) instead of re-expressing it in Tailwind utilities; the pixel-art engine (`PixelSprite`/`MiniPix`/`CreatureSprite`/`NavIcon`) is ported as typed React components; the bottom bar uses the prototype's pixel icons, not lucide. Tailwind remains for layout glue only.
+**Alternatives:** keep approximating with Tailwind + lucide (D-017) — produced a "similar but not the same" shell that failed David's review against the deployed mockup.
+**Why:** with the mockup's own CSS, the clone is guaranteed by construction; with a reinterpretation it depends on a judge's eye. Verification bonus: the deployed mockup (demos.ixine.com) is byte-identical (SHA-256) to the handoff zip's offline HTML, and 9/11 embedded sources match `docs/prototype/fuentes/` exactly — the two that differ (`app.jsx`, `screens1.jsx`) only add URL deep-link plumbing, with zero visual delta.
+**Trail:** LCHP-6 · src/styles/globals.css · src/components/pixel/ · PR #4.
