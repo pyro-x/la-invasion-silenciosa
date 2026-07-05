@@ -2,9 +2,20 @@
 
 Este directorio contiene la referencia visual exportada desde Claude Design.
 
-## Archivo principal
+## Contenido versionado
 
-- [invasion-silenciosa-handoff.zip](invasion-silenciosa-handoff.zip): paquete exportado con HTML, JSX, assets y capturas del prototipo.
+- [`fuentes/`](fuentes/): las fuentes JSX del prototipo (`app.jsx`, `pixel.jsx`,
+  `data.jsx`, `screens1-3.jsx`, `android-frame.jsx`, `tweaks-panel.jsx`) y sus
+  assets clave (`lalatina-geo.js` con los geodatos del barrio, logos de La
+  Chispera). Es la referencia que los tickets de M1 usan para portar pantallas.
+- [`prototipo_en_imagenes/`](prototipo_en_imagenes/): capturas de todas las
+  pantallas del prototipo.
+
+## Bundle original (NO versionado)
+
+El zip completo del handoff (`invasion-silenciosa-handoff.zip`, ~4 MB, incluye
+además el HTML navegable offline) está **gitignorado**. Vive en local y en el
+proyecto de Claude Design original; si no lo tienes, pídeselo a David.
 
 ## Documentos relacionados
 

@@ -1,0 +1,24 @@
+# Dependencias y builds
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Entorno y secretos — NUNCA comitear
+.env
+.env.*
+!.env.example
+
+# Supabase local
+.supabase/
+supabase/.temp/
+
+# Bundles del prototipo (las fuentes extraídas viven en docs/prototype/fuentes/)
+docs/prototype/*.zip
+
+# Sistema y editores
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json

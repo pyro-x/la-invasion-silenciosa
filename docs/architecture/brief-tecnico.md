@@ -15,6 +15,27 @@ Este brief técnico no debe duplicar todo el contenido funcional, sino tomarlo c
 - [Reglas y especificación funcional](../product/reglas-y-especificacion.md)
 - [Prototipo visual](../prototype/claude-design-handoff.md)
 
+> **Cómo leer este documento.** Es un spec vivo: se actualiza en el mismo
+> PR que cambia el comportamiento (regla de sincronización, ver
+> [AGENTS.md](../../AGENTS.md)). Todas las secciones se consideran
+> **`Decidido`** (no re-litigar sin hablarlo) salvo las marcadas
+> explícitamente como **`[Explorando]`** en su título, que están abiertas.
+>
+> **Enmienda 2026-07-05 (LCHP-1):** el MVP **no tiene moderación previa**.
+> Los avistamientos nacen `pending` y son **visibles en el mapa** con
+> marcador de aviso (como siempre describió
+> [reglas-y-especificacion.md](../product/reglas-y-especificacion.md) §5);
+> **una (1) confirmación** de otro usuario los pasa a `approved` — el
+> umbral es configurable vía `app_config.validation_threshold` (1 para el
+> piloto; la maqueta sugiere ~3 a futuro) —, consolidando +10 al autor y
+> +5 al verificador. Los estados
+> `rejected`/`removed`, la tabla `reports` y los roles de moderación se
+> conservan en el esquema como válvula de escape, sin UI ni lógica en el
+> MVP. Las secciones siguientes están redactadas conforme a esta enmienda.
+> El diseño original basado en moderación NO se elimina: queda como
+> **referencia post-MVP** en §5, §15, §20, §24, §36 y §37 (fase D), porque
+> la intención es retomarlo a futuro si el piloto lo pide.
+
 ## 2. Descripción general del proyecto
 
 **La Invasión Silenciosa** es una aplicación web mobile-first para una iniciativa vecinal de ciencia ciudadana gamificada en La Latina, Madrid.
@@ -29,7 +50,8 @@ Principios funcionales importantes, definidos en [reglas-y-especificacion.md](..
 * la privacidad es innegociable;
 * los avistamientos pasan por estado pendiente antes de validarse;
 * los puntos se consolidan tras validación;
-* el mapa público solo debe mostrar contenido validado o aprobado;
+* el mapa muestra pendientes (con marcador de aviso, «por verificar») y validados — la distinción de estado siempre es visible;
+* la validación es comunitaria (1 confirmación), sin moderación previa en el MVP;
 * la foto es evidencia, no contenido principal del mapa.
 
 ## 3. Fuente funcional
@@ -111,13 +133,14 @@ El MVP debe permitir:
 * guardar foto en Supabase Storage privado;
 * guardar avistamiento en Supabase;
 * crear siempre los nuevos avistamientos como `pending`;
-* aprobar manualmente avistamientos de forma básica;
-* mostrar en el mapa público solo avistamientos `approved`;
+* mostrar en el mapa los `pending` (marcador de aviso «por verificar») y los `approved`;
+* validar por confirmación comunitaria: 1 confirmación de otro usuario → `approved`, +10 al autor y +5 al verificador;
 * cargar la foto solo bajo demanda;
-* mantener estructura preparada para verificación, ranking, perfil y moderación futura.
+* mantener estructura preparada para ranking, perfil y moderación futura (estados y tablas en el esquema, sin UI).
 
 Quedan fuera del MVP inicial, pero deben estar previstos:
 
+* moderación/aprobación manual con cola de revisión (el diseño original del MVP; ver §24 y §37 fase D);
 * moderación automática de imágenes;
 * blur automático;
 * OCR;
@@ -140,7 +163,7 @@ mobile-first;
 PWA antes que app nativa;
 abrir desde QR sin instalación obligatoria;
 privacidad primero;
-moderación antes que publicación inmediata;
+validación comunitaria antes de consolidar puntos (sin moderación previa en MVP);
 mapa ligero;
 fotos bajo demanda;
 storage privado;
@@ -315,8 +338,8 @@ Solo se abre lo necesario.
 Lecturas directas desde frontend permitidas:
 
 * especies activas;
-* avistamientos `approved` para el mapa;
-* detalle público de avistamiento `approved`;
+* avistamientos `pending` y `approved` para el mapa (el estado siempre visible; enmienda 2026-07-05);
+* detalle público de avistamiento `pending` o `approved`;
 * perfil propio básico.
 
 No devolver nunca en vistas públicas:
@@ -338,8 +361,10 @@ type PublicMapSighting = {
   species_id: string;
   lat_public: number;
   lng_public: number;
+  status: 'pending' | 'approved';
   confidence: string;
   verification_count: number;
+  created_at: string;
 };
 ```
 
@@ -365,14 +390,16 @@ POST /moderation/analyze-image
 POST /admin/update-config
 ```
 
-En el MVP inicial probablemente solo hacen falta:
+En el MVP inicial solo hacen falta (enmienda 2026-07-05):
 
 ```text
 POST /create-sighting
 POST /get-photo-url
-POST /moderation/approve
-POST /moderation/reject
+POST /verify-sighting
 ```
+
+Las rutas `moderation/*`, `report-sighting` y `admin/*` quedan previstas
+para post-MVP; el router deja el hueco pero no las implementa.
 
 ### Pros de una única Edge Function
 
@@ -512,6 +539,26 @@ Los puntos no se calculan solo desde campos sueltos.
 Se registran como eventos para auditar cuándo y por qué se otorgaron.
 ```
 
+### app_config
+
+Configuración operativa editable sin despliegue (fuente del umbral de
+validación y futuros interruptores de features):
+
+```ts
+type AppConfig = {
+  key: string;
+  value: string;
+  updated_at: string;
+};
+```
+
+Claves iniciales:
+
+```text
+validation_threshold = 1   (confirmaciones necesarias para validar;
+                            el piloto usa 1, la maqueta sugiere ~3 a futuro)
+```
+
 ### reports
 
 Preparada para post-MVP:
@@ -608,25 +655,38 @@ sighting.status = pending
 ↓
 sin PointEvent todavía
 ↓
-moderador/comunidad valida
+otro usuario lo confirma (1 confirmación, comunitaria)
 ↓
 sighting.status = approved
 ↓
-crear PointEvent(type = sighting_validated, points = 10)
+en la misma transacción:
+  crear PointEvent(type = sighting_validated, points = 10) para el autor
+  crear PointEvent(type = verification_accepted, points = 5) para el verificador
 ↓
 actualizar total_points/weekly_points
 ```
 
-Verificación:
+Reglas de la verificación (enmienda 2026-07-05):
 
 ```text
-Usuario verifica avistamiento de otro
-↓
-verification.status = pending o accepted según reglas
-↓
-si se acepta
-↓
-crear PointEvent(type = verification_accepted, points = 5)
+El autor no puede verificar su propio avistamiento.
+Un usuario solo puede verificar cada avistamiento una vez.
+El umbral de confirmaciones para validar vive en app_config
+(validation_threshold); para el piloto es 1.
+Cuando verification_count alcanza el umbral → pending → approved.
+Las transiciones de estado y los PointEvent se crean SOLO server-side.
+```
+
+Referencia post-MVP (diseño original, a retomar si hace falta más robustez):
+
+```text
+Subir validation_threshold (p. ej. a 3, como sugieren los datos seed de
+la maqueta — los validados tienen 3-6 votes) es solo un cambio de
+configuración: sin migración, sin despliegue, sin tocar código.
+Además, las verificaciones podrán tener estado propio
+(verification.status = pending o accepted según reglas), con aceptación
+diferida; el PointEvent verification_accepted se crearía solo al
+aceptarse la verificación, no al emitirse.
 ```
 
 ## 16. Auth y roles
@@ -682,9 +742,10 @@ Puede:
 
 No debería publicar automáticamente en MVP.
 
-### Moderator
+### Moderator (rol en esquema; SIN uso en el MVP — enmienda 2026-07-05)
 
-Puede:
+En el MVP no hay moderación: el rol existe en `profiles.role` como
+preparación post-MVP, pero ninguna UI ni ruta lo usa. Post-MVP podrá:
 
 * ver cola de moderación;
 * aprobar;
@@ -793,23 +854,35 @@ Se muestra confirmación:
 
 El avistamiento no aparece automáticamente en el mapa público hasta pasar a `approved`.
 
-## 20. Flujo de validación
+## 20. Flujo de validación (comunitaria — enmienda 2026-07-05)
 
 ```text
-Avistamiento pending
+Avistamiento pending (ya visible en el mapa con marcador de aviso)
 ↓
-Moderador o comunidad lo valida
+Otro vecino lo confirma desde el modal de verificación
+(al alcanzar validation_threshold — 1 en el piloto)
 ↓
 Avistamiento pasa a approved
 ↓
-Se crea PointEvent +10 para el autor
+Se crea PointEvent +10 para el autor y +5 para el verificador
 ↓
-Aparece en mapa público
+El pin deja de parpadear (pasa a icono de especie normal)
 ↓
 Cuenta para ranking, perfil y progreso
 ```
 
-Si se descarta:
+Descarte en el MVP:
+
+```text
+No hay flujo de descarte en el MVP (sin moderación).
+Los estados rejected/removed existen en el esquema como válvula de escape:
+si el piloto detecta abuso o incumplimientos de la regla de oro,
+se activará el flujo de moderación post-MVP (fase D).
+Mientras tanto, un caso problemático puntual se resuelve con un
+manual_adjustment / UPDATE administrativo directo, documentándolo.
+```
+
+Flujo de descarte post-MVP (diseño original, se activará con la moderación — fase D):
 
 ```text
 Avistamiento pending
@@ -872,7 +945,7 @@ export const tileProviderConfig = {
 
 No hardcodear el proveedor en varios componentes.
 
-## 22. Opciones futuras para mapas
+## 22. Opciones futuras para mapas `[Explorando]`
 
 ### Opción A — Mantener raster OSM temporalmente
 
@@ -988,7 +1061,7 @@ Recomendación:
 No usar en MVP. Evaluar solo si hay tracción y capacidad técnica.
 ```
 
-## 23. Vector tiles como objetivo a medio plazo
+## 23. Vector tiles como objetivo a medio plazo `[Explorando]`
 
 Lo ideal a medio plazo sería usar vector tiles.
 
@@ -1021,17 +1094,20 @@ evaluar proveedor vectorial con free tier o tiles propios de zona limitada.
 
 La moderación se divide en fases.
 
-### MVP inicial
+### MVP inicial (enmienda 2026-07-05)
 
 En el MVP inicial:
 
 ```text
 Todo avistamiento nuevo se crea como pending.
-El mapa público solo lee approved.
-Debe existir una forma sencilla de aprobar manualmente.
+El mapa muestra pending (marcador de aviso) y approved — el estado siempre visible.
+La validación es comunitaria: 1 confirmación de otro usuario → approved.
+No hay moderación previa ni cola de moderación.
 No implementar IA de moderación.
 No implementar pipeline completo de análisis de imagen.
-No publicar automáticamente contenido generado por usuario.
+La contención del MVP es: regla de oro visible en onboarding/captura/verificación,
+rate limits por usuario, y el esquema preparado (rejected/removed, reports)
+para activar moderación si el piloto muestra problemas.
 ```
 
 ### Post-MVP
@@ -1045,12 +1121,14 @@ Análisis automático de imagen
 Detección de contenido problemático
 Blur de datos sensibles
 Cola de revisión humana
+Aprobación/rechazo manual por moderadores
+  (recupera el principio original «moderación antes que publicación inmediata»)
 Reportes comunitarios
 Estados de confianza
 Retirada temporal ante reportes
 ```
 
-## 25. Moderación automática de imágenes post-MVP
+## 25. Moderación automática de imágenes post-MVP `[Explorando]`
 
 La moderación automática no entra como requisito del MVP inicial, pero debe quedar contemplada.
 
@@ -1126,7 +1204,7 @@ type NormalizedImageModerationResult = {
 };
 ```
 
-## 26. Opciones de moderación automática
+## 26. Opciones de moderación automática `[Explorando]`
 
 ### Opción A — Sightengine
 
@@ -1234,7 +1312,7 @@ Recomendación:
 Descartado para MVP y fases iniciales.
 ```
 
-## 27. Pipeline post-MVP de imagen
+## 27. Pipeline post-MVP de imagen `[Explorando]`
 
 Flujo ideal post-MVP:
 
@@ -1272,7 +1350,7 @@ Revisión humana
 approved / rejected / removed
 ```
 
-## 28. Blur y privacidad post-MVP
+## 28. Blur y privacidad post-MVP `[Explorando]`
 
 Elementos a ocultar:
 
@@ -1304,7 +1382,7 @@ OCR para texto sensible
 
 El blur automático puede fallar y no sustituye revisión humana.
 
-## 29. Turnstile y anti-abuso
+## 29. Turnstile y anti-abuso `[Explorando]`
 
 Cloudflare Turnstile debe prepararse para la fase pública.
 
@@ -1633,13 +1711,18 @@ Playwright
 * signed URL temporal;
 * no cargar fotos en mapa.
 
-### Paso 6 — Moderación mínima/dev
+### Paso 6 — Verificación comunitaria (enmienda 2026-07-05)
 
-* vista protegida simple;
-* listar pending;
-* aprobar/rechazar manualmente;
-* al aprobar, crear PointEvent +10;
-* sin IA todavía.
+* modal de verificación (foto bajo demanda, criatura, calle, autor);
+* Confirmar (+5) · Saltar; recordatorio de la regla de oro;
+* al alcanzar validation_threshold (app_config; 1 en el piloto) → approved + PointEvent +10 (autor) y +5 (verificador), en transacción server-side;
+* autor no puede autovalidarse; una verificación por usuario y avistamiento;
+* sin moderación ni IA.
+
+> Referencia post-MVP: el diseño original de este paso («Moderación
+> mínima/dev»: vista protegida simple, listar pending, aprobar/rechazar
+> manualmente, +10 al aprobar) no se descarta — queda recogido en la
+> fase D del roadmap post-MVP (§37).
 
 ### Paso 7 — Perfil/ranking básico
 
@@ -1656,7 +1739,7 @@ Playwright
 * revisar privacidad;
 * revisar coste/uso.
 
-## 37. Roadmap post-MVP
+## 37. Roadmap post-MVP `[Explorando]`
 
 ### Fase A — Anti-abuso básico
 
@@ -1683,6 +1766,7 @@ Playwright
 
 ### Fase D — Moderación humana completa
 
+* vista de moderación mínima: listar pending, aprobar/rechazar manualmente (el Paso 6 del diseño original del MVP);
 * cola de revisión;
 * filtros por flags;
 * aprobar/rechazar;
@@ -1724,17 +1808,21 @@ El MVP se considera válido si:
 Un usuario puede abrir la app desde un QR.
 Puede ver un mapa con iconos.
 Puede crear un avistamiento con foto.
-El avistamiento queda pending.
+El avistamiento queda pending y aparece en el mapa con marcador de aviso.
 No recibe puntos definitivos al enviar.
-Un moderador puede aprobarlo de forma básica.
-Al aprobar, se consolidan +10 puntos.
-El avistamiento approved aparece en el mapa.
+Otro usuario puede confirmarlo (verificación comunitaria, 1 confirmación).
+Al validarse, se consolidan +10 al autor y +5 al verificador.
+El avistamiento approved aparece en el mapa con su icono de especie.
 La foto solo se carga bajo demanda.
-No hay publicación automática sin revisión.
+El estado (por verificar / validado) siempre es visible en el mapa.
 La app respeta la maqueta de Claude Design.
-El schema deja preparada la moderación posterior.
+El schema deja preparada la moderación posterior (rejected/removed, reports, roles).
 El mapa usa coste cero inicial y está preparado para cambiar de proveedor.
 ```
+
+El criterio original «no hay publicación automática sin revisión» no se
+abandona: pasa a ser el objetivo de la fase D (moderación) si el piloto
+muestra que la validación comunitaria no basta.
 
 ## 39. Decisión final
 
@@ -1749,8 +1837,8 @@ coste cero;
 privacidad;
 mapa ligero;
 subida de avistamientos;
-estado pending;
-validación manual básica;
+estado pending visible en el mapa;
+validación comunitaria (1 confirmación);
 puntos al validar, no al enviar;
 perfil/ranking básico si no bloquea;
 arquitectura preparada para crecer.
