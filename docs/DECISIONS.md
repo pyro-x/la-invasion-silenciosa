@@ -224,3 +224,10 @@ Why / Trail**.
 **Alternatives:** keep the Workers static-assets setup (D-029) — drafted while the Pages flow seemed unavailable; its PR was accidentally merged after the plan had been discarded.
 **Why:** Pages was already working (first deploy green, externally verified: root + deep links 200) before the stray merge; one platform, one config.
 **Trail:** LCHP-19 · PR #12 (accidental) reverted here · README (live URL).
+
+## D-031 · 2026-07-06 · Anonymous sightings allowed in the MVP; quota enforced by Postgres trigger (LCHP-3)
+
+**Decision:** anonymous users CAN create sightings from their first submission (no magic link gate); the per-day quota (2/day anonymous, 5/day registered, brief §30) is enforced in Postgres with a `BEFORE INSERT` trigger calling a `security definer` function that counts the user's rows for the current day and picks the quota from the JWT's `is_anonymous` claim. The Edge Function may pre-check for friendlier errors, but the trigger is the source of truth.
+**Alternatives:** require magic link from the first submission (kills first-touch participation in a neighborhood pilot; unnecessary — the upgrade preserves `user.id`, so nothing is lost by starting anonymous) · enforce the quota only in the Edge Function (bypassable via direct PostgREST; weaker guarantee than the data layer).
+**Why:** verified against the real free-tier project (LCHP-3 spike): real anonymous sessions work (`is_anonymous=true` claim, 1 h JWT + refresh, permanent `auth.users` row), the anonymous→registered upgrade keeps the same `user.id` end-to-end (magic-link email followed on a local stack), RLS policies distinguish both types via the claim, and the trigger blocked the 3rd anonymous / 6th registered insert of the day in live tests.
+**Trail:** LCHP-3 · brief §16, §30, §32 (enmiendas 2026-07-06) · PR of this spike.
