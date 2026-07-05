@@ -14,7 +14,7 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('link', { name: /ranking/i }))
-    expect(screen.getByText('Top 10 semanal')).toBeInTheDocument()
+    expect(screen.getByText('Ranking semanal')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /ranking/i })).toHaveClass('active')
   })
 
@@ -22,7 +22,7 @@ describe('shell navigation', () => {
     const user = userEvent.setup()
     renderAt('/mapa')
     await user.click(screen.getByRole('button', { name: 'Cazar' }))
-    expect(screen.getByText('Flujo de captura')).toBeInTheDocument()
+    expect(screen.getByText('Nuevo avistamiento')).toBeInTheDocument()
   })
 
   it('the home screen offers «Empezar la misión»', () => {
