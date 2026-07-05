@@ -20,7 +20,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 2 })
 
 for (const route of routes) {
-  await page.goto(`http://localhost:${route}`, { waitUntil: 'networkidle' })
+  await page.goto(`http://localhost:${PORT}${route}`, { waitUntil: 'networkidle' })
   const name = route === '/' ? 'home' : route.replaceAll('/', '-').replace(/^-/, '')
   await page.screenshot({ path: `${OUT}/${name}.png` })
   console.log(`✓ ${route} → ${OUT}/${name}.png`)
