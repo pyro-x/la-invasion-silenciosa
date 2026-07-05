@@ -51,7 +51,7 @@ explains how they are kept alive.
 
 ## Linear and GitHub — how we work
 
-- **Linear project:** [La Invasión Silenciosa — MVP](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074) · team **`av-la-chispera`** (prefix **`LCHP`**). Milestones M0–M7. Tickets are written in Spanish.
+- **Linear project:** [La Invasión Silenciosa — MVP](https://linear.app/ixine/project/la-invasion-silenciosa-mvp-5c9e727b8074) · team **`av-la-chispera`** (prefix **`LCHP`**). Milestones M0–M7. Tickets, milestones and new comments are written in English (D-015).
 - **The ticket is a self-contained brief**: context, scope, sources of
   truth, unknowns and acceptance checklist. Implement by reading the
   ticket + the docs it links. If a ticket contradicts a doc → ask.
