@@ -19,11 +19,15 @@ export function BottomNav() {
       {TABS.slice(0, 2).map((tab) => (
         <Tab key={tab.to} {...tab} />
       ))}
-      <button type="button" className="tab cta" onClick={() => navigate('/cazar')}>
+      <button
+        type="button"
+        aria-label="Cazar"
+        className="tab cta"
+        onClick={() => navigate('/cazar')}
+      >
         <span className="fab">
           <NavIcon name="hunt" scale={4} />
         </span>
-        Cazar
       </button>
       {TABS.slice(2).map((tab) => (
         <Tab key={tab.to} {...tab} />
