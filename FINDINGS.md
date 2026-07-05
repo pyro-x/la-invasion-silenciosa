@@ -15,4 +15,8 @@ while working on something else.
 
 ---
 
-*(no entries yet)*
+## [LCHP-21] — captura_02_briefing.png is a mislabeled map frame
+
+**Problem:** the onboarding/briefing screen has no valid reference capture: `captura_02_briefing.png` is a near-duplicate of `captura_03` (the map).
+**Context:** found by the LCHP-7 visual loop; the screen was verified against the prototype JSX source instead.
+**Proposal:** re-capture from the deployed mockup with `?onboarding=1` and replace the file (small docs PR).

@@ -5,9 +5,10 @@ import { renderRoute as renderAt } from '@/test/render'
 describe('shell navigation', () => {
   it('renders the 5 destinations of the bottom bar', () => {
     renderAt('/mapa')
-    for (const label of ['Mapa', 'Especies', 'Cazar', 'Ranking', 'Perfil']) {
+    for (const label of ['Mapa', 'Especies', 'Ranking', 'Perfil']) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
+    expect(screen.getByRole('button', { name: 'Cazar' })).toBeInTheDocument()
   })
 
   it('navigates between tabs and marks the active one', async () => {
