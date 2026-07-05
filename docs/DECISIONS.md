@@ -148,3 +148,24 @@ Why / Trail**.
 **Alternatives:** keep approximating with Tailwind + lucide (D-017) — produced a "similar but not the same" shell that failed David's review against the deployed mockup.
 **Why:** with the mockup's own CSS, the clone is guaranteed by construction; with a reinterpretation it depends on a judge's eye. Verification bonus: the deployed mockup (demos.ixine.com) is byte-identical (SHA-256) to the handoff zip's offline HTML, and 9/11 embedded sources match `docs/prototype/fuentes/` exactly — the two that differ (`app.jsx`, `screens1.jsx`) only add URL deep-link plumbing, with zero visual delta.
 **Trail:** LCHP-6 · src/styles/globals.css · src/components/pixel/ · PR #4.
+
+## D-020 · 2026-07-05 · Golden-rule onboarding copy follows reglas §3.1, not the mockup string (LCHP-7)
+
+**Decision:** the onboarding golden-rule paragraph adds «vecinos» to the mockup's `ob_rule_txt` so the list of protected people matches §3.1 (huéspedes, porteros, **vecinos** o trabajadores); the rest of the sentence is the mockup string verbatim.
+**Alternatives:** ship the mockup string verbatim (100% replica, but it omits «vecinos», a category the product invariant protects).
+**Why:** the ticket marks this text as the product invariant to carry faithfully from §3.1, and the sync rule makes the documents prescriptive over the prototype. The one extra word is the only copy divergence from the mockup in the whole PR.
+**Trail:** LCHP-7 · reglas-y-especificacion.md §3.1 · src/pages/OnboardingPage.tsx.
+
+## D-021 · 2026-07-05 · Onboarding is a route (`/onboarding`), gated at press-start (LCHP-7)
+
+**Decision:** the onboarding ships as its own full-bleed route outside the AppShell. The press-start button resolves the first-visit gate (`localStorage['sil_onb_v1']`, the prototype's key) and navigates to `/onboarding` or `/mapa`; `?onboarding=1` (or `?intro=1`) on the home route forces it — same params and accepted values as the prototype's boot logic.
+**Alternatives:** overlay state inside a single page (the prototype approach — it was a single-canvas mock with no router).
+**Why:** the app is route-driven (D-016) and the visual loop (D-013) captures URLs, so the step must be addressable. The visual result is identical: the prototype's overlay was a `.screen` with `bottom: 0` covering the tabbar, which is exactly what the route renders.
+**Trail:** LCHP-7 · src/app/router.tsx · src/lib/onboarding.ts (+ tests).
+
+## D-022 · 2026-07-05 · Start-screen art is logo-chispera.png; onboarding judged against the JSX (LCHP-7)
+
+**Decision:** the press-start emblem ships `logo-chispera.png` — the white-plate lockup the prototype's `StartScreen` actually references and `captura_01_inicio.png` shows — copied to `src/assets/`, not the raw `chispera-emblem.png`. The onboarding screen is judged against `screens1.jsx` (structure and inline values copied verbatim) because `captura_02_briefing.png` is mislabeled: it captures the map, so the onboarding has no reference image (flagged on LCHP-7 for its own tech-debt ticket).
+**Alternatives:** `chispera-emblem.png` (raw transparent emblem — loses the plate and inner ring visible in the capture) · blocking on a fresh mockup capture.
+**Why:** replica by construction means shipping the exact asset and values the mockup renders.
+**Trail:** LCHP-7 · src/assets/logo-chispera.png · docs/prototype/prototipo_en_imagenes/captura_02_briefing.png.
