@@ -77,6 +77,14 @@ explains how they are kept alive.
   decision: schedule it or demote it to `post-mvp`).
 - Spikes (`spike` label) deliver knowledge documented in the brief, not
   product.
+- **Where explanations live (D-044):** Linear is the *what/why* (board,
+  scope, acceptance, planning, product-facing visuals); GitHub is the
+  *how* (code, the PR body, and — for substantial or security-critical
+  PRs — an optional Markdown "explainer" comment with mermaid diagrams,
+  readable by anyone on the PR). A code walkthrough belongs on the PR, not
+  in Linear; it would duplicate the ticket's plan/acceptance trail and
+  Linear doesn't render mermaid. Interactive HTML explainer artifacts are
+  produced on request, not by default.
 
 ### Never do
 
