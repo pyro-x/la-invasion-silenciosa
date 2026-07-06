@@ -326,8 +326,6 @@ Los secrets de moderación pueden dejarse sin configurar en el MVP inicial.
 
 ## 12. Supabase y RLS
 
-Activar automatic RLS.
-
 Regla general:
 
 ```text
@@ -335,25 +333,20 @@ Todo bloqueado por defecto.
 Solo se abre lo necesario.
 ```
 
-Lecturas directas desde frontend permitidas:
+### Políticas implementadas (LCHP-11, migración 0004 — enmienda 2026-07-06) `Decidido`
 
-* especies activas;
-* avistamientos `pending` y `approved` para el mapa (el estado siempre visible; enmienda 2026-07-05);
-* detalle público de avistamiento `pending` o `approved`;
-* perfil propio básico.
+Esta sección es el **espejo exacto** de `supabase/migrations/0004_rls_policies_and_storage.sql`; cada línea está cubierta por la suite pgTAP (`supabase/tests/rls_policies.test.sql`, corre en CI). El reparto de caminos (qué va directo por PostgREST y qué pasa por la Edge Function) es la decisión D-037: híbrido *PostgREST-first* — lecturas y verificaciones directas; creación de avistamientos y acceso a fotos exclusivamente vía Edge Function.
 
-No devolver nunca en vistas públicas:
+**Privilegios (defensa en profundidad):** `REVOKE ALL` sobre las 7 tablas para `anon` y `authenticated`, re-concediendo solo el mínimo. Una query directa a una tabla cerrada falla con `42501` (permission denied) en vez de devolver conjuntos vacíos engañosos.
 
-* `photo_path`;
-* `lat_private`;
-* `lng_private`;
-* `created_by`;
-* `reviewed_by`;
-* `auto_moderation_result`;
-* `rejection_reason`;
-* datos internos de moderación.
+**Lecturas permitidas desde el frontend:**
 
-Se recomienda crear una view o RPC pública para el mapa:
+* especies activas — policy `species_select_active` (`is_active`, para `anon` + `authenticated`);
+* perfil propio — policy `profiles_select_own` (`auth.uid() = id`); el ranking tendrá su propia vista pública (LCHP-16);
+* mapa **únicamente vía la vista** `public_map_sightings` — la tabla `sightings` no es legible directamente ni siquiera con SELECT;
+* verificaciones propias — policy `verifications_select_own`.
+
+**Vista `public_map_sightings`** (owner-rights a propósito — `security_invoker = false` + `security_barrier`): expone exactamente 8 columnas y filtra `moderation_status in ('pending','approved')`:
 
 ```ts
 type PublicMapSighting = {
@@ -361,12 +354,21 @@ type PublicMapSighting = {
   species_id: string;
   lat_public: number;
   lng_public: number;
-  status: 'pending' | 'approved';
+  status: 'pending' | 'approved'; // moderation_status renombrado y filtrado
   confidence: string;
   verification_count: number;
   created_at: string;
 };
 ```
+
+Lista prohibida — **nunca** añadir a la vista: `photo_path`, `photo_blurred_path`, `photo_thumbnail_path`, `lat_private`, `lng_private`, `location_accuracy_m`, `created_by`, `reviewed_by`, `reviewed_at`, `rejection_reason`, `points_awarded*`, `auto_moderation_*`, `image_processing_status`, `report_count`, `updated_at`.
+
+**Escrituras desde el cliente:**
+
+* `verifications` INSERT es la **única** vía de escritura abierta (D-038): `WITH CHECK` de `user_id = auth.uid()` **y** JWT sin `is_anonymous` (los anónimos no verifican — §16 y anti-sybil con umbral 1) **y** target válido vía `private.verification_target_is_valid(sighting_id)` (helper `security definer` en el esquema **`private`, no expuesto por PostgREST**, que deriva el verificador de `auth.uid()` internamente — en `public` con parámetro libre sería un RPC-oráculo para sondear la autoría oculta de los avistamientos): el avistamiento debe estar **`pending`** y **no ser del propio autor** — la auto-aprobación y verificar estados no verificables se bloquean en la frontera de la base de datos, no en código de aplicación (hallazgos de la review adversarial de LCHP-11, rondas 1 y 2); GRANT por columnas (`sighting_id, user_id, type, note`) para que `status`/`points_awarded` jamás vengan del cliente; unicidad por el `UNIQUE (sighting_id, user_id)` del esquema. La consolidación (umbral → `approved`, +10/+5) es un trigger server-side (LCHP-15) que **debe ser la frontera de concurrencia** (lock de fila o `UPDATE … WHERE moderation_status = 'pending'` atómico): el `WITH CHECK` no serializa verificaciones concurrentes.
+* Todo lo demás, cerrado: `sightings` (INSERT/UPDATE/DELETE), `point_events`, `reports` y `app_config` no tienen ninguna política — la Edge Function con `service_role` es el único camino de escritura (D-037), y los triggers/CHECKs de Postgres la vigilan también a ella (cuota D-032, invariantes 0003).
+
+**Storage:** bucket `sightings-photos` privado con **cero políticas** en `storage.objects` (el cliente no puede leer, listar ni subir nada); límites de bucket como red de seguridad para cualquier caller, service role incluido: 512 KB y `image/jpeg`/`image/webp`. La foto solo se ve mediante la signed URL temporal de `/get-photo-url` (LCHP-12).
 
 ## 13. Edge Function única
 
