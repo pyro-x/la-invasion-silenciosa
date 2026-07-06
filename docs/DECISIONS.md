@@ -249,8 +249,9 @@ Why / Trail**.
 
 **Decision:** every state/vocabulary column (`sightings.moderation_status`, `sightings.confidence`, `profiles.role`, `point_events.type`, `verifications.type/status`, `reports.reason/status`, `species.rarity`) is `text` with a `CHECK (col IN (…))` constraint instead of a native enum type.
 **Alternatives:** `CREATE TYPE … AS ENUM` (native enums) · unconstrained text.
-**Why:** the schema is deliberately created in full as an escape valve (AGENTS.md §ceiling), so vocabularies WILL evolve; changing a CHECK is a drop+add in one migration, while enums need `ALTER TYPE` ceremony (no removal, ordering quirks, in-transaction limits on older PG). `supabase gen types` emits the same union types either way, so the TS surface is identical. Unconstrained text loses data integrity for zero gain.
-**Trail:** LCHP-10 · supabase/migrations/0001_initial_schema.sql · brief §14.
+**Why:** the schema is deliberately created in full as an escape valve (AGENTS.md §ceiling), so vocabularies WILL evolve; changing a CHECK is a drop+add in one migration, while enums need `ALTER TYPE` ceremony (no removal, ordering quirks, in-transaction limits on older PG). Unconstrained text loses data integrity for zero gain.
+**Known trade-off (Codex adversarial review, LCHP-10):** `supabase gen types` emits literal unions only for native enums — CHECK-backed columns come out as plain `string` in `src/types/database.ts`. Accepted: the app never consumes the generated row types directly; screens depend on hand-authored view-model types through the service layer (D-007), which keep the literal unions, and state transitions are created exclusively server-side (brief §15, LCHP-12/15) where the CHECK is the enforcement. If M3+ wiring ever exposes the widened fields to app code, narrow them there (e.g. a typed override of `Database`), not by migrating to enums.
+**Trail:** LCHP-10 · supabase/migrations/0001_initial_schema.sql · brief §14 · src/types/database.ts.
 
 ## D-035 · 2026-07-06 · PostGIS enabled from day 0; MVP columns stay plain doubles (LCHP-10)
 
