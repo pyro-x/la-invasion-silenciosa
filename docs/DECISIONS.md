@@ -296,6 +296,7 @@ Why / Trail**.
 **Why:** during the street pilot "which build is this phone running?" is the first triage question, and the answer must be readable by a neighbor from their own screen; the SHA maps 1:1 to the Cloudflare dashboard and `git log`.
 **Trail:** LCHP-24 · vite.config.ts · src/lib/version.ts · src/components/ui/SampleDataBanner.tsx · src/pages/ProfilePage.tsx (+ tests) · D-020, D-026.
 **First bump (2026-07-06):** M2 (Supabase foundation) completed with LCHP-12 → `0.1.0` → `0.2.0`, carried by LCHP-12's PR #28 per this policy.
+**Second bump (2026-07-07):** M3 (Map) actually completed on 2026-07-06 with LCHP-13/LCHP-24, but its closing PR (#30) missed the bump — caught by David during the LCHP-15 session and carried late by a chore PR: `0.2.0` → `0.3.0`. Lesson: the milestone-closing PR checklist must include the bump.
 
 ## D-041 · 2026-07-06 · Quota trigger derives anonymity from auth.users, not the JWT (LCHP-12)
 
