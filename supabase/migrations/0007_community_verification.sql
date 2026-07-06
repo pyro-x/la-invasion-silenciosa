@@ -67,10 +67,14 @@ security definer
 set search_path = ''
 stable
 as $$
-  -- Malformed values fail closed to 1 (the pilot value) rather than 0,
-  -- which would validate sightings with no confirmations at all.
+  -- Defensive parse (Codex adversarial review, HIGH): a bare ::integer cast
+  -- would RAISE on a malformed value — and since this runs inside the AFTER
+  -- INSERT trigger, one config typo would abort every confirmation in
+  -- production. Non-integer values fall back to 1 (the pilot value), never
+  -- to 0, which would validate sightings with no confirmations at all.
   select greatest(1, coalesce(
-    (select c.value::integer from public.app_config c
+    (select case when c.value ~ '^\d+$' then c.value::integer end
+       from public.app_config c
       where c.key = 'validation_threshold'),
     1
   ));

@@ -72,6 +72,7 @@ describe('verification modal', () => {
     const user = userEvent.setup()
     const onResult = vi.fn()
     renderModal({ onResult })
+    await screen.findByRole('img', { name: /Evidencia/ })
     await user.click(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
     expect(submitMock).toHaveBeenCalledWith('s-pending')
     expect(onResult).toHaveBeenCalledWith({ kind: 'validated' })
@@ -82,17 +83,30 @@ describe('verification modal', () => {
     let resolve: (o: VerifyOutcome) => void = () => {}
     submitMock.mockImplementationOnce(() => new Promise((r) => (resolve = r)))
     renderModal()
+    await screen.findByRole('img', { name: /Evidencia/ })
     await user.click(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
     expect(screen.getByRole('button', { name: 'Enviando…' })).toBeDisabled()
     resolve({ kind: 'counted' })
   })
 
-  it('a sighting without a photo shows the friendly message instead', async () => {
+  it('confirming is impossible until the evidence has rendered (no blind vouching)', async () => {
+    let resolve: (v: Record<string, unknown>) => void = () => {}
+    evidenceMock.mockImplementationOnce(() => new Promise((r) => (resolve = r)))
+    renderModal()
+    // while loading: disabled
+    expect(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })).toBeDisabled()
+    resolve({ kind: 'ready', url: 'https://storage.example/signed/photo.jpg', expiresIn: 300 })
+    await screen.findByRole('img', { name: /Evidencia/ })
+    expect(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })).toBeEnabled()
+  })
+
+  it('a sighting without a photo shows the friendly message and cannot be confirmed', async () => {
     evidenceMock.mockResolvedValue({ kind: 'unavailable' })
     renderModal()
     expect(
       await screen.findByText('Este avistamiento aún no tiene foto disponible'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })).toBeDisabled()
   })
 
   it('Saltar closes; Reclasificar defers (post-MVP)', async () => {

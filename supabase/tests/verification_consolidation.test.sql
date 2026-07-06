@@ -14,7 +14,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(35);
+select plan(37);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: three registered users (author + two verifiers), two anonymous
@@ -40,7 +40,7 @@ select
   'a0000000-0000-0000-0000-00000000000a',
   40.411, -3.711,
   now() - interval '1 day'
-from (values ('1'), ('2'), ('3'), ('4'), ('5'), ('6')) as t (n);
+from (values ('1'), ('2'), ('3'), ('4'), ('5'), ('6'), ('7')) as t (n);
 
 -- The suite assumes the seeded pilot defaults; assert them so a drifted
 -- local database fails loudly instead of producing confusing results.
@@ -268,6 +268,26 @@ select is(
   (select count(*)::int from public.point_events
     where sighting_id = 'f0000000-0000-0000-0000-000000000006' and type = 'sighting_validated'),
   0, 'no +10 is minted for a deleted author');
+
+-- ---------------------------------------------------------------------------
+-- Scenario 9 · malformed config must not brick verification (Codex review,
+-- HIGH): a bare ::integer cast would abort every confirmation INSERT from
+-- inside the trigger. A non-integer threshold falls back to 1 — the insert
+-- lives and consolidation still behaves.
+-- ---------------------------------------------------------------------------
+
+update public.app_config set value = 'tres' where key = 'validation_threshold';
+
+select lives_ok(
+  $$ insert into public.verifications (sighting_id, user_id, type)
+     values ('f0000000-0000-0000-0000-000000000007', 'b0000000-0000-0000-0000-00000000000b', 'confirm_exists') $$,
+  'a malformed validation_threshold does not abort the confirmation insert');
+
+select is(
+  (select moderation_status from public.sightings where id = 'f0000000-0000-0000-0000-000000000007'),
+  'approved', 'the malformed threshold falls back to 1 (never to 0, never an exception)');
+
+update public.app_config set value = '1' where key = 'validation_threshold';
 
 select * from finish();
 rollback;

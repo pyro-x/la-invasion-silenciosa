@@ -142,10 +142,12 @@ describe('map screen', () => {
   })
 
   it('confirming toasts the validated outcome and re-reads the map (pin stops blinking)', async () => {
+    getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
     const user = userEvent.setup()
     renderRoute('/mapa')
     await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
     await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ }) // confirm unlocks with the photo
     const readsBefore = listMapSightingsMock.mock.calls.length
     await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
     expect(submitVerificationMock).toHaveBeenCalledWith('s-pending')
@@ -159,10 +161,12 @@ describe('map screen', () => {
 
   it('an anonymous confirmation toasts the provisional-support message', async () => {
     submitVerificationMock.mockResolvedValue({ kind: 'saved_provisional' })
+    getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
     const user = userEvent.setup()
     renderRoute('/mapa')
     await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
     await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ })
     await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
     expect(
       await screen.findByText('Apoyo guardado · regístrate para que cuente y cobrar tus +5'),
@@ -171,10 +175,12 @@ describe('map screen', () => {
 
   it('an already-verified duplicate is told so, without fake success', async () => {
     submitVerificationMock.mockResolvedValue({ kind: 'already_verified' })
+    getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
     const user = userEvent.setup()
     renderRoute('/mapa')
     await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
     await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ })
     await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
     expect(await screen.findByText('Ya habías verificado este avistamiento')).toBeInTheDocument()
   })

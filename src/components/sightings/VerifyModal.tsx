@@ -134,11 +134,14 @@ export function VerifyModal({
           <p className="muted" style={{ margin: '0 0 4px', fontSize: 13, textAlign: 'center' }}>
             ¿La criatura está bien clasificada?
           </p>
+          {/* Blind confirmations are a golden-rule hole (Codex review, HIGH):
+              the neighbor must be LOOKING at the evidence to vouch for it, so
+              the action stays disabled until the photo actually rendered. */}
           <button
             type="button"
             className="btn btn-accent"
             onClick={() => void confirm()}
-            disabled={busy}
+            disabled={busy || !(typeof evidence === 'object' && evidence.kind === 'ready')}
           >
             {busy ? 'Enviando…' : '✔ Confirmar (+5 pts)'}
           </button>
