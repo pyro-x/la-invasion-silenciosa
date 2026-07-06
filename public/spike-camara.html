@@ -305,13 +305,17 @@
     } else {
       const exif2 = analizarExif(await jpegBlob.arrayBuffer());
       R.reencode = "OK · " + w0 + "×" + h0 + " → " + w + "×" + h + " · " + KB(jpegBlob.size) + " · " + ms + " ms";
-      R.exifTrasReencode = exif2.exif ? "SÍ ⚠️ FALLO DE PRIVACIDAD" : "NO ✅ (eliminado)";
+      R.exifTrasReencode = !exif2.exif
+        ? "NO ✅ (eliminado)"
+        : exif2.gps
+          ? "SÍ con GPS ⚠️⚠️ FALLO DE PRIVACIDAD REAL"
+          : "SÍ pero SIN GPS ⚠️ (WebKit re-añade EXIF de orientación/perfil — sin ubicación)";
       lineas.push("re-codificado: " + w0 + "×" + h0 + " → " + w + "×" + h + " · JPEG q0.8: " + KB(jpegBlob.size) + " · " + ms + " ms");
       lineas.push("WebP q0.8: " + (webpOk ? KB(webpBlob.size) : "no soportado"));
       lineas.push("EXIF tras re-codificar: " + (exif2.exif ? "SÍ ⚠️" : "NO ✅") + " · GPS: " + (exif2.gps ? "SÍ ⚠️" : "NO ✅"));
       const objetivo = jpegBlob.size <= 300 * 1024;
       lineas.push("objetivo 150–300 KB (brief §17): " + (objetivo ? "dentro ✅" : "FUERA ⚠️ (" + KB(jpegBlob.size) + ")"));
-      badge("b-foto", exif2.exif ? "fail" : "pass", exif2.exif ? "FAIL" : "PASS");
+      badge("b-foto", exif2.gps ? "fail" : exif2.exif ? "warn" : "pass", exif2.gps ? "FAIL" : exif2.exif ? "EXIF SIN GPS" : "PASS");
       const img = $("img-reenc");
       img.src = URL.createObjectURL(jpegBlob);
       img.hidden = false;
