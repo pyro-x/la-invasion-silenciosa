@@ -896,7 +896,16 @@ No se conceden puntos
 
 ## 21. Mapas: MapLibre, OSM y tiles
 
-### Decisión MVP
+> **Enmienda 2026-07-06 (spike LCHP-4):** la combinación MapLibre GL JS +
+> raster OSM quedó **verificada con evidencia** (página desechable +
+> Playwright, viewport móvil 412×892 @2.625x). Esta sección pasa de
+> propuesta a **`Decidido` verificado**; se añaden los límites concretos
+> de la Tile Usage Policy, el hallazgo crítico sobre la geodata del
+> prototipo (lienzo, no lat/lng) y la forma final de la abstracción
+> `tileProvider`. Quien implemente **LCHP-13** debe leer esta sección
+> entera antes de escribir código.
+
+### Decisión MVP (verificada en LCHP-4)
 
 Para el MVP inicial se usará:
 
@@ -910,42 +919,176 @@ iconos propios encima
 
 Esto permite coste cero, sin cuenta y sin API key.
 
-### Importante
+Evidencia del spike (2026-07-06, capturas en el ticket LCHP-4):
 
-OpenStreetMap proporciona datos libres, pero los servidores públicos de tiles no deben considerarse un CDN gratuito ilimitado para producción. Para MVP, demo interna y piloto pequeño puede ser aceptable. Para campaña pública amplia se debe evaluar otra opción.
+* La Latina renderiza correctamente en viewport móvil 412×892 (dpr 2.625):
+  etiquetas nítidas, «Barrio de la Latina» legible, primera carga ~1–2 s
+  con 15 tiles (~460 KB).
+* Peso de librería: `maplibre-gl` 4.7.1 ≈ 211 KB JS + 9 KB CSS (gzip).
+  Aceptable para móvil; cargarla solo en la ruta `/mapa` (code-splitting).
+* La atribución «© OpenStreetMap contributors» es visible por defecto
+  (control de atribución de MapLibre, abajo a la derecha, modo no
+  compacto). No desactivarla ni taparla: es requisito de la policy.
+* ~100 marcadores DOM (`maplibregl.Marker`) con animación CSS de parpadeo:
+  60 fps en reposo (la animación CSS no cuesta); durante pan/zoom animado
+  el reposicionamiento por frame de los marcadores DOM baja a ~20–29 fps
+  en Chromium *headless sin GPU* (peor caso; en un móvil real con GPU irá
+  mejor). Para el piloto (~100 avistamientos) es suficiente; si el volumen
+  crece, migrar los avistamientos `approved` a una capa `symbol` con
+  sprites (queda anotado en §22).
+* Una sesión completa de prueba (carga + pan + zoom 15→17,5) consumió
+  104 tiles ≈ 2 MB: el uso interactivo normal está lejísimos de cualquier
+  umbral problemático.
 
-### Qué se hará en MVP
+### Límites concretos de la OSM Tile Usage Policy (verificados 2026-07-06)
 
-* usar raster tiles OSM;
-* attribution visible a OpenStreetMap;
-* evitar precarga agresiva;
-* evitar scraping;
-* evitar peticiones innecesarias;
-* mantener el mapa ligero;
-* abstraer el proveedor de tiles.
+Fuente: <https://operations.osmfoundation.org/policies/tiles/>. Lo que nos
+aplica, en concreto:
 
-### Abstracción recomendada
+* **URL exacta** `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, solo
+  HTTPS, sin subdominios alternativos (los antiguos `a/b/c.tile...` ya no).
+* **Web (nuestro caso, PWA en navegador):** el navegador ya envía
+  User-Agent y Referer válidos. Lo único que podemos romper nosotros:
+  **no configurar una `Referrer-Policy` restrictiva** que suprima el
+  Referer hacia tile.openstreetmap.org.
+* **Caché:** no enviar `Cache-Control: no-cache` / `Pragma: no-cache`;
+  respetar las cabeceras del servidor (observado en vivo: `max-age` ~4 h +
+  `stale-while-revalidate` 7 días + ETag). Si no se pueden leer, TTL
+  mínimo de 7 días.
+* **Prohibido explícitamente:** pre-seed de zonas o pilas de zoom,
+  archivos de tiles (.mbtiles/.zip), botones «descargar para offline»,
+  escaneos automatizados en bbox anchos (especialmente z≥14), bots
+  headless que fuercen render. **Consecuencia para nuestro service worker
+  (PWA):** los tiles NO se precachean; como mucho runtime caching que
+  respete las cabeceras HTTP. El modo offline de la app cubre shell y
+  datos, no el basemap.
+* **Atribución** «© OpenStreetMap contributors» siempre visible
+  (típicamente abajo a la derecha), nunca tras un toggle ni fuera de
+  pantalla.
+* **Sin SLA:** disponibilidad best-effort; pueden bloquear sin aviso si
+  se viola la policy. No hay exención formal para proyectos pequeños,
+  pero el «uso interactivo normal del viewport» es exactamente el caso
+  permitido → **un piloto de barrio encaja con holgura** (ver medición de
+  consumo arriba). Para campaña amplia, reevaluar (§22).
+* **Post-MVP (Capacitor):** una app nativa deberá enviar un User-Agent
+  propio identificando la app; hoy no aplica.
 
-Crear una capa `tileProvider.ts` o similar:
+### ⚠️ Realidad de la geodata: `lalatina-geo` está en lienzo 1000×527, NO en lat/lng (crítico para LCHP-13)
+
+`src/components/map/lalatina-geo.ts` (y su original
+`docs/prototype/fuentes/assets/lalatina-geo.js`) contiene calles,
+edificios, plazas y topónimos reales de La Latina **pero en coordenadas de
+un lienzo de 1000×527 px** (D-016), no en coordenadas geográficas. Los
+avistamientos fake del servicio mock viven en ese mismo espacio.
+
+Qué se comprobó en el spike (ajuste afín por mínimos cuadrados con 9
+plazas como anclas, coordenadas reales vía Nominatim):
+
+* El marco del lienzo corresponde aprox. al bbox
+  `lon −3,7173…−3,7068 · lat 40,4093…40,4138` (rotación ~−2,5°, escala
+  ~1,12 m/px).
+* El mejor ajuste afín deja **residuos de 4–39 m (RMS ~25 m)**. A z17 eso
+  son >100 px de error: superpuesta sobre los tiles reales, la geometría
+  del lienzo **corta edificios y se separa visiblemente de las calles**
+  (captura en el ticket). **La geometría del lienzo NO puede usarse como
+  capa sobre MapLibre.**
+
+Camino de migración decidido para LCHP-13:
+
+1. **La geometría del lienzo se retira con MapLibre.** No hace falta
+   sustituirla: los tiles OSM ya pintan calles, plazas y edificios.
+   `StreetMap.tsx` + `lalatina-geo.ts` viven solo mientras exista el mapa
+   del prototipo y se borran al completar la migración.
+2. **Encuadre:** usar el bbox de arriba como `bounds` iniciales /
+   `maxBounds` del mapa
+   (`[[-3.7173, 40.4093], [-3.7068, 40.4138]]`).
+3. **Los avistamientos necesitan lat/lng reales.** Los seeds/fake en
+   coordenadas de lienzo se convierten una única vez con la
+   transformación afín del spike — válida porque el producto muestra
+   ubicación **aproximada** por diseño (§31) y ±25 m entra en esa
+   tolerancia — o se re-siembran a mano sobre el mapa real. Transformación
+   (lienzo → Web Mercator en metros, EPSG:3857):
+
+   ```text
+   X = 1.11953·x + 0.08583·y − 413805.14
+   Y = −0.04976·x − 1.16532·y + 4926260.13
+   ```
+
+   Los avistamientos nuevos del piloto nacen ya en lat/lng.
+4. **El límite del barrio para lógica de juego** (si hace falta acotar
+   capturas a La Latina) debe ser un polígono GeoJSON real — dibujado a
+   mano o derivado del límite administrativo de OSM —, no el marco del
+   lienzo.
+
+### Abstracción `tileProvider` (validada en LCHP-4)
+
+El boceto original mapeaba bien sobre MapLibre; la forma final corrige un
+detalle: un estilo vectorial es una **URL que se pasa tal cual** a
+`new Map({ style })`, mientras que raster exige construir un estilo JSON
+inline (source `type: 'raster'` + una capa `raster`). Una unión
+discriminada evita los campos huérfanos (`styleUrl: undefined`):
 
 ```ts
-export type TileProvider =
+import type { StyleSpecification } from 'maplibre-gl'
+
+export type TileProviderId =
   | 'osm-raster'
   | 'maptiler-vector'
   | 'stadia-vector'
-  | 'custom-vector';
+  | 'custom-vector'
 
-export const tileProviderConfig = {
-  provider: 'osm-raster',
-  rasterTiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-  styleUrl: undefined,
+export type TileProviderConfig =
+  | {
+      id: TileProviderId
+      kind: 'raster'
+      tiles: string[]
+      tileSize: 256
+      maxzoom: number
+      attribution: string
+    }
+  | { id: TileProviderId; kind: 'vector'; styleUrl: string }
+
+export const tileProvider: TileProviderConfig = {
+  id: 'osm-raster',
+  kind: 'raster',
+  tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+  tileSize: 256,
+  maxzoom: 19,
   attribution: '© OpenStreetMap contributors',
-};
+}
+
+export function buildMapStyle(cfg: TileProviderConfig): string | StyleSpecification {
+  if (cfg.kind === 'vector') return cfg.styleUrl
+  return {
+    version: 8,
+    sources: {
+      basemap: {
+        type: 'raster',
+        tiles: cfg.tiles,
+        tileSize: cfg.tileSize,
+        maxzoom: cfg.maxzoom,
+        attribution: cfg.attribution,
+      },
+    },
+    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+  }
+}
 ```
 
-No hardcodear el proveedor en varios componentes.
+Este `buildMapStyle` exacto se usó en la página del spike y renderiza sin
+ajustes. Cambiar a vector post-MVP = cambiar el objeto de config; ningún
+componente toca el proveedor. No hardcodear el proveedor en varios
+componentes.
 
 ## 22. Opciones futuras para mapas `[Explorando]`
+
+> **Nota (LCHP-4, 2026-07-06):** la elección MVP (opción A) ya está
+> verificada y decidida en §21; esta sección solo queda abierta para el
+> **post-MVP**. Hallazgo del spike a tener en cuenta aquí: los marcadores
+> DOM reposicionan por frame durante pan/zoom (~20–29 fps con 100
+> marcadores sin GPU); si el volumen de avistamientos crece mucho, la
+> evolución natural es una capa `symbol` con sprites para los `approved`,
+> independiente del cambio de proveedor de tiles.
 
 ### Opción A — Mantener raster OSM temporalmente
 
@@ -1082,9 +1225,12 @@ Decisión:
 ```text
 MVP:
 raster OSM, coste cero, sin estilo propio.
+(Verificado en el spike LCHP-4 — evidencia y límites en §21.)
 
 Código:
-preparado para cambiar a vector tiles.
+preparado para cambiar a vector tiles
+(la abstracción tileProvider de §21 quedó validada: cambiar a vector
+= pasar un styleUrl, sin tocar componentes).
 
 Post-MVP:
 evaluar proveedor vectorial con free tier o tiles propios de zona limitada.
