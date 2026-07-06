@@ -68,10 +68,10 @@ export const LA_LATINA_BOUNDS: [[number, number], [number, number]] = [
   [-3.7068, 40.4138],
 ]
 
-// Pan limit: the frame plus ~1 km of margin (≈0.0118° lng, 0.009° lat at
-// 40.4°N). Lets the map breathe and reach the neighborhood's edges without
+// Pan limit: the frame plus ~1.5 km of margin (≈0.0177° lng, 0.0135° lat at
+// 40.4°N). Lets the map breathe and reach the surrounding streets without
 // wandering off to another part of the city — it's a barrio game (brief §21).
 export const LA_LATINA_MAX_BOUNDS: [[number, number], [number, number]] = [
-  [-3.7291, 40.4003],
-  [-3.695, 40.4228],
+  [-3.735, 40.3958],
+  [-3.6891, 40.4273],
 ]

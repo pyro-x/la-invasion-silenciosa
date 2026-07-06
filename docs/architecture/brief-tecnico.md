@@ -1125,8 +1125,8 @@ Camino de migración decidido para LCHP-13:
 2. **Encuadre (implementado LCHP-13):** el bbox de arriba
    (`[[-3.7173, 40.4093], [-3.7068, 40.4138]]`) es el **`bounds` inicial** —
    el mapa abre encuadrado a La Latina. El **`maxBounds`** (límite de paneo)
-   es el mismo bbox **+ ~1 km de margen**
-   (`[[-3.7291, 40.4003], [-3.6950, 40.4228]]`) para que respire sin poder
+   es el mismo bbox **+ ~1,5 km de margen**
+   (`[[-3.7350, 40.3958], [-3.6891, 40.4273]]`) para que respire sin poder
    irse a otra parte de la ciudad (es un juego de barrio; David, loop visual).
 3. **Los avistamientos necesitan lat/lng reales.** Los seeds/fake en
    coordenadas de lienzo se convierten una única vez con la
