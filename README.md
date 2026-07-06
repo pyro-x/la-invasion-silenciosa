@@ -29,6 +29,7 @@ until M2+ (on-screen ribbon).
 | Visual prototype (source of truth for UI) | [`docs/prototype/`](docs/prototype/claude-design-handoff.md) |
 | How to work in this repo (humans and agents) | [`AGENTS.md`](AGENTS.md) |
 | Decision log | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
+| Supabase workflow (CLI, Docker, migrations) | [`docs/SUPABASE.md`](docs/SUPABASE.md) |
 | Tech debt and findings | [`FINDINGS.md`](FINDINGS.md) |
 
 Product documents are written in Spanish for the neighborhood

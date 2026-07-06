@@ -86,7 +86,8 @@ explains how they are kept alive.
 - ❌ Committing `.env`, service-role keys, or any secret. The Supabase
   `anon key` is public by design; EVERYTHING else is not.
 - ❌ Touching the Supabase schema by hand in the dashboard: only
-  versioned migrations under `supabase/migrations/`.
+  versioned migrations under `supabase/migrations/` — forward-only,
+  append-only. Full workflow reference: [`docs/SUPABASE.md`](./docs/SUPABASE.md).
 
 ## Languages (D-014, D-015)
 
