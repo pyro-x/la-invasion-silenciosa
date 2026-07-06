@@ -281,3 +281,10 @@ Why / Trail**.
 **Alternatives:** `POST /verify-sighting` Edge route doing insert + consolidation (LCHP-15's original wording, brief §13) — more imperative code for logic that is purely relational; the endpoint slot stays reserved in the router if friendlier errors are ever needed · allowing anonymous verifiers (rejected: sybil-cheap self-validation at threshold 1).
 **Why:** the trigger runs inside the INSERT's own transaction (atomicity for free), keeps the Edge Function thin, and Postgres-level enforcement holds for every entry path. David chose it explicitly during LCHP-11 planning; LCHP-15 was notified in a ticket comment.
 **Trail:** LCHP-11 · LCHP-15 (comment 2026-07-06) · supabase/migrations/0004 · brief §12, §16 · D-032.
+
+## D-039 · 2026-07-06 · Conversation with David has no fixed language (amends D-014's scope)
+
+**Decision:** Spanish stops being the default for conversation with David (agent sessions, reviews, discussion). There is no fixed conversation language: agents mirror whatever language David uses in each exchange. Everything else in the D-014/D-015 audience split is untouched — English for code/commits/PRs/Linear/dev docs, Spanish for the two product documents and UI strings.
+**Alternatives:** keep Spanish as default (the original D-014 row) · hard-switch the default to English (rejected: the point is removing the fixed default, not replacing it).
+**Why:** David's call (branch `doc/remove-spanish-language-as-default`, PR #25): the fixed default added friction without serving any reader — the audience principle of D-014 applied to conversation resolves to "whatever the human in the conversation is using".
+**Trail:** PR #25 · AGENTS.md §Languages (table row) + §Maintainer · D-014, D-015.

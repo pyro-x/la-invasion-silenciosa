@@ -98,7 +98,7 @@ explains how they are kept alive.
 | Linear: tickets, milestones, new comments | **English** — same audience as the repo |
 | Product documents (`reglas-y-especificacion.md`, `brief-tecnico.md`) | **Spanish** — they belong to the neighborhood association |
 | UI strings visible to users | **Spanish** (quote them verbatim in Spanish inside tickets/PRs) |
-| Conversation with David | Spanish |
+| Conversation with David | No fixed default — mirror the language David uses in each exchange |
 
 ## Stack — locked, do not re-litigate
 
