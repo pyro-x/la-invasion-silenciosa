@@ -325,3 +325,38 @@ Why / Trail**.
 **Alternatives:** mirror every explainer into the Linear ticket too (rejected: duplicates the ticket's own plan/acceptance trail, adds no planning value, and Linear doesn't render mermaid — the diagrams would degrade to code blocks) · always attach an interactive artifact to every PR (rejected: noise on docs/chore PRs; reserve for PRs that warrant it) · keep explainers only as private claude.ai artifacts (rejected: not viewable by a reviewer who only sees the PR).
 **Why:** an explainer answers "what did this change do and how does it work" — a reviewer's question, mapped to the diff — so it belongs where the code is. Keeping each tool to its lane (Linear plans, GitHub implements) matches the AGENTS.md "Resuming work" model (the board is the state truth; PRs explain themselves). Confirmed with David after the LCHP-11/LCHP-12 explainers.
 **Trail:** AGENTS.md §Linear and GitHub · PR #26 (LCHP-11 explainer comment) · PR #28 (LCHP-12 explainer comment) · D-033.
+
+## D-045 · 2026-07-06 · Map tint: «pergamino suave», picked from four visual-loop variants (LCHP-13)
+
+**Decision:** the OSM raster is tinted with `grayscale(0.45) sepia(0.30) brightness(1.06)` as a CSS filter on the MapLibre canvas plus a cream multiply veil (opacity 0.22). The filter targets the canvas only, so marker sprites keep their true colors. Raster-paint properties stay untouched (provider plumbing only).
+**Alternatives:** four candidates were screenshotted side by side over the same real La Latina frame and David picked V4: V1 raster-paint + color-blend veil (subtle; OSM greens survive) · V2 strong sepia (golden monochrome — most "chispera" but kills OSM's semantic colors) · V3 terracotta (reddish toward the accent; aggressive).
+**Why:** kills the embedded-Google-Maps look while keeping maximum label legibility; a CSS filter reproduces exactly what the visual loop showed. Vector tiles with a real custom style remain the post-MVP endgame (§23).
+**Trail:** LCHP-13 · src/styles/globals.css (.barrio-map) · src/components/map/BarrioMap.tsx · tileProvider.ts · visual-loop artifact (tint comparison).
+
+## D-046 · 2026-07-06 · The map shows a generic approximate location — no author, no street (LCHP-13)
+
+**Decision:** the detail sheet and the «Cerca de ti» rows show «Ubicación aproximada · La Latina · hace X» — no author alias and no street name. This is a sanctioned divergence from the mockup (which showed «@rosa_lat» and «Plaza de los Carros» from fake data).
+**Alternatives:** show the author (impossible: `created_by` is on the public view's forbidden list — §12/D-037) · reverse-geocode a street label at read time (rejected for now: adds a Nominatim runtime dependency and could suggest more precision than the ~55 m public snap honestly has).
+**Why:** the golden rule owns this surface; the pin already IS the location. The richer, accuracy-adaptive label («street if we trust the coordinate, neighbourhood if we don't» — David's design) arrives with LCHP-26, which stores a private reverse-geocoded label at capture and exposes an accuracy-bounded public one after its own adversarial review.
+**Trail:** LCHP-13 · LCHP-26 (comment 2026-07-06) · brief §18 · D-037.
+
+## D-047 · 2026-07-06 · Lazy anonymous session, minted by the first action that needs one (LCHP-13)
+
+**Decision:** the app starts sessionless (map reads are public). The first action that requires a JWT — viewing photo evidence today, capture in LCHP-14 — calls `ensureSession()`, which reuses the existing session or signs in anonymously (D-032).
+**Alternatives:** anonymous sign-in on app boot (burns GoTrue's 30/h/IP anonymous-signup budget on every visitor including pure readers, and creates permanent auth.users rows for people who never participate) · requiring registration before evidence (contradicts D-032's first-touch participation).
+**Why:** sessions are created exactly when the product needs them; a map lurker costs nothing. The anonymous id is permanent and upgrades in place (LCHP-3), so nothing is lost by minting it mid-flow.
+**Trail:** LCHP-13 · src/lib/session.ts · src/services/evidence.service.ts · D-032, D-043.
+
+## D-048 · 2026-07-06 · The sample-data ribbon stays until the last fake service dies (amends LCHP-19's plan)
+
+**Decision:** `USING_SAMPLE_DATA` is NOT flipped in LCHP-13, although the original LCHP-19 note said it would be. The map now reads real data, but capture, ranking and profile still serve prototype fixtures — «versión de prueba · datos de ejemplo» remains true for most screens. The ribbon (which also carries the version string, D-040) retires when the last fake service goes real (M6).
+**Alternatives:** flip now because the map is real (would remove the warning while 3 of 5 screens still show fake data).
+**Why:** the ribbon's promise is about the app, not one screen; keeping it honest beats keeping the original schedule.
+**Trail:** LCHP-13 · src/lib/flags.ts · LCHP-19 · D-040.
+
+## D-049 · 2026-07-06 · Dual-purpose database: the game feeds the association's internal touristification dataset
+
+**Decision:** the Supabase database is not only the game's backend — A.V. La Chispera will use it as their internal dataset of touristification signals (short-term rentals, key boxes, auto check-ins…). Standing consequence for data design: when a choice trades off "the game doesn't show X" against "don't store X", lean toward **storing rich private data** (exact coordinates in `lat/lng_private`, measured GPS accuracy in `location_accuracy_m`, the future reverse-geocoded `approx_area` of LCHP-26) — always server-side, never exposed through the public views, with the golden rule untouched on every public surface.
+**Alternatives:** store only what the game shows (simpler, but throws away the association's future dataset) · a separate database for the association (duplicates capture effort; the sightings ARE the dataset).
+**Why:** David's call (2026-07-06): the neighbors' documentation effort should build the association's evidence base, not just game state. The privacy model already separates public from private surfaces, so richness and the golden rule don't conflict.
+**Trail:** David (LCHP-13 session) · LCHP-26 · D-037, D-046 · memory of the capture schema (lat/lng_private, location_accuracy_m).

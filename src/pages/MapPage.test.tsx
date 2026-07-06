@@ -1,53 +1,199 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderRoute } from '@/test/render'
+import type { MapSightingGeo } from '@/types/sighting'
+
+const FIXTURES: MapSightingGeo[] = [
+  {
+    id: 's-approved',
+    speciesId: 'candadin',
+    lat: 40.4118,
+    lng: -3.7105,
+    status: 'approved',
+    verificationCount: 4,
+    createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
+  },
+  {
+    id: 's-pending',
+    speciesId: 'turistox',
+    lat: 40.4109,
+    lng: -3.7074,
+    status: 'pending',
+    verificationCount: 0,
+    createdAt: new Date(Date.now() - 35 * 60_000).toISOString(),
+  },
+]
+
+// The real service hits Supabase; the map needs WebGL. Stub both so the test
+// exercises MapPage's own logic (data → markers, detail sheet, nearby list).
+// Both mocks are controllable per test (rejections, deferred responses).
+const listMapSightingsMock = vi.fn<() => Promise<MapSightingGeo[]>>()
+const getEvidenceUrlMock = vi.fn<(id: string) => Promise<Record<string, unknown>>>()
+
+vi.mock('@/services/sightings.service', async (importActual) => ({
+  ...(await importActual<typeof import('@/services/sightings.service')>()),
+  listMapSightings: () => listMapSightingsMock(),
+}))
+
+vi.mock('@/services/evidence.service', () => ({
+  getEvidenceUrl: (id: string) => getEvidenceUrlMock(id),
+}))
+
+beforeEach(() => {
+  listMapSightingsMock.mockResolvedValue(FIXTURES)
+  getEvidenceUrlMock.mockImplementation((id: string) =>
+    Promise.resolve(
+      id === 's-approved'
+        ? { kind: 'ready', url: 'https://storage.example/signed/photo.jpg', expiresIn: 300 }
+        : { kind: 'unavailable' },
+    ),
+  )
+})
+
+vi.mock('@/components/map/BarrioMap', () => ({
+  BarrioMap: ({
+    sightings,
+    onPick,
+  }: {
+    sightings: MapSightingGeo[]
+    onPick: (id: string) => void
+  }) => (
+    <div>
+      {sightings.map((s) => (
+        <button key={s.id} aria-label={`pin ${s.id}`} onClick={() => onPick(s.id)}>
+          {s.speciesId}
+        </button>
+      ))}
+    </div>
+  ),
+}))
 
 describe('map screen', () => {
-  it('renders the toggle, the legend and the pending list', async () => {
+  it('renders the toggle, the legend and the pending list from real data', async () => {
     renderRoute('/mapa')
     expect(await screen.findByText('Avistamientos en La Latina')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Avistamientos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mapa de calor' })).toBeInTheDocument()
     expect(screen.getByText('Cerca de ti')).toBeInTheDocument()
-    expect(await screen.findByText('3 Por verificar')).toBeInTheDocument()
-    expect(screen.getByText('Plaza de los Carros · @rosa_lat')).toBeInTheDocument()
+    // one pending fixture → the «Cerca de ti» counter and its age line
+    expect(await screen.findByText('1 Por verificar')).toBeInTheDocument()
+    expect(screen.getByText('La Latina · hace 35 min')).toBeInTheDocument()
   })
 
-  it('blinks pending pins with the warn border, validated ones do not', async () => {
-    renderRoute('/mapa')
-    const pendingPin = await screen.findByRole('button', { name: 'Avistamiento A-220' })
-    const pendingBox = pendingPin.firstElementChild as HTMLElement
-    expect(pendingBox.style.animation).toContain('blinkdot')
-    expect(pendingBox.getAttribute('style')).toContain('var(--warn)')
-    const validatedPin = screen.getByRole('button', { name: 'Avistamiento A-204' })
-    const validatedBox = validatedPin.firstElementChild as HTMLElement
-    expect(validatedBox.style.animation).toBe('none')
-    expect(validatedBox.getAttribute('style')).toContain('var(--line)')
-  })
-
-  it('opens the pin popover with species, street, age, status and verify CTA', async () => {
+  it('opens the detail sheet with approximate location — no author, no exact street', async () => {
     const user = userEvent.setup()
     renderRoute('/mapa')
-    await user.click(await screen.findByRole('button', { name: 'Avistamiento A-220' }))
-    expect(await screen.findByText('Plaza de los Carros · hace 20 m')).toBeInTheDocument()
-    expect(screen.getByText('Por verificar')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '✔ Verificar' })).toBeInTheDocument()
-  })
-
-  it('shows the Validado chip and no verify CTA for validated sightings', async () => {
-    const user = userEvent.setup()
-    renderRoute('/mapa')
-    await user.click(await screen.findByRole('button', { name: 'Avistamiento A-204' }))
-    expect(await screen.findByText('Cava Baja, 12 · hace 2 h')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'pin s-approved' }))
+    expect(
+      await screen.findByText('Ubicación aproximada · La Latina · hace 2 h'),
+    ).toBeInTheDocument()
     expect(screen.getByText('Validado')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ver evidencia' })).toBeInTheDocument()
+    // no verify CTA on a validated sighting
     expect(screen.queryByRole('button', { name: '✔ Verificar' })).not.toBeInTheDocument()
+    // the public map never reveals the author
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument()
   })
 
-  it('switches to the heat map and hides the pins', async () => {
+  it('«Ver evidencia» loads the signed photo on demand — never before', async () => {
     const user = userEvent.setup()
     renderRoute('/mapa')
-    expect(await screen.findByRole('button', { name: 'Avistamiento A-220' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'pin s-approved' }))
+    // nothing loaded until asked
+    expect(screen.queryByRole('img', { name: /Evidencia/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Ver evidencia' }))
+    const img = await screen.findByRole('img', { name: /Evidencia/ })
+    expect(img).toHaveAttribute('src', 'https://storage.example/signed/photo.jpg')
+  })
+
+  it('a sighting without a photo shows the friendly unavailable message', async () => {
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+    await user.click(screen.getByRole('button', { name: 'Ver evidencia' }))
+    expect(
+      await screen.findByText('Este avistamiento aún no tiene foto disponible'),
+    ).toBeInTheDocument()
+  })
+
+  it('verify is «próximamente» on pending sightings (real transaction is LCHP-15)', async () => {
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+    const verify = await screen.findByRole('button', { name: '✔ Verificar' })
+    await user.click(verify)
+    expect(await screen.findByText('Verificación · próximamente')).toBeInTheDocument()
+  })
+
+  it('a stale evidence response never renders under a different sighting', async () => {
+    const user = userEvent.setup()
+    let resolveA: (v: Record<string, unknown>) => void = () => {}
+    getEvidenceUrlMock.mockImplementationOnce(() => new Promise((resolve) => (resolveA = resolve)))
+    renderRoute('/mapa')
+    // ask for A's evidence, then switch selection to B before A resolves
+    await user.click(await screen.findByRole('button', { name: 'pin s-approved' }))
+    await user.click(screen.getByRole('button', { name: 'Ver evidencia' }))
+    await user.click(screen.getByRole('button', { name: 'pin s-pending' }))
+    resolveA({ kind: 'ready', url: 'https://storage.example/signed/photo-A.jpg', expiresIn: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    // B is selected: A's late photo must NOT appear anywhere
+    expect(screen.queryByRole('img', { name: /Evidencia/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Evidencia ·/)).not.toBeInTheDocument()
+  })
+
+  it('same-sighting re-taps: the newest evidence request wins even if it resolves first', async () => {
+    const user = userEvent.setup()
+    const resolvers: ((v: Record<string, unknown>) => void)[] = []
+    getEvidenceUrlMock.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)))
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-approved' }))
+    await user.click(screen.getByRole('button', { name: 'Ver evidencia' })) // req 1
+    await user.click(screen.getByRole('button', { name: 'Ver evidencia' })) // req 2 (newest)
+    // newest resolves first, then the older one — the older must not clobber it
+    resolvers[1]({ kind: 'ready', url: 'https://storage.example/new.jpg', expiresIn: 300 })
+    resolvers[0]({ kind: 'unavailable' })
+    await new Promise((r) => setTimeout(r, 50))
+    const img = await screen.findByRole('img', { name: /Evidencia/ })
+    expect(img).toHaveAttribute('src', 'https://storage.example/new.jpg')
+    expect(
+      screen.queryByText('Este avistamiento aún no tiene foto disponible'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('dismissing while loading: a late evidence response does not reopen the overlay', async () => {
+    const user = userEvent.setup()
+    let resolve: (v: Record<string, unknown>) => void = () => {}
+    getEvidenceUrlMock.mockImplementationOnce(() => new Promise((r) => (resolve = r)))
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-approved' }))
+    await user.click(screen.getByRole('button', { name: 'Ver evidencia' }))
+    // close the loading overlay before the request resolves
+    await user.click(await screen.findByRole('button', { name: 'Cerrar' }))
+    resolve({ kind: 'ready', url: 'https://storage.example/late.jpg', expiresIn: 300 })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByRole('img', { name: /Evidencia/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Evidencia ·/)).not.toBeInTheDocument()
+  })
+
+  it('a failed map read shows a retryable error, never a fake empty map', async () => {
+    listMapSightingsMock.mockRejectedValue(new Error('boom'))
+    renderRoute('/mapa')
+    expect(
+      await screen.findByText('No se pudieron cargar los avistamientos', undefined, {
+        timeout: 4000,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+    // the lying counter is hidden
+    expect(screen.queryByText('0 Por verificar')).not.toBeInTheDocument()
+  })
+
+  it('the heat-map toggle hides the markers', async () => {
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    expect(await screen.findByRole('button', { name: 'pin s-approved' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Mapa de calor' }))
-    expect(screen.queryByRole('button', { name: 'Avistamiento A-220' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'pin s-approved' })).not.toBeInTheDocument()
+    expect(screen.getByText('Mapa de calor · próximamente')).toBeInTheDocument()
   })
 })

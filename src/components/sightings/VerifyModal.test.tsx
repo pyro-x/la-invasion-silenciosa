@@ -1,37 +1,56 @@
-import { screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { renderRoute } from '@/test/render'
+import { VerifyModal } from './VerifyModal'
+import type { MapSighting } from '@/types/sighting'
 
-describe('static verification modal (mockup parity)', () => {
-  it('opens from a «Cerca de ti» row and shows the golden-rule reminder', async () => {
-    const user = userEvent.setup()
-    renderRoute('/mapa')
-    await waitFor(() => expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0))
-    await user.click(screen.getAllByText('Verificar')[0])
+// The modal is rendered in isolation: MapPage no longer opens it (verify is
+// «próximamente» until LCHP-15, which will wire it to the real transaction
+// and to the real data shape). Here we test the component's own contract.
+const SIGHTING: MapSighting = {
+  id: 'A-220',
+  speciesId: 'candadin',
+  x: 570,
+  y: 274,
+  street: 'Plaza de los Carros',
+  reportedBy: 'rosa_lat',
+  reportedAgo: 'hace 20 m',
+  status: 'pending',
+  verificationCount: 1,
+}
+
+describe('verification modal (component)', () => {
+  it('shows the creature, the golden-rule reminder and the actions', () => {
+    render(
+      <VerifyModal
+        sighting={SIGHTING}
+        speciesName="CANDADÍN"
+        onClose={() => {}}
+        onConfirm={() => {}}
+      />,
+    )
     expect(screen.getByText('Verificar avistamiento')).toBeInTheDocument()
     expect(
       screen.getByText('Comprueba que no aparezcan personas ni datos privados.'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Saltar' })).toBeInTheDocument()
   })
 
-  it('Confirmar closes the modal and shows the +5 toast without changing state', async () => {
+  it('Confirmar fires onConfirm; Saltar/Cerrar fire onClose', async () => {
     const user = userEvent.setup()
-    renderRoute('/mapa')
-    await waitFor(() => expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0))
-    await user.click(screen.getAllByText('Verificar')[0])
+    const onConfirm = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <VerifyModal
+        sighting={SIGHTING}
+        speciesName="CANDADÍN"
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />,
+    )
     await user.click(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
-    expect(screen.queryByText('Verificar avistamiento')).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('+5 · verificación')
-    expect(screen.getByText('3 Por verificar')).toBeInTheDocument()
-  })
-
-  it('Saltar closes without a toast', async () => {
-    const user = userEvent.setup()
-    renderRoute('/mapa')
-    await waitFor(() => expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0))
-    await user.click(screen.getAllByText('Verificar')[0])
+    expect(onConfirm).toHaveBeenCalledOnce()
     await user.click(screen.getByRole('button', { name: 'Saltar' }))
-    expect(screen.queryByText('Verificar avistamiento')).not.toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalledOnce()
   })
 })

@@ -915,25 +915,42 @@ Formato preferente: WebP
 
 ## 18. Flujo de mapa
 
+### Implementado (LCHP-13 — enmienda 2026-07-06) `Decidido`
+
+Espejo del comportamiento real (`BarrioMap` + `MapPage`, verificado e2e):
+
 ```text
-Usuario abre mapa
+Usuario abre mapa (sin sesión: lectura pública)
 ↓
-La app carga solo avistamientos approved
+La app lee public_map_sightings: pending Y approved
+(enmienda LCHP-1: los pending son visibles desde el primer momento)
 ↓
-Se muestran iconos por especie
+Iconos de especie sobre MapLibre + raster OSM teñido «pergamino suave»
+(elegido por David en el loop visual entre 4 variantes; filtro CSS sobre
+el canvas + velo crema multiply — los sprites conservan su color)
 ↓
-No se cargan fotos
+Los pending llevan anillo ámbar y parpadean (blinkdot); los validados no
 ↓
-Usuario pulsa icono
+NO se carga ninguna foto (verificado: 0 peticiones a Storage al cargar)
 ↓
-Se abre bottom sheet/detalle
+Usuario pulsa icono (o fila de «Cerca de ti»)
 ↓
-Puede pedir ver evidencia
+Ficha de detalle: especie · estado · antigüedad ·
+«Ubicación aproximada · La Latina»
+— SIN autor y SIN calle exacta: la vista pública no los expone (§12);
+  la etiqueta adaptativa por precisión llegará con el geocodificado
+  privado (ticket LCHP-26)
 ↓
-Solo entonces se solicita signed URL
+«Ver evidencia» → sesión anónima perezosa si no hay (D-032/D-043)
+→ POST /get-photo-url → overlay con la foto (URL firmada de 5 min)
+(verificado: exactamente 1 petición a Storage, solo tras pedirla;
+un avistamiento sin foto muestra un aviso amable)
+↓
+«Verificar» → «próximamente» (la transacción real es LCHP-15)
 ```
 
-La foto es evidencia bajo demanda, no contenido principal del mapa.
+La foto es evidencia bajo demanda, no contenido principal del mapa. El
+«Mapa de calor» queda como toggle con aviso «próximamente» (post-MVP).
 
 ## 19. Flujo de captura
 
