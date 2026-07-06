@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderRoute } from '@/test/render'
 import type { CameraPermission } from '@/lib/permissions'
@@ -56,6 +56,9 @@ vi.mock('@/components/map/LocationPickerMap', () => ({
 const submitMock = vi.fn<(s: NewSightingSubmission) => Promise<SubmitSightingResult>>()
 vi.mock('@/services/sightings.service', () => ({
   submitSighting: (submission: NewSightingSubmission) => submitMock(submission),
+  // MapPage mounts when a test navigates away from /cazar via ✕
+  listMapSightings: () => Promise.resolve([]),
+  listPendingSightings: () => Promise.resolve([]),
 }))
 
 beforeEach(() => {
@@ -233,6 +236,31 @@ describe('capture flow (Cazar)', () => {
 
     // the cached gate fix pre-centers the map: GPS position without any tap
     expect(await screen.findByText(/Tu posición · ±9 m/)).toBeInTheDocument()
+  })
+
+  it('stops a granted stream if the user leaves before the arming settles (no camera-light leak)', async () => {
+    const user = userEvent.setup()
+    cameraStateMock.mockResolvedValue('prompt')
+    const stopTrack = vi.fn()
+    let resolveStream: (stream: MediaStream) => void = () => {}
+    const fakeStream = Object.assign(new MediaStream(), {
+      getTracks: () => [{ stop: stopTrack }],
+    })
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      mediaDevices: {
+        getUserMedia: () => new Promise<MediaStream>((resolve) => (resolveStream = resolve)),
+      },
+      geolocation: { getCurrentPosition: () => {} }, // never answers (GPS cold)
+    })
+    renderHunt()
+
+    await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+    // the user gives up mid-wait and leaves the flow
+    await user.click(screen.getByLabelText('Cerrar'))
+    // ...and only then does the OS deliver the granted stream
+    resolveStream(fakeStream)
+    await waitFor(() => expect(stopTrack).toHaveBeenCalled())
   })
 
   it('keeps collected data when navigating back through the step indicator', async () => {

@@ -14,14 +14,14 @@ import {
   initialCaptureFlowState,
   isStepComplete,
 } from '@/features/hunt/captureFlow'
-import { EquipmentGate, type Equipment } from '@/features/hunt/EquipmentGate'
+import { EquipmentGate } from '@/features/hunt/EquipmentGate'
 import { LocationStep } from '@/features/hunt/LocationStep'
 import { PhotoStep } from '@/features/hunt/PhotoStep'
 import { PrivacyNote } from '@/features/hunt/PrivacyNote'
-import { cameraPermissionState } from '@/lib/permissions'
+import { getGeoFix, type GeoFix } from '@/lib/geo'
+import { CAMERA_CONSTRAINTS, cameraPermissionState } from '@/lib/permissions'
 import { submitSighting } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
-import type { GeoFix } from '@/lib/geo'
 
 const STEP_TITLES = [
   'Captura la criatura',
@@ -48,14 +48,15 @@ export function HuntPage() {
   // re-arms exactly when a native prompt is coming). The primed stream lives
   // in a ref — it is a live resource, not render state.
   const [gate, setGate] = useState<GateState>('checking')
+  const [arming, setArming] = useState(false)
   const [autoStartCamera, setAutoStartCamera] = useState(false)
   const [primedFix, setPrimedFix] = useState<GeoFix | null>(null)
   const primedStreamRef = useRef<MediaStream | null>(null)
+  const aliveRef = useRef(true)
 
   useEffect(() => {
-    let alive = true
     void cameraPermissionState().then((camera) => {
-      if (!alive) return
+      if (!aliveRef.current) return
       if (camera === 'granted') {
         setAutoStartCamera(true)
         setGate('done')
@@ -63,16 +64,32 @@ export function HuntPage() {
         setGate('open')
       }
     })
-    return () => {
-      alive = false
-    }
   }, [])
 
-  function onGateReady(equipment: Equipment) {
-    primedStreamRef.current = equipment.stream
-    setPrimedFix(equipment.fix)
-    setAutoStartCamera(true)
-    setGate('done')
+  // One gesture, both prompts: fired in parallel and synchronously within the
+  // tap (Safari's transient activation must cover both). The stream is handed
+  // to the viewfinder AS SOON AS the camera resolves — never parked while the
+  // slower geolocation settles (Codex review: a parked stream is a leak) —
+  // and the fix lands whenever it lands, pre-centering the location step.
+  function armEquipment() {
+    setArming(true)
+    const streamPromise: Promise<MediaStream | null> = navigator.mediaDevices?.getUserMedia
+      ? navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).catch(() => null)
+      : Promise.resolve(null)
+    const fixPromise = getGeoFix()
+
+    void streamPromise.then((stream) => {
+      if (!aliveRef.current) {
+        stream?.getTracks().forEach((track) => track.stop())
+        return
+      }
+      primedStreamRef.current = stream
+      setAutoStartCamera(true)
+      setGate('done')
+    })
+    void fixPromise.then((fix) => {
+      if (aliveRef.current) setPrimedFix(fix)
+    })
   }
 
   function takePrimedStream(): MediaStream | null {
@@ -89,6 +106,7 @@ export function HuntPage() {
   })
   useEffect(
     () => () => {
+      aliveRef.current = false
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
       primedStreamRef.current?.getTracks().forEach((track) => track.stop())
       primedStreamRef.current = null
@@ -200,7 +218,9 @@ export function HuntPage() {
           </div>
         )}
 
-        {showGate && <EquipmentGate onReady={onGateReady} onSkip={() => setGate('done')} />}
+        {showGate && (
+          <EquipmentGate arming={arming} onArm={armEquipment} onSkip={() => setGate('done')} />
+        )}
 
         {!showGate && gate !== 'checking' && state.step === 0 && (
           <PhotoStep
