@@ -2,6 +2,7 @@
 // so nobody mistakes the public preview for real data. Removed in LCHP-13.
 // Hidden under automation so the visual-replica loop screenshots stay clean.
 import { USING_SAMPLE_DATA } from '@/lib/flags'
+import { APP_VERSION } from '@/lib/version'
 
 export function SampleDataBanner() {
   if (!USING_SAMPLE_DATA || navigator.webdriver) return null
@@ -25,7 +26,7 @@ export function SampleDataBanner() {
         opacity: 0.92,
       }}
     >
-      versión de prueba · datos de ejemplo
+      versión de prueba · datos de ejemplo · {APP_VERSION}
     </div>
   )
 }
