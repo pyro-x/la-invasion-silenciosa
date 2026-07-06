@@ -62,7 +62,52 @@ function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState 
   return { db, state }
 }
 
-const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])
+// Structurally valid, metadata-free JPEG (SOI · APP0 · SOS · EOI): the
+// metadata guard from the LCHP-14 review walks real segments, so the
+// fixture must be a JPEG the client pipeline could actually produce.
+const JPEG_BYTES = new Uint8Array([
+  0xff,
+  0xd8, // SOI
+  0xff,
+  0xe0,
+  0x00,
+  0x04,
+  0x4a,
+  0x46, // APP0 (JFIF header, allowed)
+  0xff,
+  0xda,
+  0x00,
+  0x02, // SOS
+  0x12,
+  0x34, // entropy-coded data
+  0xff,
+  0xd9, // EOI
+])
+
+// The same JPEG with an EXIF APP1 segment injected — what a client that
+// bypassed src/lib/photo.ts would upload.
+const EXIF_JPEG_BYTES = new Uint8Array([
+  0xff,
+  0xd8, // SOI
+  0xff,
+  0xe1,
+  0x00,
+  0x08,
+  0x45,
+  0x78,
+  0x69,
+  0x66,
+  0x00,
+  0x00, // APP1 'Exif\0\0'
+  0xff,
+  0xda,
+  0x00,
+  0x02, // SOS
+  0x12,
+  0x34,
+  0xff,
+  0xd9, // EOI
+])
 
 function sightingForm(
   overrides: Partial<Record<'species_id' | 'lat' | 'lng', string>> = {},
@@ -119,6 +164,15 @@ Deno.test('create-sighting: a PNG pretending to be a JPEG is rejected by magic b
   const res = await createSighting(sightingForm({}, png), REGISTERED, db)
   assertEquals(res.status, 400)
   assertEquals(await errorCode(res), 'invalid_image')
+})
+
+Deno.test('create-sighting: an EXIF-bearing JPEG is rejected at the trust boundary', async () => {
+  const { db, state } = fakeDb()
+  const exif = new Blob([EXIF_JPEG_BYTES], { type: 'image/jpeg' })
+  const res = await createSighting(sightingForm({}, exif), REGISTERED, db)
+  assertEquals(res.status, 400)
+  assertEquals(await errorCode(res), 'invalid_image')
+  assertEquals(state.uploads.length, 0) // never reached Storage
 })
 
 Deno.test('create-sighting: oversized image is rejected before reading bytes', async () => {

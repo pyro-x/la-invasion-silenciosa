@@ -10,6 +10,7 @@ import { apiError, json } from '../lib/responses.ts'
 import {
   bodyExceedsLimit,
   detectImageMime,
+  imageCarriesMetadata,
   isUuid,
   isWithinNeighborhood,
   MAX_IMAGE_BYTES,
@@ -63,6 +64,13 @@ export async function createSighting(req: Request, caller: Caller, db: Db): Prom
   const mime = detectImageMime(bytes)
   if (mime === null) {
     return apiError(400, 'invalid_image', 'La foto debe ser JPEG o WebP')
+  }
+
+  // Golden rule at the trust boundary: the app's pipeline always strips
+  // metadata before upload, so bytes carrying EXIF/XMP/COM only come from a
+  // client that bypassed it (LCHP-14 Codex review).
+  if (imageCarriesMetadata(bytes, mime)) {
+    return apiError(400, 'invalid_image', 'La foto contiene metadatos — hazla desde la app')
   }
 
   if (!(await db.speciesIsActive(speciesId))) {

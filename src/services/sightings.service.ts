@@ -1,17 +1,12 @@
-// Map reads are REAL (LCHP-13): listMapSightings/listPendingSightings read
-// the `public_map_sightings` view (LCHP-11) through the anon client. The
-// capture-flow helpers (getApproxLocation/submitSighting) are still fake on
-// the prototype's canvas coordinates until M4 (LCHP-14) wires them to the
-// Edge Function; the map no longer depends on them.
+// Map reads (LCHP-13) and real capture submit (LCHP-14). Reads go straight
+// to the `public_map_sightings` view through the anon client; a sighting is
+// only ever born through POST /create-sighting (D-037), which owns every
+// server-side invariant (bbox, image bytes, quota, public-grid snapping).
+import { FunctionsHttpError } from '@supabase/supabase-js'
+import { ensureSession } from '@/lib/session'
 import { supabase } from '@/lib/supabase'
 import type { SpeciesId } from '@/types/species'
-import type {
-  CaptureLocation,
-  MapSighting,
-  MapSightingGeo,
-  NewSighting,
-  SightingStatus,
-} from '@/types/sighting'
+import type { MapSightingGeo, SightingStatus } from '@/types/sighting'
 
 // species_id is a UUID in the DB; the app keys sprites and the Pokédex by
 // slug. anon can read active species (policy species_select_active), so we
@@ -68,31 +63,72 @@ export async function listPendingSightings(): Promise<MapSightingGeo[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Capture flow — still fake (canvas coords) until LCHP-14 (M4). HuntPage is
-// the only consumer; the real map above does not touch these.
+// Capture submit (LCHP-14)
 // ---------------------------------------------------------------------------
 
-const APPROX_LOCATION: CaptureLocation = {
-  street: 'Calle de la Cava Baja · La Latina',
-  shortStreet: 'Cava Baja',
-  x: 710,
-  y: 225,
+/** What the capture flow sends: an EXIF-free photo plus the exact position. */
+export type NewSightingSubmission = {
+  speciesId: SpeciesId
+  /** Already processed by src/lib/photo.ts (≤1280 px JPEG, metadata-free). */
+  photo: Blob
+  lat: number
+  lng: number
+  accuracyM: number | null
 }
 
-export async function getApproxLocation(): Promise<CaptureLocation> {
-  return APPROX_LOCATION
+export type SubmitSightingResult =
+  | { kind: 'created'; id: string }
+  /** The server said no; `message` is its Spanish string, shown verbatim. */
+  | { kind: 'rejected'; message: string }
+  | { kind: 'error' }
+
+interface CreateSightingResponse {
+  id?: string
 }
 
-let nextSightingNumber = 224
+interface ApiErrorBody {
+  error?: string
+  message?: string
+}
 
-/** Fake submit for the M1 capture flow; the real POST /create-sighting is LCHP-14. */
-export async function submitSighting(draft: NewSighting): Promise<MapSighting> {
-  return {
-    ...draft,
-    id: `A-${nextSightingNumber++}`,
-    reportedBy: 'pyroxine',
-    reportedAgo: 'ahora mismo',
-    status: 'pending',
-    verificationCount: 0,
+/** Exported for tests: the exact multipart contract of /create-sighting. */
+export function buildSightingForm(speciesUuid: string, s: NewSightingSubmission): FormData {
+  const form = new FormData()
+  form.append('photo', new File([s.photo], 'sighting.jpg', { type: 'image/jpeg' }))
+  form.append('species_id', speciesUuid)
+  form.append('lat', String(s.lat))
+  form.append('lng', String(s.lng))
+  if (s.accuracyM !== null) form.append('accuracy', String(s.accuracyM))
+  return form
+}
+
+export async function submitSighting(
+  submission: NewSightingSubmission,
+): Promise<SubmitSightingResult> {
+  try {
+    await ensureSession()
+    const species = await supabase
+      .from('species')
+      .select('id')
+      .eq('slug', submission.speciesId)
+      .single()
+    if (species.error) return { kind: 'error' }
+
+    const { data, error } = await supabase.functions.invoke<CreateSightingResponse>(
+      'api/create-sighting',
+      { body: buildSightingForm(species.data.id, submission) },
+    )
+    if (error) {
+      if (error instanceof FunctionsHttpError) {
+        const response: Response = error.context
+        const body: ApiErrorBody | null = await response.json().catch(() => null)
+        if (typeof body?.message === 'string') return { kind: 'rejected', message: body.message }
+      }
+      return { kind: 'error' }
+    }
+    if (typeof data?.id !== 'string') return { kind: 'error' }
+    return { kind: 'created', id: data.id }
+  } catch {
+    return { kind: 'error' }
   }
 }
