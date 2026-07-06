@@ -441,6 +441,15 @@ esta sección es el espejo del esquema real. Notas de implementación:
   `auth.users`; `point_events.user_id` y `verifications.user_id` →
   `CASCADE` (el borrado de cuenta arrastra su libro de puntos y sus
   verificaciones); `sightings.species_id` → `RESTRICT`.
+* Invariantes de datos (revisión adversarial D-033): las coordenadas y la
+  precisión tienen `CHECK` de rango (lat ∈ [-90, 90], lng ∈ [-180, 180],
+  `location_accuracy_m` ≥ 0, sin NaN ni Infinity).
+* `verification_count` y `report_count` son **contadores históricos**
+  que incrementa el servidor (LCHP-12/15), NO agregados en vivo de las
+  tablas `verifications`/`reports`: si un verificador borra su cuenta,
+  sus filas de `verifications` desaparecen (GDPR) pero el contador, las
+  transiciones de estado ya producidas y los puntos otorgados NO se
+  rebobinan — un avistamiento aprobado sigue aprobado.
 
 ### species
 
