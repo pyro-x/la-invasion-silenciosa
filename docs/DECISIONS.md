@@ -288,6 +288,7 @@ Why / Trail**.
 **Alternatives:** git tags + GitHub Releases + changelog (ceremony without readers: with continuous deploy the SHA is the release) · bump-whenever-it-feels-right (numbers lose meaning; gets forgotten) · version in the header permanently (dev noise in the game's most valuable pixels).
 **Why:** during the street pilot "which build is this phone running?" is the first triage question, and the answer must be readable by a neighbor from their own screen; the SHA maps 1:1 to the Cloudflare dashboard and `git log`.
 **Trail:** LCHP-24 · vite.config.ts · src/lib/version.ts · src/components/ui/SampleDataBanner.tsx · src/pages/ProfilePage.tsx (+ tests) · D-020, D-026.
+**First bump (2026-07-06):** M2 (Supabase foundation) completed with LCHP-12 → `0.1.0` → `0.2.0`, carried by LCHP-12's PR #28 per this policy.
 
 ## D-041 · 2026-07-06 · Quota trigger derives anonymity from auth.users, not the JWT (LCHP-12)
 
