@@ -1,10 +1,13 @@
-// Real location step (LCHP-14): the position is always the picker map's
-// center (fixed center pin, D-051). «Usar mi ubicación» fires the native
-// geolocation prompt ON TAP (never on load — LCHP-5 decision); denial or
-// absence degrade to the manual pin, never a dead end. The exact coordinate
-// goes to the server untouched (D-049); the public one is snapped there.
+// Real location step (LCHP-14/LCHP-28): the position is always the picker
+// map's center (fixed center pin, D-051). The gate may hand over a cached GPS
+// fix so the map opens pre-centered without re-prompting; «Usar mi ubicación»
+// fires the native prompt ON TAP for anyone who skipped it. Denial or absence
+// degrade to the manual pin, never a dead end — with per-platform recovery
+// guidance (the old copy sent iOS users to a settings page with no location
+// entry). The exact coordinate goes to the server untouched (D-049).
 import { lazy, Suspense, useRef, useState } from 'react'
-import { getGeoFix, isWithinLaLatina } from '@/lib/geo'
+import { getGeoFix, isWithinLaLatina, type GeoFix } from '@/lib/geo'
+import { locationDenialGuidance } from '@/lib/permissions'
 import type { CapturePosition } from './captureFlow'
 
 const LocationPickerMap = lazy(() =>
@@ -14,6 +17,8 @@ const LocationPickerMap = lazy(() =>
 type Props = {
   position: CapturePosition | null
   approxOnly: boolean
+  /** Geolocation outcome cached by the equipment gate, if it ran. */
+  primedFix: GeoFix | null
   onPositionChanged: (position: CapturePosition) => void
   onApproxToggled: () => void
   onNext: () => void
@@ -21,24 +26,42 @@ type Props = {
 
 type GeoState = 'idle' | 'locating' | 'granted' | 'denied' | 'unavailable'
 
-const GEO_MESSAGES: Partial<Record<GeoState, string>> = {
-  denied:
-    'Sin permiso de ubicación. Actívala en Ajustes → Safari (o en el candado del navegador) — o coloca el pin a mano arrastrando el mapa.',
-  unavailable: 'No se pudo obtener tu posición. Coloca el pin a mano arrastrando el mapa.',
+function geoMessageFor(geo: GeoState): string | null {
+  if (geo === 'denied') return locationDenialGuidance()
+  if (geo === 'unavailable') {
+    return 'No se pudo obtener tu posición. Coloca el pin a mano arrastrando el mapa.'
+  }
+  return null
 }
+
+type PendingFly = { lat: number; lng: number; accuracyM: number }
+
+// easeTo lands exactly on the target unless maxBounds clamps it; anything
+// closer than ~10 m is the fly settling, not the initial-load report.
+const FLY_MATCH_EPSILON = 1e-4
 
 export function LocationStep({
   position,
   approxOnly,
+  primedFix,
   onPositionChanged,
   onApproxToggled,
   onNext,
 }: Props) {
-  const [geo, setGeo] = useState<GeoState>('idle')
-  const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(null)
-  // Accuracy of a GPS fix in flight: consumed by the programmatic moveend it
-  // triggers, so the settled center is tagged as a GPS position.
-  const pendingGpsAccuracy = useRef<number | null>(null)
+  const [geo, setGeo] = useState<GeoState>(() =>
+    primedFix && primedFix.kind !== 'ok' ? primedFix.kind : 'idle',
+  )
+  const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(() =>
+    primedFix?.kind === 'ok' ? { lat: primedFix.lat, lng: primedFix.lng } : null,
+  )
+  // The GPS target in flight: programmatic settles are only tagged as a GPS
+  // position when they land ON the target — the map's initial-load report
+  // (also programmatic, at the default frame) must not steal the tag.
+  const pendingFly = useRef<PendingFly | null>(
+    primedFix?.kind === 'ok'
+      ? { lat: primedFix.lat, lng: primedFix.lng, accuracyM: primedFix.accuracyM }
+      : null,
+  )
 
   async function locate() {
     setGeo('locating')
@@ -48,23 +71,32 @@ export function LocationStep({
       return
     }
     setGeo('granted')
-    pendingGpsAccuracy.current = fix.accuracyM
+    pendingFly.current = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM }
     setFlyTo({ lat: fix.lat, lng: fix.lng })
   }
 
   function onCenterChanged(center: { lat: number; lng: number }, byUser: boolean) {
-    if (!byUser && pendingGpsAccuracy.current !== null) {
-      const accuracyM = pendingGpsAccuracy.current
-      pendingGpsAccuracy.current = null
-      onPositionChanged({ ...center, accuracyM, source: 'gps' })
+    const target = pendingFly.current
+    if (!byUser && target) {
+      const landed =
+        Math.abs(center.lat - target.lat) < FLY_MATCH_EPSILON &&
+        Math.abs(center.lng - target.lng) < FLY_MATCH_EPSILON
+      if (landed) {
+        pendingFly.current = null
+        setGeo('granted')
+        onPositionChanged({ ...center, accuracyM: target.accuracyM, source: 'gps' })
+      }
+      // Not landed yet (initial-load report, or the fly got clamped by the
+      // map bounds): wait — the user's own drag always takes over below.
       return
     }
+    if (byUser) pendingFly.current = null
     onPositionChanged({ ...center, accuracyM: null, source: 'manual' })
   }
 
   const outOfBounds = position !== null && !isWithinLaLatina(position.lat, position.lng)
   const canContinue = position !== null && !outOfBounds
-  const geoMessage = GEO_MESSAGES[geo]
+  const geoMessage = geoMessageFor(geo)
 
   return (
     <div className="stack" style={{ gap: 12 }}>

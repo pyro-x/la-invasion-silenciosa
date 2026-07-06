@@ -992,12 +992,22 @@ La foto es evidencia bajo demanda, no contenido principal del mapa. El
 
 ## 19. Flujo de captura
 
-### Implementado (LCHP-14 — enmienda 2026-07-06) `Decidido`
+### Implementado (LCHP-14 + LCHP-28 — enmienda 2026-07-06) `Decidido`
 
-Espejo del comportamiento real (`HuntPage` + `PhotoStep` + `LocationStep`):
+Espejo del comportamiento real (`HuntPage` + `EquipmentGate` + `PhotoStep` +
+`LocationStep`):
 
 ```text
-Usuario pulsa “Cazar” (recordatorio de la regla de oro en pantalla)
+Usuario pulsa “Cazar”
+↓
+Puerta de equipamiento (D-053) — SOLO si viene un prompt nativo
+(cámara no concedida): «¡Prepara tu equipo!» + regla de oro; UN tap
+dispara cámara + ubicación en un solo gesto. El stream concedido pasa
+vivo al visor y el fix GPS se cachea para el paso de ubicación.
+«Ahora no» → cámara del sistema / galería. En Android se auto-salta
+desde la 2ª visita; en iOS re-aparece por sesión (WebKit no persiste
+el permiso de cámara, bug 215884) — un diálogo nativo nunca
+interrumpe a mitad de acción
 ↓
 Foto: visor in-app (getUserMedia, cámara trasera) o cámara del
 sistema / galería (D-050) → pipeline §17.1 → previsualización
@@ -1005,9 +1015,11 @@ sistema / galería (D-050) → pipeline §17.1 → previsualización
 Elige especie (catálogo real)
 ↓
 Ubicación: mapa MapLibre con pin fijo al centro — arrastra el mapa
-debajo del pin (D-052). «Usar mi ubicación» dispara getCurrentPosition
-EN EL TAP (nunca al cargar); si code=1 / no disponible → aviso
-(«Actívala en Ajustes → Safari…») y el pin manual sigue funcionando.
+debajo del pin (D-052); si la puerta cacheó un fix GPS, abre ya
+centrado en ti. «Usar mi ubicación» dispara getCurrentPosition EN EL
+TAP; si code=1 / no disponible → guía POR PLATAFORMA (iOS: Ajustes →
+Privacidad y seguridad → Localización → Sitios web de Safari; resto:
+el candado del navegador) y el pin manual sigue funcionando.
 Un pin fuera de La Latina bloquea el paso (espejo del bbox servidor)
 ↓
 Revisa y envía → POST /create-sighting (multipart: foto limpia +
