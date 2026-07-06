@@ -1,97 +1,77 @@
-// Typed fake service (D-007): prototype sightings (data.jsx). Coordinates
-// are prototype canvas coords until MapLibre lands in LCHP-13 (D-016).
-import type { CaptureLocation, MapSighting, NewSighting } from '@/types/sighting'
+// Map reads are REAL (LCHP-13): listMapSightings/listPendingSightings read
+// the `public_map_sightings` view (LCHP-11) through the anon client. The
+// capture-flow helpers (getApproxLocation/submitSighting) are still fake on
+// the prototype's canvas coordinates until M4 (LCHP-14) wires them to the
+// Edge Function; the map no longer depends on them.
+import { supabase } from '@/lib/supabase'
+import type { SpeciesId } from '@/types/species'
+import type {
+  CaptureLocation,
+  MapSighting,
+  MapSightingGeo,
+  NewSighting,
+  SightingStatus,
+} from '@/types/sighting'
 
-const SIGHTINGS: MapSighting[] = [
-  {
-    id: 'A-204',
-    speciesId: 'candadin',
-    x: 660,
-    y: 221,
-    street: 'Cava Baja, 12',
-    reportedBy: 'lola_rastrea',
-    reportedAgo: 'hace 2 h',
-    status: 'approved',
-    verificationCount: 4,
-  },
-  {
-    id: 'A-209',
-    speciesId: 'keymon',
-    x: 710,
-    y: 116,
-    street: 'Calle del Almendro',
-    reportedBy: 'el_vecino_z',
-    reportedAgo: 'hace 4 h',
-    status: 'approved',
-    verificationCount: 6,
-  },
-  {
-    id: 'A-211',
-    speciesId: 'turistox',
-    x: 560,
-    y: 84,
-    street: 'Plaza de la Paja',
-    reportedBy: 'mapache_42',
-    reportedAgo: 'hace 5 h',
-    status: 'approved',
-    verificationCount: 3,
-  },
-  {
-    id: 'A-215',
-    speciesId: 'checkinchu',
-    x: 850,
-    y: 311,
-    street: 'Calle de Toledo, 30',
-    reportedBy: 'pyroxine',
-    reportedAgo: 'hace 1 d',
-    status: 'approved',
-    verificationCount: 5,
-  },
-  {
-    id: 'A-220',
-    speciesId: 'candadin',
-    x: 570,
-    y: 274,
-    street: 'Plaza de los Carros',
-    reportedBy: 'rosa_lat',
-    reportedAgo: 'hace 20 m',
-    status: 'pending',
-    verificationCount: 1,
-  },
-  {
-    id: 'A-221',
-    speciesId: 'turistox',
-    x: 960,
-    y: 321,
-    street: 'Plaza de Cascorro',
-    reportedBy: 'curro88',
-    reportedAgo: 'hace 35 m',
-    status: 'pending',
-    verificationCount: 0,
-  },
-  {
-    id: 'A-223',
-    speciesId: 'keymon',
-    x: 660,
-    y: 248,
-    street: 'Cava Alta, 7',
-    reportedBy: 'marta_v',
-    reportedAgo: 'hace 1 h',
-    status: 'pending',
-    verificationCount: 2,
-  },
-]
-
-export async function listMapSightings(): Promise<MapSighting[]> {
-  return SIGHTINGS
+// species_id is a UUID in the DB; the app keys sprites and the Pokédex by
+// slug. anon can read active species (policy species_select_active), so we
+// resolve the mapping here.
+async function speciesSlugById(): Promise<Map<string, SpeciesId>> {
+  const { data, error } = await supabase.from('species').select('id, slug')
+  if (error) throw error
+  return new Map(data.map((s) => [s.id, s.slug as SpeciesId]))
 }
 
-export async function listPendingSightings(): Promise<MapSighting[]> {
-  return SIGHTINGS.filter((s) => s.status === 'pending')
+export async function listMapSightings(): Promise<MapSightingGeo[]> {
+  const [result, slugs] = await Promise.all([
+    supabase
+      .from('public_map_sightings')
+      .select('id, species_id, lat_public, lng_public, status, verification_count, created_at')
+      .order('created_at', { ascending: false }),
+    speciesSlugById(),
+  ])
+  if (result.error) throw result.error
+
+  // View columns are nullable in the generated types; drop any row that is
+  // missing an essential field or whose species can't be resolved (e.g. an
+  // inactive species) — better a missing pin than a crash. flatMap keeps the
+  // result typed.
+  return result.data.flatMap((row) => {
+    const speciesId = row.species_id ? slugs.get(row.species_id) : undefined
+    if (
+      !speciesId ||
+      row.id == null ||
+      row.lat_public == null ||
+      row.lng_public == null ||
+      row.status == null ||
+      row.created_at == null
+    ) {
+      return []
+    }
+    return [
+      {
+        id: row.id,
+        speciesId,
+        lat: row.lat_public,
+        lng: row.lng_public,
+        status: row.status as SightingStatus,
+        verificationCount: row.verification_count ?? 0,
+        createdAt: row.created_at,
+      },
+    ]
+  })
 }
 
-// Fake approximate location for the capture flow (prototype's hardcoded spot);
-// real geolocation lands in M4 (LCHP-5 spike).
+export async function listPendingSightings(): Promise<MapSightingGeo[]> {
+  const all = await listMapSightings()
+  return all.filter((s) => s.status === 'pending')
+}
+
+// ---------------------------------------------------------------------------
+// Capture flow — still fake (canvas coords) until LCHP-14 (M4). HuntPage is
+// the only consumer; the real map above does not touch these.
+// ---------------------------------------------------------------------------
+
 const APPROX_LOCATION: CaptureLocation = {
   street: 'Calle de la Cava Baja · La Latina',
   shortStreet: 'Cava Baja',
@@ -105,9 +85,9 @@ export async function getApproxLocation(): Promise<CaptureLocation> {
 
 let nextSightingNumber = 224
 
-/** Fake submit: appends the sighting as pending to the in-memory map data. */
+/** Fake submit for the M1 capture flow; the real POST /create-sighting is LCHP-14. */
 export async function submitSighting(draft: NewSighting): Promise<MapSighting> {
-  const sighting: MapSighting = {
+  return {
     ...draft,
     id: `A-${nextSightingNumber++}`,
     reportedBy: 'pyroxine',
@@ -115,6 +95,4 @@ export async function submitSighting(draft: NewSighting): Promise<MapSighting> {
     status: 'pending',
     verificationCount: 0,
   }
-  SIGHTINGS.push(sighting)
-  return sighting
 }

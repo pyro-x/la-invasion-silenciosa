@@ -424,3 +424,11 @@ body {
     animation: none !important;
   }
 }
+
+/* LCHP-13 · map tint «pergamino suave» (visual-loop pick): desaturate +
+   light sepia on the OSM raster canvas only — markers are siblings of the
+   canvas, so sprites keep their true colors. Paired with the cream multiply
+   veil in BarrioMap. */
+.barrio-map .maplibregl-canvas {
+  filter: grayscale(0.45) sepia(0.3) brightness(1.06);
+}

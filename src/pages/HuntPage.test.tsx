@@ -1,20 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
-import { Providers } from '@/app/providers'
-import { routes } from '@/app/router'
-import { listPendingSightings } from '@/services/sightings.service'
+import { renderRoute } from '@/test/render'
 
-function renderHunt() {
-  const router = createMemoryRouter(routes, { initialEntries: ['/cazar'] })
-  render(
-    <Providers>
-      <RouterProvider router={router} />
-    </Providers>,
-  )
-  return router
-}
+// Fresh, retry:false query client per test (renderRoute) — avoids the shared
+// singleton leaking cache across tests and keeps the suite deterministic.
+const renderHunt = () => renderRoute('/cazar')
 
 describe('capture flow (Cazar)', () => {
   it('walks the 4 steps and confirms with the exact brief §4 wording', async () => {
@@ -57,12 +47,10 @@ describe('capture flow (Cazar)', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Volver al mapa' })).toBeInTheDocument()
-
-    // the fake sighting is registered as pending in the service
-    const pending = await listPendingSightings()
-    expect(pending.some((s) => s.speciesId === 'candadin' && s.reportedBy === 'pyroxine')).toBe(
-      true,
-    )
+    // NOTE: the submitted sighting appearing on the map is LCHP-14 territory
+    // (real POST /create-sighting). Here submit is still fake and the map
+    // reads the real DB, so the two are decoupled — asserted at the success
+    // screen above, not via listPendingSightings.
   })
 
   it('keeps collected data when navigating back through the step indicator', async () => {
