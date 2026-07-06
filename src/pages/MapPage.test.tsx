@@ -39,8 +39,15 @@ vi.mock('@/services/evidence.service', () => ({
   getEvidenceUrl: (id: string) => getEvidenceUrlMock(id),
 }))
 
+const submitVerificationMock = vi.fn<(id: string) => Promise<{ kind: string }>>()
+
+vi.mock('@/services/verifications.service', () => ({
+  submitVerification: (id: string) => submitVerificationMock(id),
+}))
+
 beforeEach(() => {
   listMapSightingsMock.mockResolvedValue(FIXTURES)
+  submitVerificationMock.mockResolvedValue({ kind: 'validated' })
   getEvidenceUrlMock.mockImplementation((id: string) =>
     Promise.resolve(
       id === 's-approved'
@@ -116,13 +123,66 @@ describe('map screen', () => {
     ).toBeInTheDocument()
   })
 
-  it('verify is «próximamente» on pending sightings (real transaction is LCHP-15)', async () => {
+  it('«Verificar» on the pin card opens the real verification modal (door 1)', async () => {
     const user = userEvent.setup()
     renderRoute('/mapa')
     await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
-    const verify = await screen.findByRole('button', { name: '✔ Verificar' })
-    await user.click(verify)
-    expect(await screen.findByText('Verificación · próximamente')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    expect(await screen.findByText('Verificar avistamiento')).toBeInTheDocument()
+    expect(
+      screen.getByText('Comprueba que no aparezcan personas ni datos privados.'),
+    ).toBeInTheDocument()
+  })
+
+  it('a «Cerca de ti» row opens the verification modal directly (door 2)', async () => {
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByText('La Latina · hace 35 min'))
+    expect(await screen.findByText('Verificar avistamiento')).toBeInTheDocument()
+  })
+
+  it('confirming toasts the validated outcome and re-reads the map (pin stops blinking)', async () => {
+    getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+    await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ }) // confirm unlocks with the photo
+    const readsBefore = listMapSightingsMock.mock.calls.length
+    await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
+    expect(submitVerificationMock).toHaveBeenCalledWith('s-pending')
+    expect(
+      await screen.findByText('Avistamiento validado · +10 para el autor · +5 para ti'),
+    ).toBeInTheDocument()
+    // the modal closed and the map query was invalidated
+    expect(screen.queryByText('Verificar avistamiento')).not.toBeInTheDocument()
+    expect(listMapSightingsMock.mock.calls.length).toBeGreaterThan(readsBefore)
+  })
+
+  it('an anonymous confirmation toasts the provisional-support message', async () => {
+    submitVerificationMock.mockResolvedValue({ kind: 'saved_provisional' })
+    getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+    await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ })
+    await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
+    expect(
+      await screen.findByText('Apoyo guardado · regístrate para que cuente y cobrar tus +5'),
+    ).toBeInTheDocument()
+  })
+
+  it('an already-verified duplicate is told so, without fake success', async () => {
+    submitVerificationMock.mockResolvedValue({ kind: 'already_verified' })
+    getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+    await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ })
+    await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
+    expect(await screen.findByText('Ya habías verificado este avistamiento')).toBeInTheDocument()
   })
 
   it('a stale evidence response never renders under a different sighting', async () => {

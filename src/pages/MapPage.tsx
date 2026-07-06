@@ -2,16 +2,20 @@
 // Validated sightings show the species sprite; pending ones blink with an
 // amber ring. The detail sheet shows species · status · age · approximate
 // location — NO author and NO exact street (the public view exposes neither;
-// golden rule / D-037). «Ver evidencia» loads the photo on demand; «Verificar»
-// is «próximamente» until the real transaction lands in LCHP-15.
+// golden rule / D-037). «Ver evidencia» loads the photo on demand.
+// «Verificar» (LCHP-15) opens the real verification modal from its two
+// doors — the pin card and the «Cerca de ti» list — and the outcome toast
+// mirrors what the consolidation trigger actually did.
 import { lazy, Suspense, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
+import { VerifyModal } from '@/components/sightings/VerifyModal'
 import { Toast } from '@/components/ui/Toast'
 import { formatAge } from '@/lib/age'
 import { getEvidenceUrl, type EvidenceResult } from '@/services/evidence.service'
 import { listMapSightings } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
+import type { VerifyOutcome } from '@/services/verifications.service'
 import type { MapSightingGeo } from '@/types/sighting'
 
 // MapLibre is ~210 KB gzipped (spike LCHP-4): load it only on /mapa.
@@ -44,9 +48,20 @@ function SightingMarker({ sighting, selected }: { sighting: MapSightingGeo; sele
 // a late response for sighting A must never render under sighting B.
 type EvidenceState = { sightingId: string; state: 'loading' | EvidenceResult } | null
 
+const VERIFY_TOASTS: Record<VerifyOutcome['kind'], string> = {
+  validated: 'Avistamiento validado · +10 para el autor · +5 para ti',
+  counted: 'Confirmación registrada · +5 cuando se valide',
+  saved_provisional: 'Apoyo guardado · regístrate para que cuente y cobrar tus +5',
+  already_verified: 'Ya habías verificado este avistamiento',
+  not_verifiable: 'Este avistamiento ya no se puede verificar',
+  error: 'No se pudo enviar, inténtalo de nuevo',
+}
+
 export function MapPage() {
+  const queryClient = useQueryClient()
   const [heat, setHeat] = useState(false)
   const [sel, setSel] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
   const [evidence, setEvidence] = useState<EvidenceState>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -57,8 +72,24 @@ export function MapPage() {
 
   const pick = (id: string) => {
     setSel(id)
+    setVerifying(false)
     setEvidence(null)
     evidenceReq.current++ // drop any in-flight request from the previous pin
+  }
+
+  const onVerifyResult = (outcome: VerifyOutcome) => {
+    setVerifying(false)
+    showToast(VERIFY_TOASTS[outcome.kind])
+    if (
+      outcome.kind === 'validated' ||
+      outcome.kind === 'counted' ||
+      outcome.kind === 'saved_provisional'
+    ) {
+      // The pin may stop blinking / the count may move: re-read the public
+      // view on every stored confirmation (a provisional one can still have
+      // validated the sighting when the operational switch is open).
+      void queryClient.invalidateQueries({ queryKey: ['sightings', 'map'] })
+    }
   }
 
   const loadEvidence = async (id: string) => {
@@ -255,7 +286,7 @@ export function MapPage() {
                   type="button"
                   className="btn btn-accent"
                   style={{ flex: 1 }}
-                  onClick={() => showToast('Verificación · próximamente')}
+                  onClick={() => setVerifying(true)}
                 >
                   ✔ Verificar
                 </button>
@@ -286,7 +317,10 @@ export function MapPage() {
             key={s.id}
             type="button"
             className="panel pad"
-            onClick={() => pick(s.id)}
+            onClick={() => {
+              pick(s.id)
+              setVerifying(true) // the list is the second door to the modal
+            }}
             style={{
               padding: 12,
               display: 'flex',
@@ -308,6 +342,17 @@ export function MapPage() {
           </button>
         ))}
       </div>
+
+      {/* verification modal (LCHP-15): only over a pending selection */}
+      {verifying && selS && selS.status === 'pending' && (
+        <VerifyModal
+          sighting={selS}
+          speciesName={speciesName(selS.speciesId)}
+          onClose={() => setVerifying(false)}
+          onResult={onVerifyResult}
+          onReclassify={() => showToast('Reclasificar · próximamente')}
+        />
+      )}
 
       {/* evidence overlay (brief §18): the photo is on-demand proof, shown
           over the map like the mockup's verify modal — never inline, never

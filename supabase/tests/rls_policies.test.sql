@@ -5,7 +5,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(57);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (as postgres): two registered users, one anonymous user, one
@@ -39,6 +39,12 @@ values ('dddddddd-0000-0000-0000-000000000005',
 
 insert into storage.objects (bucket_id, name)
 values ('sightings-photos', 'fixtures/hidden-photo.jpg');
+
+-- Threshold 2 for THIS suite: it tests access control, not consolidation
+-- (that is verification_consolidation.test.sql's job). At the seeded
+-- threshold 1, the registered confirmation below would approve sighting 1
+-- mid-suite and change what later assertions see.
+update public.app_config set value = '2' where key = 'validation_threshold';
 
 -- ---------------------------------------------------------------------------
 -- View column contract (as postgres): exactly the 8 safe columns, in order.
@@ -262,11 +268,37 @@ set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"cccccccc-0000-0000-0000-000000000003","role":"authenticated","is_anonymous":true}', true);
 
+-- D-054 (amends D-038): the INSERT door is open to anonymous sessions —
+-- their confirmation is PROVISIONAL support. Whether it counts is the
+-- consolidation trigger's job (verification_consolidation.test.sql); here
+-- we prove the door, the provisional outcome, and that the target
+-- invariants still hold for anonymous callers.
+
+select lives_ok(
+  $$ insert into public.verifications (sighting_id, user_id, type)
+     values ('dddddddd-0000-0000-0000-000000000005', 'cccccccc-0000-0000-0000-000000000003', 'confirm_exists') $$,
+  'anonymous sessions CAN store a provisional confirmation (D-054)'
+);
+
+select is(
+  (select status from public.verifications
+    where user_id = 'cccccccc-0000-0000-0000-000000000003'),
+  'pending',
+  'the anonymous confirmation stays provisional: not accepted, no points'
+);
+
+select is(
+  (select status from public.public_map_sightings
+    where id = 'dddddddd-0000-0000-0000-000000000005'),
+  'pending',
+  'a provisional confirmation consolidates nothing (sighting still pending)'
+);
+
 select throws_ok(
   $$ insert into public.verifications (sighting_id, user_id, type)
      values ('dddddddd-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000003', 'confirm_exists') $$,
   '42501', null,
-  'anonymous sessions cannot verify (registered only, D-038 anti-sybil)'
+  'approved sightings reject anonymous confirmations too (target invariant)'
 );
 
 select is(
@@ -446,7 +478,7 @@ set local role service_role;
 
 select is(
   (select value from public.app_config where key = 'validation_threshold'),
-  '1',
+  '2', -- the fixture raised it to 2 to keep this suite consolidation-free
   'service_role reads app_config (lib/config.ts)'
 );
 

@@ -4,8 +4,8 @@ export type SightingStatus = 'pending' | 'approved'
 
 /**
  * Legacy prototype view model on the mockup's 1000×527 canvas space (D-016).
- * Only the not-yet-rewired prototype pieces still use it (StreetMap,
- * VerifyModal — LCHP-15 territory); the live map and capture flow are on
+ * Only the not-yet-rewired prototype pieces still use it (StreetMap and its
+ * heat canvas); the live map, capture flow and verification modal are on
  * MapSightingGeo / CapturePosition.
  */
 export type MapSighting = {

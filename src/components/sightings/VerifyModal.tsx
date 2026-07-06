@@ -1,20 +1,49 @@
-// Verification modal ported from the prototype (screens2.jsx VerifyModal).
-// M1: static simulation — Confirmar fires onConfirm (toast in the caller),
-// Reclasificar/Saltar just close. The real transaction arrives in LCHP-15.
+// Verification modal (LCHP-15): the real transaction behind the mockup's
+// screens2.jsx VerifyModal. The photo loads when the modal opens — the
+// evidence IS what the neighbor judges, so it is never optional — and shows
+// species + approximate location only: the public surface carries NO author
+// and NO street (D-046/D-037). «Reclasificar» stays post-MVP.
+import { useEffect, useState } from 'react'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
-import type { MapSighting } from '@/types/sighting'
+import { formatAge } from '@/lib/age'
+import { getEvidenceUrl, type EvidenceResult } from '@/services/evidence.service'
+import { submitVerification, type VerifyOutcome } from '@/services/verifications.service'
+import type { MapSightingGeo } from '@/types/sighting'
 
 export function VerifyModal({
   sighting,
   speciesName,
   onClose,
-  onConfirm,
+  onResult,
+  onReclassify,
 }: {
-  sighting: MapSighting
+  sighting: MapSightingGeo
   speciesName: string
   onClose: () => void
-  onConfirm: () => void
+  /** Fires once with the transaction's outcome; the caller toasts + closes. */
+  onResult: (outcome: VerifyOutcome) => void
+  onReclassify: () => void
 }) {
+  const [evidence, setEvidence] = useState<'loading' | EvidenceResult>('loading')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void getEvidenceUrl(sighting.id).then((result) => {
+      if (alive) setEvidence(result)
+    })
+    return () => {
+      alive = false
+    }
+  }, [sighting.id])
+
+  async function confirm() {
+    setBusy(true)
+    const outcome = await submitVerification(sighting.id)
+    setBusy(false)
+    onResult(outcome)
+  }
+
   return (
     <div
       style={{
@@ -47,11 +76,29 @@ export function VerifyModal({
           </button>
         </div>
 
-        <div className="photo-ph center" style={{ height: 150, marginBottom: 12 }}>
-          <CreatureSprite id={sighting.speciesId} scale={6} />
-          <span style={{ position: 'absolute', bottom: 8, left: 0, right: 0, textAlign: 'center' }}>
-            foto del avistamiento {sighting.id}
-          </span>
+        <div
+          className="photo-ph center"
+          style={{ height: 170, marginBottom: 12, overflow: 'hidden' }}
+        >
+          {evidence === 'loading' && (
+            <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
+              Cargando foto…
+            </span>
+          )}
+          {typeof evidence === 'object' && evidence.kind === 'ready' && (
+            <img
+              src={evidence.url}
+              alt={`Evidencia del avistamiento de ${speciesName}`}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          )}
+          {typeof evidence === 'object' && evidence.kind !== 'ready' && (
+            <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
+              {evidence.kind === 'unavailable'
+                ? 'Este avistamiento aún no tiene foto disponible'
+                : 'No se pudo cargar la foto, inténtalo de nuevo'}
+            </span>
+          )}
         </div>
 
         <div className="row" style={{ gap: 10, marginBottom: 12 }}>
@@ -61,16 +108,8 @@ export function VerifyModal({
               {speciesName}
             </div>
             <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-              {sighting.street}
+              Ubicación aproximada · La Latina · {formatAge(sighting.createdAt)}
             </div>
-          </div>
-          <div className="stack" style={{ alignItems: 'flex-end' }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-dim)' }}>
-              Reportado por
-            </span>
-            <span className="mono" style={{ fontSize: 11 }}>
-              @{sighting.reportedBy}
-            </span>
           </div>
         </div>
 
@@ -95,11 +134,19 @@ export function VerifyModal({
           <p className="muted" style={{ margin: '0 0 4px', fontSize: 13, textAlign: 'center' }}>
             ¿La criatura está bien clasificada?
           </p>
-          <button type="button" className="btn btn-accent" onClick={onConfirm}>
-            ✔ Confirmar (+5 pts)
+          {/* Blind confirmations are a golden-rule hole (Codex review, HIGH):
+              the neighbor must be LOOKING at the evidence to vouch for it, so
+              the action stays disabled until the photo actually rendered. */}
+          <button
+            type="button"
+            className="btn btn-accent"
+            onClick={() => void confirm()}
+            disabled={busy || !(typeof evidence === 'object' && evidence.kind === 'ready')}
+          >
+            {busy ? 'Enviando…' : '✔ Confirmar (+5 pts)'}
           </button>
           <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn" onClick={onClose}>
+            <button type="button" className="btn" onClick={onReclassify}>
               Reclasificar
             </button>
             <button type="button" className="btn" onClick={onClose}>
