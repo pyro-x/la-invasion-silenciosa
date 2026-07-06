@@ -842,6 +842,57 @@ Lado largo máximo: 1280 px
 Formato preferente: WebP
 ```
 
+### 17.1 Captura, EXIF y compresión en cliente — spike LCHP-5 `[Explorando]`
+
+> Estado: spike **en curso**. Lo de abajo está verificado en escritorio
+> (Chromium headless vía Playwright: cámara falsa
+> `--use-fake-device-for-media-stream`, geolocalización simulada y un JPEG
+> sintético con IFD GPS real en el EXIF). Falta el pase en dispositivos
+> reales (iPhone Safari + Android Chrome, pestaña y PWA instalada) con la
+> página de sondeo `public/spike-camara.html` — artefacto desechable del
+> spike, **se elimina del repo al cerrarlo**. Esta sección pasará a
+> `Decidido` con los resultados del pase.
+
+**Estrategia candidata de privacidad (regla de oro), verificada en escritorio:**
+
+```text
+Cualquier foto (getUserMedia→canvas o <input type=file>) se re-codifica
+SIEMPRE en cliente antes de subir: canvas, lado largo máx. 1280 px,
+JPEG calidad 0.8.
+La re-codificación por canvas elimina el EXIF completo por construcción
+(el encoder del navegador no copia metadatos).
+Verificado: JPEG de entrada con APP1/Exif e IFD GPS → salida sin ningún
+segmento EXIF. La orientación EXIF se respeta visualmente
+(createImageBitmap con imageOrientation: 'from-image').
+```
+
+**Medidas en escritorio (orientativas; el pase real medirá en gama media):**
+
+```text
+Re-codificación 1600×1200 → 1280×960: 25–36 ms, JPEG q0.8 ~18 KB (imagen
+sintética; una foto real quedará más cerca del objetivo 150–300 KB).
+WebP q0.8 vía canvas.toBlob: soportado en Chromium (~40% menos que JPEG);
+soporte de ENCODING en Safari/iOS por confirmar en el pase → hasta
+entonces, JPEG como formato de subida y WebP como mejora condicional.
+Geolocalización: getCurrentPosition/watchPosition con
+enableHighAccuracy, timeout 15 s; denegación (code 1) gestionada →
+fallback de fijar el pin a mano en el mapa (§19).
+requestFullscreen: funciona en Chromium; en iPhone Safari se espera API
+ausente para elementos no-<video> → la vía de inmersión en iOS es la
+PWA instalada (standalone), no la API fullscreen.
+```
+
+**Pendiente del pase en dispositivos (matriz detallada en el ticket LCHP-5):**
+
+```text
+getUserMedia en iOS Safari (pestaña y PWA instalada) y su UX de permisos.
+¿La cámara nativa via input capture incluye GPS en EXIF en iOS/Android?
+Precisión/latencia GPS real en calle estrecha de La Latina.
+Tiempo de re-codificación y tamaño resultante en un móvil de gama media.
+Decisión final visor-custom-vs-input-nativo (se registrará en
+DECISIONS.md y aquí, como Decidido).
+```
+
 ## 18. Flujo de mapa
 
 ```text
