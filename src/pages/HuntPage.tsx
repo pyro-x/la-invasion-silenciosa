@@ -1,9 +1,10 @@
-// 4-step capture flow, ported from the prototype (screens1.jsx HuntFlow).
-// Photo is the prototype placeholder viewer until the real camera lands in M4.
-import { useReducer, type CSSProperties, type ReactNode } from 'react'
+// 4-step capture flow against the real backend (LCHP-14): processed photo →
+// species → map position → POST /create-sighting. A failed submit keeps every
+// collected field (retry is pressing send again); success invalidates the map
+// query so the new pending marker blinks on return.
+import { useEffect, useReducer, useRef, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
-import { StreetMap } from '@/components/map/StreetMap'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { PixelBurst } from '@/components/pixel/PixelBurst'
 import {
@@ -11,7 +12,10 @@ import {
   initialCaptureFlowState,
   isStepComplete,
 } from '@/features/hunt/captureFlow'
-import { getApproxLocation, submitSighting } from '@/services/sightings.service'
+import { LocationStep } from '@/features/hunt/LocationStep'
+import { PhotoStep } from '@/features/hunt/PhotoStep'
+import { PrivacyNote } from '@/features/hunt/PrivacyNote'
+import { submitSighting } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
 
 const STEP_TITLES = [
@@ -24,30 +28,46 @@ const STEP_TITLES = [
 // Brief §4: points are never shown as definitive before community validation.
 const SUCCESS_MESSAGE = 'Avistamiento enviado · +10 puntos pendientes de validación'
 
-const SENDING_DELAY_MS = 1100
+const NETWORK_ERROR_MESSAGE = 'No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.'
 
 export function HuntPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(captureFlowReducer, initialCaptureFlowState)
   const { data: species } = useQuery({ queryKey: ['species'], queryFn: listSpecies })
-  const { data: location } = useQuery({
-    queryKey: ['capture', 'location'],
-    queryFn: getApproxLocation,
+
+  // The preview object URL outlives React state; release it on unmount.
+  const previewUrlRef = useRef<string | null>(null)
+  useEffect(() => {
+    previewUrlRef.current = state.photo?.previewUrl ?? null
   })
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    },
+    [],
+  )
 
   async function submit() {
-    if (state.sending || state.done || state.speciesId === null || !location) return
+    if (state.sending || state.done) return
+    if (!state.photo || state.speciesId === null || !state.position) return
     dispatch({ type: 'SUBMIT_STARTED' })
-    await Promise.all([
-      submitSighting({
-        speciesId: state.speciesId,
-        x: location.x,
-        y: location.y,
-        street: location.shortStreet,
-      }),
-      new Promise((resolve) => setTimeout(resolve, SENDING_DELAY_MS)),
-    ])
-    dispatch({ type: 'SUBMIT_SUCCEEDED' })
+    const result = await submitSighting({
+      speciesId: state.speciesId,
+      photo: state.photo.blob,
+      lat: state.position.lat,
+      lng: state.position.lng,
+      accuracyM: state.position.accuracyM,
+    })
+    if (result.kind === 'created') {
+      void queryClient.invalidateQueries({ queryKey: ['sightings', 'map'] })
+      dispatch({ type: 'SUBMIT_SUCCEEDED' })
+      return
+    }
+    dispatch({
+      type: 'SUBMIT_FAILED',
+      message: result.kind === 'rejected' ? result.message : NETWORK_ERROR_MESSAGE,
+    })
   }
 
   if (state.done && state.speciesId !== null) {
@@ -129,69 +149,15 @@ export function HuntPage() {
         </div>
 
         {state.step === 0 && (
-          <div className="stack" style={{ gap: 12 }}>
-            <div className="photo-ph" style={{ paddingTop: '92%', position: 'relative' }}>
-              {!state.photoTaken ? (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    gap: 8,
-                  }}
-                >
-                  {VIEWFINDER_CORNERS.map((corner, i) => (
-                    <div key={i} style={cornerStyle(corner)} />
-                  ))}
-                  <span style={{ fontSize: 28 }}>📷</span>
-                  <span>visor · enfoca la criatura</span>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <CreatureSprite id="candadin" scale={6} />
-                  <span
-                    style={{
-                      position: 'absolute',
-                      bottom: 10,
-                      left: 0,
-                      right: 0,
-                      textAlign: 'center',
-                    }}
-                  >
-                    foto · candado en vía pública
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <PrivacyNote />
-
-            {!state.photoTaken ? (
-              <button className="btn btn-accent" onClick={() => dispatch({ type: 'PHOTO_TAKEN' })}>
-                ◉ Disparar foto
-              </button>
-            ) : (
-              <div className="row" style={{ gap: 10 }}>
-                <button className="btn" onClick={() => dispatch({ type: 'PHOTO_RETAKEN' })}>
-                  ↺ Repetir
-                </button>
-                <button className="btn btn-cta" onClick={() => dispatch({ type: 'NEXT' })}>
-                  ✓ Usar foto
-                </button>
-              </div>
-            )}
-          </div>
+          <PhotoStep
+            photo={state.photo}
+            onPhotoReady={(photo) => dispatch({ type: 'PHOTO_READY', photo })}
+            onRetake={() => {
+              if (state.photo) URL.revokeObjectURL(state.photo.previewUrl)
+              dispatch({ type: 'PHOTO_CLEARED' })
+            }}
+            onConfirm={() => dispatch({ type: 'NEXT' })}
+          />
         )}
 
         {state.step === 1 && (
@@ -234,96 +200,51 @@ export function HuntPage() {
           </div>
         )}
 
-        {state.step === 2 && state.speciesId !== null && (
-          <div className="stack" style={{ gap: 12 }}>
-            <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3' }}>
-              <StreetMap
-                heat={false}
-                selected={null}
-                onPick={() => {}}
-                sightings={[
-                  {
-                    id: 'new',
-                    speciesId: state.speciesId,
-                    x: location?.x ?? 710,
-                    y: location?.y ?? 225,
-                    street: '',
-                    reportedBy: '',
-                    reportedAgo: '',
-                    status: 'pending',
-                    verificationCount: 0,
-                  },
-                ]}
-              />
-            </div>
-            <div className="panel pad" style={{ padding: 14 }}>
-              <div
-                className="mono"
-                style={{ fontSize: 11, color: 'var(--ink-dim)', marginBottom: 4 }}
-              >
-                UBICACIÓN APROXIMADA
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{location?.street}</div>
-            </div>
-            <button
-              className="panel pad"
-              onClick={() => dispatch({ type: 'APPROX_TOGGLED' })}
-              style={{
-                padding: 14,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                cursor: 'pointer',
-                textAlign: 'left',
-                width: '100%',
-              }}
-            >
-              <div
-                style={{
-                  width: 44,
-                  height: 26,
-                  borderRadius: 999,
-                  background: state.approxOnly ? 'var(--good)' : 'var(--line)',
-                  border: 'var(--bw) solid var(--line)',
-                  position: 'relative',
-                  flexShrink: 0,
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 1,
-                    left: state.approxOnly ? 20 : 2,
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    background: '#fff',
-                    transition: 'left .15s',
-                  }}
-                />
-              </div>
-              <span style={{ fontSize: 12.5, color: 'var(--ink-dim)' }}>
-                Por privacidad, guardamos solo una ubicación aproximada.
-              </span>
-            </button>
-            <button className="btn btn-cta" onClick={() => dispatch({ type: 'NEXT' })}>
-              ▸ Revisa y envía
-            </button>
-          </div>
+        {state.step === 2 && (
+          <LocationStep
+            position={state.position}
+            approxOnly={state.approxOnly}
+            onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
+            onApproxToggled={() => dispatch({ type: 'APPROX_TOGGLED' })}
+            onNext={() => dispatch({ type: 'NEXT' })}
+          />
         )}
 
         {state.step === 3 && state.speciesId !== null && (
           <div className="stack" style={{ gap: 12 }}>
             <div className="panel pad" style={{ padding: 14, display: 'flex', gap: 14 }}>
-              <div className="photo-ph center" style={{ width: 84, height: 84, flexShrink: 0 }}>
-                <CreatureSprite id={state.speciesId} scale={4} />
+              <div
+                className="photo-ph center"
+                style={{
+                  width: 84,
+                  height: 84,
+                  flexShrink: 0,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                {state.photo ? (
+                  <img
+                    src={state.photo.previewUrl}
+                    alt="Foto del avistamiento"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <CreatureSprite id={state.speciesId} scale={4} />
+                )}
               </div>
               <div className="grow stack" style={{ gap: 6, justifyContent: 'center' }}>
                 <span className="display" style={{ fontSize: 12 }}>
                   {species?.find((sp) => sp.id === state.speciesId)?.name}
                 </span>
                 <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-                  {location?.shortStreet} · Ubicación aproximada
+                  La Latina · Ubicación aproximada
                 </span>
                 <span className="chip chip-warn" style={{ alignSelf: 'flex-start' }}>
                   Por verificar
@@ -331,12 +252,25 @@ export function HuntPage() {
               </div>
             </div>
             <PrivacyNote />
+            {state.submitError && (
+              <div
+                className="panel pad"
+                role="alert"
+                style={{ padding: 12, fontSize: 12.5, color: 'var(--bad)' }}
+              >
+                {state.submitError}
+              </div>
+            )}
             <button
               className="btn btn-accent"
               onClick={() => void submit()}
               disabled={state.sending}
             >
-              {state.sending ? 'Enviando…' : '▲ Enviar al registro'}
+              {state.sending
+                ? 'Enviando…'
+                : state.submitError
+                  ? '⟳ Reintentar'
+                  : '▲ Enviar al registro'}
             </button>
           </div>
         )}
@@ -353,38 +287,4 @@ function Frame({ children }: { children: ReactNode }) {
       </div>
     </div>
   )
-}
-
-function PrivacyNote() {
-  return (
-    <div
-      className="panel panel-2 pad"
-      style={{ padding: 12, display: 'flex', gap: 8, alignItems: 'center', borderStyle: 'dashed' }}
-    >
-      <span style={{ fontSize: 16 }}>🛡️</span>
-      <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-        Nada de personas, matrículas ni datos privados.
-      </span>
-    </div>
-  )
-}
-
-type Corner = { v: 'top' | 'bottom'; h: 'left' | 'right' }
-
-const VIEWFINDER_CORNERS: Corner[] = [
-  { v: 'top', h: 'left' },
-  { v: 'top', h: 'right' },
-  { v: 'bottom', h: 'left' },
-  { v: 'bottom', h: 'right' },
-]
-
-function cornerStyle({ v, h }: Corner): CSSProperties {
-  const style: CSSProperties = { position: 'absolute', width: 26, height: 26 }
-  style[v] = 14
-  style[h] = 14
-  if (v === 'top') style.borderTop = '3px solid var(--accent2)'
-  else style.borderBottom = '3px solid var(--accent2)'
-  if (h === 'left') style.borderLeft = '3px solid var(--accent2)'
-  else style.borderRight = '3px solid var(--accent2)'
-  return style
 }
