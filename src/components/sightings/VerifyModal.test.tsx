@@ -1,56 +1,108 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VerifyModal } from './VerifyModal'
-import type { MapSighting } from '@/types/sighting'
+import type { VerifyOutcome } from '@/services/verifications.service'
+import type { MapSightingGeo } from '@/types/sighting'
 
-// The modal is rendered in isolation: MapPage no longer opens it (verify is
-// «próximamente» until LCHP-15, which will wire it to the real transaction
-// and to the real data shape). Here we test the component's own contract.
-const SIGHTING: MapSighting = {
-  id: 'A-220',
+const SIGHTING: MapSightingGeo = {
+  id: 's-pending',
   speciesId: 'candadin',
-  x: 570,
-  y: 274,
-  street: 'Plaza de los Carros',
-  reportedBy: 'rosa_lat',
-  reportedAgo: 'hace 20 m',
+  lat: 40.4118,
+  lng: -3.7105,
   status: 'pending',
   verificationCount: 1,
+  createdAt: new Date(Date.now() - 20 * 60_000).toISOString(),
 }
 
-describe('verification modal (component)', () => {
-  it('shows the creature, the golden-rule reminder and the actions', () => {
-    render(
-      <VerifyModal
-        sighting={SIGHTING}
-        speciesName="CANDADÍN"
-        onClose={() => {}}
-        onConfirm={() => {}}
-      />,
-    )
-    expect(screen.getByText('Verificar avistamiento')).toBeInTheDocument()
+const submitMock = vi.fn<(id: string) => Promise<VerifyOutcome>>()
+const evidenceMock = vi.fn<(id: string) => Promise<Record<string, unknown>>>()
+
+vi.mock('@/services/verifications.service', () => ({
+  submitVerification: (id: string) => submitMock(id),
+}))
+vi.mock('@/services/evidence.service', () => ({
+  getEvidenceUrl: (id: string) => evidenceMock(id),
+}))
+
+beforeEach(() => {
+  submitMock.mockResolvedValue({ kind: 'validated' })
+  evidenceMock.mockResolvedValue({
+    kind: 'ready',
+    url: 'https://storage.example/signed/photo.jpg',
+    expiresIn: 300,
+  })
+})
+
+function renderModal(overrides?: {
+  onClose?: () => void
+  onResult?: (o: VerifyOutcome) => void
+  onReclassify?: () => void
+}) {
+  return render(
+    <VerifyModal
+      sighting={SIGHTING}
+      speciesName="CANDADÍN"
+      onClose={overrides?.onClose ?? (() => {})}
+      onResult={overrides?.onResult ?? (() => {})}
+      onReclassify={overrides?.onReclassify ?? (() => {})}
+    />,
+  )
+}
+
+describe('verification modal', () => {
+  it('loads the photo evidence when it opens — the neighbor judges the photo', async () => {
+    renderModal()
+    const img = await screen.findByRole('img', { name: /Evidencia/ })
+    expect(img).toHaveAttribute('src', 'https://storage.example/signed/photo.jpg')
+    expect(evidenceMock).toHaveBeenCalledWith('s-pending')
+  })
+
+  it('shows species, approximate location, the golden-rule reminder — never author or street', async () => {
+    renderModal()
+    expect(screen.getByText('CANDADÍN')).toBeInTheDocument()
+    expect(screen.getByText('Ubicación aproximada · La Latina · hace 20 min')).toBeInTheDocument()
     expect(
       screen.getByText('Comprueba que no aparezcan personas ni datos privados.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Saltar' })).toBeInTheDocument()
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Reportado por/)).not.toBeInTheDocument()
   })
 
-  it('Confirmar fires onConfirm; Saltar/Cerrar fire onClose', async () => {
+  it('Confirmar submits the verification and reports the outcome', async () => {
     const user = userEvent.setup()
-    const onConfirm = vi.fn()
-    const onClose = vi.fn()
-    render(
-      <VerifyModal
-        sighting={SIGHTING}
-        speciesName="CANDADÍN"
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />,
-    )
+    const onResult = vi.fn()
+    renderModal({ onResult })
     await user.click(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
-    expect(onConfirm).toHaveBeenCalledOnce()
+    expect(submitMock).toHaveBeenCalledWith('s-pending')
+    expect(onResult).toHaveBeenCalledWith({ kind: 'validated' })
+  })
+
+  it('the confirm button is disabled while the transaction is in flight', async () => {
+    const user = userEvent.setup()
+    let resolve: (o: VerifyOutcome) => void = () => {}
+    submitMock.mockImplementationOnce(() => new Promise((r) => (resolve = r)))
+    renderModal()
+    await user.click(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
+    expect(screen.getByRole('button', { name: 'Enviando…' })).toBeDisabled()
+    resolve({ kind: 'counted' })
+  })
+
+  it('a sighting without a photo shows the friendly message instead', async () => {
+    evidenceMock.mockResolvedValue({ kind: 'unavailable' })
+    renderModal()
+    expect(
+      await screen.findByText('Este avistamiento aún no tiene foto disponible'),
+    ).toBeInTheDocument()
+  })
+
+  it('Saltar closes; Reclasificar defers (post-MVP)', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onReclassify = vi.fn()
+    renderModal({ onClose, onReclassify })
     await user.click(screen.getByRole('button', { name: 'Saltar' }))
     expect(onClose).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole('button', { name: 'Reclasificar' }))
+    expect(onReclassify).toHaveBeenCalledOnce()
   })
 })

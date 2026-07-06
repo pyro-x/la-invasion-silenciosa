@@ -333,9 +333,9 @@ Todo bloqueado por defecto.
 Solo se abre lo necesario.
 ```
 
-### Políticas implementadas (LCHP-11, migración 0004 — enmienda 2026-07-06) `Decidido`
+### Políticas implementadas (LCHP-11, migración 0004; enmendada por LCHP-15, migración 0007) `Decidido`
 
-Esta sección es el **espejo exacto** de `supabase/migrations/0004_rls_policies_and_storage.sql`; cada línea está cubierta por la suite pgTAP (`supabase/tests/rls_policies.test.sql`, corre en CI). El reparto de caminos (qué va directo por PostgREST y qué pasa por la Edge Function) es la decisión D-037: híbrido *PostgREST-first* — lecturas y verificaciones directas; creación de avistamientos y acceso a fotos exclusivamente vía Edge Function.
+Esta sección es el **espejo exacto** de `supabase/migrations/0004_rls_policies_and_storage.sql` + `0007_community_verification.sql`; cada línea está cubierta por las suites pgTAP (`supabase/tests/*.test.sql`, corren en CI). El reparto de caminos (qué va directo por PostgREST y qué pasa por la Edge Function) es la decisión D-037: híbrido *PostgREST-first* — lecturas y verificaciones directas; creación de avistamientos y acceso a fotos exclusivamente vía Edge Function.
 
 **Privilegios (defensa en profundidad):** `REVOKE ALL` sobre las 7 tablas para `anon` y `authenticated`, re-concediendo solo el mínimo. Una query directa a una tabla cerrada falla con `42501` (permission denied) en vez de devolver conjuntos vacíos engañosos.
 
@@ -365,7 +365,8 @@ Lista prohibida — **nunca** añadir a la vista: `photo_path`, `photo_blurred_p
 
 **Escrituras desde el cliente:**
 
-* `verifications` INSERT es la **única** vía de escritura abierta (D-038): `WITH CHECK` de `user_id = auth.uid()` **y** JWT sin `is_anonymous` (los anónimos no verifican — §16 y anti-sybil con umbral 1) **y** target válido vía `private.verification_target_is_valid(sighting_id)` (helper `security definer` en el esquema **`private`, no expuesto por PostgREST**, que deriva el verificador de `auth.uid()` internamente — en `public` con parámetro libre sería un RPC-oráculo para sondear la autoría oculta de los avistamientos): el avistamiento debe estar **`pending`** y **no ser del propio autor** — la auto-aprobación y verificar estados no verificables se bloquean en la frontera de la base de datos, no en código de aplicación (hallazgos de la review adversarial de LCHP-11, rondas 1 y 2); GRANT por columnas (`sighting_id, user_id, type, note`) para que `status`/`points_awarded` jamás vengan del cliente; unicidad por el `UNIQUE (sighting_id, user_id)` del esquema. La consolidación (umbral → `approved`, +10/+5) es un trigger server-side (LCHP-15) que **debe ser la frontera de concurrencia** (lock de fila o `UPDATE … WHERE moderation_status = 'pending'` atómico): el `WITH CHECK` no serializa verificaciones concurrentes.
+* `verifications` INSERT es la **única** vía de escritura abierta (D-038, enmendada por D-054): `WITH CHECK` de `user_id = auth.uid()` **y** target válido vía `private.verification_target_is_valid(sighting_id)` (helper `security definer` en el esquema **`private`, no expuesto por PostgREST**, que deriva el verificador de `auth.uid()` internamente — en `public` con parámetro libre sería un RPC-oráculo para sondear la autoría oculta de los avistamientos): el avistamiento debe estar **`pending`** y **no ser del propio autor** — la auto-aprobación y verificar estados no verificables se bloquean en la frontera de la base de datos, no en código de aplicación (hallazgos de la review adversarial de LCHP-11, rondas 1 y 2); GRANT por columnas (`sighting_id, user_id, type, note`) para que `status`/`points_awarded` jamás vengan del cliente; unicidad por el `UNIQUE (sighting_id, user_id)` del esquema. **Los anónimos SÍ pueden insertar** (D-054, migración 0007): su confirmación se guarda como apoyo **provisional** — el trigger de consolidación decide si cuenta. Mientras `app_config.verification_requires_registration = 'true'` (el valor por defecto y el del piloto), una confirmación anónima no suma al umbral ni acuña puntos: el coste sybil de cambiar el estado del mapa o fabricar puntos sigue siendo un email (el ataque de auto-validación por incógnito de la review de LCHP-11 sigue muerto).
+* La consolidación (umbral → `approved`, +10/+5) es el trigger server-side `private.consolidate_sighting()` (LCHP-15, migración 0007), que ES la frontera de concurrencia: lock de fila sobre el avistamiento (`FOR UPDATE`) + `UPDATE … WHERE moderation_status = 'pending'` atómico; los puntos solo se acuñan cuando esa transición sucede (contrato de la review de LCHP-11, verificado con carrera real a umbral 1). Al registrarse un usuario anónimo (misma fila de `auth.users`, LCHP-3), el trigger `on_auth_user_registered` **activa retroactivamente** sus confirmaciones: cuentan para el umbral (pudiendo validar entonces) y cobran sus +5 acumulados.
 * Todo lo demás, cerrado: `sightings` (INSERT/UPDATE/DELETE), `point_events`, `reports` y `app_config` no tienen ninguna política — la Edge Function con `service_role` es el único camino de escritura (D-037), y los triggers/CHECKs de Postgres la vigilan también a ella (cuota D-032, invariantes 0003).
 
 **Storage:** bucket `sightings-photos` privado con **cero políticas** en `storage.objects` (el cliente no puede leer, listar ni subir nada); límites de bucket como red de seguridad para cualquier caller, service role incluido: 512 KB y `image/jpeg`/`image/webp`. La foto solo se ve mediante la signed URL temporal de `/get-photo-url` (LCHP-12).
@@ -626,6 +627,12 @@ Claves iniciales:
 ```text
 validation_threshold = 1   (confirmaciones necesarias para validar;
                             el piloto usa 1, la maqueta sugiere ~3 a futuro)
+verification_requires_registration = true
+                           (D-054: con true, la confirmación de una sesión
+                            anónima queda como apoyo provisional — no suma
+                            al umbral ni acuña puntos hasta que su autor se
+                            registre; con false cuenta de pleno derecho.
+                            Cambiarla es un UPDATE, no un deploy)
 ```
 
 ### reports
@@ -737,15 +744,28 @@ en la misma transacción:
 actualizar total_points/weekly_points
 ```
 
-Reglas de la verificación (enmienda 2026-07-05):
+Reglas de la verificación (enmienda 2026-07-05; modelo D-054 implementado en LCHP-15, 2026-07-07):
 
 ```text
 El autor no puede verificar su propio avistamiento.
 Un usuario solo puede verificar cada avistamiento una vez.
+Cualquiera puede CONFIRMAR, sesiones anónimas incluidas (D-054):
+  la confirmación anónima se guarda como apoyo provisional — no suma
+  al umbral ni acuña puntos mientras
+  app_config.verification_requires_registration = true (piloto).
+  Al registrarse su autor (mismo id), se activa retroactivamente:
+  cuenta para el umbral (pudiendo validar entonces) y cobra sus +5.
 El umbral de confirmaciones para validar vive en app_config
 (validation_threshold); para el piloto es 1.
-Cuando verification_count alcanza el umbral → pending → approved.
-Las transiciones de estado y los PointEvent se crean SOLO server-side.
+Cuando las confirmaciones QUE CUENTAN alcanzan el umbral → pending →
+approved (+ confidence = community_verified).
+Al validar, TODOS los verificadores confirmantes cobran +5 (no solo el
+que alcanza el umbral): verification.status pasa a accepted y
+points_awarded evita el doble pago.
+Las transiciones de estado y los PointEvent se crean SOLO server-side
+(trigger private.consolidate_sighting, migración 0007): lock de fila +
+UPDATE atómico WHERE pending — la concurrencia a umbral 1 está
+serializada y probada (pgTAP + carrera real por curl).
 ```
 
 Referencia post-MVP (diseño original, a retomar si hace falta más robustez):
@@ -754,10 +774,9 @@ Referencia post-MVP (diseño original, a retomar si hace falta más robustez):
 Subir validation_threshold (p. ej. a 3, como sugieren los datos seed de
 la maqueta — los validados tienen 3-6 votes) es solo un cambio de
 configuración: sin migración, sin despliegue, sin tocar código.
-Además, las verificaciones podrán tener estado propio
-(verification.status = pending o accepted según reglas), con aceptación
-diferida; el PointEvent verification_accepted se crearía solo al
-aceptarse la verificación, no al emitirse.
+La aceptación diferida del diseño original (verification.status =
+pending → accepted) quedó IMPLEMENTADA con la semántica D-054: las
+confirmaciones anónimas nacen pending y se aceptan al activarse.
 ```
 
 ## 16. Auth y roles
@@ -821,11 +840,18 @@ Puede:
 
 * ver mapa;
 * crear 1–2 avistamientos/día;
-* enviar contenido siempre como `pending`.
+* enviar contenido siempre como `pending`;
+* **confirmar avistamientos ajenos como apoyo provisional** (D-054):
+  su confirmación se guarda y se activa retroactivamente al registrarse
+  (cuenta para el umbral y cobra sus +5 acumulados), pero por sí sola no
+  valida ni acuña puntos mientras
+  `verification_requires_registration = true`.
 
 No puede:
 
 * publicar directamente;
+* **validar** (hacer que una confirmación suya cuente para el umbral)
+  con el interruptor del piloto cerrado;
 * moderar;
 * hacer acciones masivas;
 * aprobar contenido.
@@ -835,7 +861,7 @@ No puede:
 Puede:
 
 * crear más avistamientos;
-* verificar/reportar;
+* verificar/reportar (sus confirmaciones cuentan y cobran +5 al validar);
 * mantener historial;
 * participar en ranking.
 
@@ -1046,21 +1072,33 @@ Nota enmienda LCHP-1: los `pending` SÍ son visibles en el mapa desde el
 primer momento (con marcador de aviso); `approved` llega con la validación
 comunitaria (§20).
 
-## 20. Flujo de validación (comunitaria — enmienda 2026-07-05)
+## 20. Flujo de validación (comunitaria — enmienda 2026-07-05; implementado en LCHP-15 con el modelo D-054)
 
 ```text
 Avistamiento pending (ya visible en el mapa con marcador de aviso)
 ↓
 Otro vecino lo confirma desde el modal de verificación
-(al alcanzar validation_threshold — 1 en el piloto)
+(dos puertas: la tarjeta del pin y la lista «Cerca de ti»;
+ la foto se carga al abrir el modal — la evidencia ES lo que se juzga)
 ↓
-Avistamiento pasa a approved
-↓
-Se crea PointEvent +10 para el autor y +5 para el verificador
-↓
-El pin deja de parpadear (pasa a icono de especie normal)
-↓
-Cuenta para ranking, perfil y progreso
+├─ vecino REGISTRADO: la confirmación cuenta
+│  (al alcanzar validation_threshold — 1 en el piloto)
+│  ↓
+│  Avistamiento pasa a approved (confidence = community_verified)
+│  ↓
+│  PointEvent +10 para el autor y +5 para CADA verificador confirmante
+│  (todo en la transacción del INSERT, trigger server-side)
+│  ↓
+│  El pin deja de parpadear (invalidación de la query del mapa)
+│  ↓
+│  Cuenta para ranking, perfil y progreso
+│
+└─ vecino ANÓNIMO: apoyo provisional (D-054)
+   «Apoyo guardado · regístrate para que cuente y cobrar tus +5»
+   ↓
+   Al registrarse (mismo id, LCHP-3): activación retroactiva —
+   sus confirmaciones cuentan (pudiendo validar entonces) y cobra
+   sus +5 acumulados de golpe
 ```
 
 Descarte en el MVP:
