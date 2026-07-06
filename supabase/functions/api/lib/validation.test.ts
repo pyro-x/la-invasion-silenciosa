@@ -100,15 +100,28 @@ Deno.test('metadata guard: malformed JPEG structure fails closed', () => {
 Deno.test('metadata guard: WebP EXIF/XMP chunks are rejected, plain VP8 passes', () => {
   const riff = (chunks: number[]) => {
     const bytes = [
-      0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, // RIFF + size (unchecked)
-      0x57, 0x45, 0x42, 0x50, // WEBP
+      0x52,
+      0x49,
+      0x46,
+      0x46,
+      0,
+      0,
+      0,
+      0, // RIFF + size (unchecked)
+      0x57,
+      0x45,
+      0x42,
+      0x50, // WEBP
       ...chunks,
     ]
     return new Uint8Array(bytes)
   }
   const chunk = (id: string, payload: number[]) => [
     ...[...id].map((c) => c.charCodeAt(0)),
-    payload.length, 0, 0, 0,
+    payload.length,
+    0,
+    0,
+    0,
     ...payload,
     ...(payload.length % 2 ? [0] : []),
   ]

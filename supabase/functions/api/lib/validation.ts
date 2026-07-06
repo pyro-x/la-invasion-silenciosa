@@ -98,7 +98,8 @@ function jpegCarriesMetadata(bytes: Uint8Array): boolean {
 // Walks RIFF chunks: EXIF and XMP chunks are metadata (the client never
 // produces WebP at all, so any hit is a hostile upload by definition).
 function webpCarriesMetadata(bytes: Uint8Array): boolean {
-  const fourCC = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3])
+  const fourCC = (at: number) =>
+    String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3])
   let i = 12
   while (i + 8 <= bytes.length) {
     const id = fourCC(i)
