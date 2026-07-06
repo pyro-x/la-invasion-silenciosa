@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { buildMapStyle, LA_LATINA_BOUNDS, tileProvider } from './tileProvider'
+import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 import type { MapSightingGeo } from '@/types/sighting'
 
 type Props = {
@@ -38,7 +38,7 @@ export function BarrioMap({ sightings, selectedId, onPick, renderMarker }: Props
       container: containerRef.current,
       style: buildMapStyle(tileProvider),
       bounds: LA_LATINA_BOUNDS,
-      maxBounds: LA_LATINA_BOUNDS,
+      maxBounds: LA_LATINA_MAX_BOUNDS,
       fitBoundsOptions: { padding: 16 },
       attributionControl: false,
       dragRotate: false,

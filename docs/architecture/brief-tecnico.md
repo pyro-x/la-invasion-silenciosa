@@ -1122,9 +1122,12 @@ Camino de migración decidido para LCHP-13:
    sustituirla: los tiles OSM ya pintan calles, plazas y edificios.
    `StreetMap.tsx` + `lalatina-geo.ts` viven solo mientras exista el mapa
    del prototipo y se borran al completar la migración.
-2. **Encuadre:** usar el bbox de arriba como `bounds` iniciales /
-   `maxBounds` del mapa
-   (`[[-3.7173, 40.4093], [-3.7068, 40.4138]]`).
+2. **Encuadre (implementado LCHP-13):** el bbox de arriba
+   (`[[-3.7173, 40.4093], [-3.7068, 40.4138]]`) es el **`bounds` inicial** —
+   el mapa abre encuadrado a La Latina. El **`maxBounds`** (límite de paneo)
+   es el mismo bbox **+ ~1 km de margen**
+   (`[[-3.7291, 40.4003], [-3.6950, 40.4228]]`) para que respire sin poder
+   irse a otra parte de la ciudad (es un juego de barrio; David, loop visual).
 3. **Los avistamientos necesitan lat/lng reales.** Los seeds/fake en
    coordenadas de lienzo se convierten una única vez con la
    transformación afín del spike — válida porque el producto muestra
