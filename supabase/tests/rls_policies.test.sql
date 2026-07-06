@@ -5,7 +5,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(54);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (as postgres): two registered users, one anonymous user, one
@@ -324,6 +324,139 @@ select is(
   1,
   'verification helper lives in the non-exposed private schema'
 );
+
+-- ---------------------------------------------------------------------------
+-- Daily quota trigger (0005, D-032) — fires for every entry path, service
+-- role included, since it's a trigger, not a policy. Fixture state today:
+-- registered A authored 4 sightings, registered B 1, anonymous C 0.
+-- ---------------------------------------------------------------------------
+
+select lives_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public)
+     values ('99999999-0000-0000-0000-000000000099', 'aaaaaaaa-0000-0000-0000-000000000001', 40.411, -3.711) $$,
+  'registered user: 5th sighting of the day is accepted (quota 5)'
+);
+
+select throws_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public)
+     values ('99999999-0000-0000-0000-000000000099', 'aaaaaaaa-0000-0000-0000-000000000001', 40.411, -3.711) $$,
+  'P0001', 'daily quota exceeded: 5 of 5 used',
+  'registered user: 6th sighting of the day is rejected'
+);
+
+select lives_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public)
+     values ('99999999-0000-0000-0000-000000000099', 'cccccccc-0000-0000-0000-000000000003', 40.411, -3.711) $$,
+  'anonymous user: 1st sighting of the day is accepted'
+);
+
+select lives_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public)
+     values ('99999999-0000-0000-0000-000000000099', 'cccccccc-0000-0000-0000-000000000003', 40.411, -3.711) $$,
+  'anonymous user: 2nd sighting of the day is accepted (quota 2)'
+);
+
+select throws_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public)
+     values ('99999999-0000-0000-0000-000000000099', 'cccccccc-0000-0000-0000-000000000003', 40.411, -3.711) $$,
+  'P0001', 'daily quota exceeded: 2 of 2 used',
+  'anonymous user: 3rd sighting of the day is rejected'
+);
+
+select lives_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public)
+     values ('99999999-0000-0000-0000-000000000099', null, 40.411, -3.711) $$,
+  'authorless rows (deleted accounts / admin inserts) are not quota material'
+);
+
+-- ---------------------------------------------------------------------------
+-- Edge Function surface (0006): service_role's explicit grants. Local
+-- baselines give service_role NO implicit DML on public tables, so the
+-- function's needs must be granted — and only those.
+-- ---------------------------------------------------------------------------
+
+set local role service_role;
+
+select is(
+  (select count(*)::int from public.species where is_active),
+  4,
+  'service_role reads the species catalog (create-sighting validation)'
+);
+
+select lives_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public, photo_path)
+     values ('99999999-0000-0000-0000-000000000099', 'bbbbbbbb-0000-0000-0000-000000000002', 40.411, -3.711, 'b/x.jpg') $$,
+  'service_role creates sightings (the Edge Function write path)'
+);
+
+-- The quota trigger must have taken its per-user/day advisory lock during
+-- that insert (serialization regression canary — a plain count-then-insert
+-- would leave no advisory lock in this transaction). True multi-session
+-- racing is beyond pgTAP's single connection; this asserts the mechanism.
+select cmp_ok(
+  (select count(*)::int from pg_locks
+    where locktype = 'advisory' and pid = pg_backend_pid()),
+  '>=', 1,
+  'quota trigger serializes via a transaction-scoped advisory lock'
+);
+
+select throws_ok(
+  $$ insert into public.sightings (species_id, created_by, lat_public, lng_public, photo_path, moderation_status)
+     values ('99999999-0000-0000-0000-000000000099', 'bbbbbbbb-0000-0000-0000-000000000002', 40.411, -3.711, 'b/y.jpg', 'approved') $$,
+  '42501', null,
+  'service_role cannot set moderation_status at insert (column grant)'
+);
+
+select throws_ok(
+  $$ select lat_private from public.sightings $$,
+  '42501', null,
+  'service_role cannot read private coordinates (column grant)'
+);
+
+reset role;
+
+-- Privilege SHAPE assertions (Codex round 2): table-level privileges must
+-- be absent — only the column-scoped grants exist. On an environment where
+-- legacy implicit ALL survived (the hosted gap 0006 revokes), these fail.
+select is(
+  (select has_table_privilege('service_role', 'public.sightings', 'select')),
+  false,
+  'service_role holds NO table-level SELECT on sightings (columns only)'
+);
+
+select is(
+  (select has_table_privilege('service_role', 'public.sightings', 'insert')),
+  false,
+  'service_role holds NO table-level INSERT on sightings (columns only)'
+);
+
+select is(
+  (select has_table_privilege('service_role', 'public.sightings', 'update')),
+  false,
+  'service_role holds NO UPDATE on sightings'
+);
+
+select is(
+  (select has_table_privilege('service_role', 'public.point_events', 'insert')),
+  false,
+  'service_role cannot forge point_events (LCHP-15 trigger territory)'
+);
+
+set local role service_role;
+
+select is(
+  (select value from public.app_config where key = 'validation_threshold'),
+  '1',
+  'service_role reads app_config (lib/config.ts)'
+);
+
+select throws_ok(
+  $$ delete from public.sightings $$,
+  '42501', null,
+  'service_role got INSERT+SELECT, not DELETE — least privilege holds'
+);
+
+reset role;
 
 select * from finish();
 rollback;
