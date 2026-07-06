@@ -421,15 +421,53 @@ Usar una única Edge Function en MVP, pero modularizar internamente.
 
 ## 14. Modelo de datos inicial
 
+Implementado en `supabase/migrations/` (LCHP-10 — enmienda 2026-07-06);
+esta sección es el espejo del esquema real. Notas de implementación:
+
+* Los campos de estado/vocabulario son `text` + `CHECK`, no enums nativos
+  de Postgres (D-034): cambiar el vocabulario es una migración de una
+  línea y los tipos TS generados son idénticos.
+* PostGIS está habilitado desde la migración inicial, pero las columnas
+  de coordenadas del MVP siguen siendo `double precision` (D-035).
+* **RLS está activado en TODAS las tablas sin ninguna policy** (deny-all
+  de nacimiento); las policies y la view pública del mapa llegan con
+  LCHP-11.
+* Triggers: `set_updated_at()` mantiene `updated_at` en `sightings` y
+  `app_config`; `handle_new_user()` (security definer, `search_path`
+  fijado) crea la fila de `profiles` en cada alta de `auth.users`,
+  incluidos los usuarios anónimos (D-032).
+* Borrados: `sightings.created_by` y `sightings.reviewed_by` → `SET NULL`
+  (borrar una cuenta no borra el mapa); `profiles.id` → `CASCADE` desde
+  `auth.users`; `point_events.user_id` y `verifications.user_id` →
+  `CASCADE` (el borrado de cuenta arrastra su libro de puntos y sus
+  verificaciones); `sightings.species_id` → `RESTRICT`.
+* Invariantes de datos (revisión adversarial D-033): las coordenadas y la
+  precisión tienen `CHECK` de rango (lat ∈ [-90, 90], lng ∈ [-180, 180],
+  `location_accuracy_m` ≥ 0, sin NaN ni Infinity).
+* `verification_count` y `report_count` son **contadores históricos**
+  que incrementa el servidor (LCHP-12/15), NO agregados en vivo de las
+  tablas `verifications`/`reports`: si un verificador borra su cuenta,
+  sus filas de `verifications` desaparecen (GDPR) pero el contador, las
+  transiciones de estado ya producidas y los puntos otorgados NO se
+  rebobinan — un avistamiento aprobado sigue aprobado.
+
 ### species
+
+La ficha real de la Pokédex (reglas §2) necesita más campos que el boceto
+original: se añaden `dex_number`, `rarity`, `habitat` y `tracking_tip`, y
+se elimina `icon` (los sprites pixel-art viven en el código, indexados
+por `slug`). Los valores de `rarity` son copy de producto en español.
 
 ```ts
 type Species = {
   id: string;
   slug: string;
+  dex_number: string;
   name: string;
+  rarity: 'común' | 'frecuente' | 'raro' | 'legendario';
   description: string;
-  icon: string;
+  habitat: string;
+  tracking_tip: string;
   points: number;
   is_active: boolean;
   created_at: string;
@@ -609,7 +647,9 @@ type Verification = {
 
 ### image_moderation_events
 
-Opcional post-MVP:
+Opcional post-MVP (a diferencia del resto de tablas de esta sección, NO
+está creada en las migraciones de LCHP-10: llegaría con la moderación
+automática de imágenes, §25–§27):
 
 ```ts
 type ImageModerationEvent = {
@@ -1831,10 +1871,10 @@ src/
 ```text
 supabase/
   migrations/
-    0001_initial_schema.sql
-    0002_rls_policies.sql
-    0003_storage_policies.sql
-    0004_seed_species.sql
+    0001_initial_schema.sql          # LCHP-10 (incluye RLS deny-all)
+    0002_seed_reference_data.sql     # LCHP-10 (species + app_config)
+    0003_rls_policies.sql            # LCHP-11
+    0004_storage_policies.sql        # LCHP-11
     0005_points_and_ranking.sql
     0006_image_moderation_optional.sql
 

@@ -11,7 +11,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,js,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{ts,js,json}\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:types": "supabase gen types typescript --linked --schema public > src/types/database.ts && prettier --write src/types/database.ts"
   },
   "dependencies": {
     "@fontsource/archivo-black": "^5.2.8",

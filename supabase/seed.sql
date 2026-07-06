@@ -1,0 +1,6 @@
+-- Local-only seed (runs on `supabase db reset`, never on hosted).
+--
+-- Product reference data (species, app_config.validation_threshold) is
+-- intentionally NOT here: it lives in migrations/0002_seed_reference_data.sql
+-- so local and hosted apply identical rows through the same mechanism.
+-- Add local-only dev fixtures (fake sightings, test profiles) below.
