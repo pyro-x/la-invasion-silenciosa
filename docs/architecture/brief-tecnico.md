@@ -699,6 +699,41 @@ Modelo recomendado:
 * roles internos para moderadores;
 * registro progresivo, no obligatorio desde el minuto cero.
 
+### Verificado contra Supabase real (spike LCHP-3 — enmienda 2026-07-06) `Decidido`
+
+Todo lo anterior se comprobó contra el proyecto real del MVP (free tier) y
+contra un stack local de Supabase; deja de ser una recomendación y pasa a
+ser comportamiento verificado:
+
+* **Anonymous sign-in existe en el free tier.** Viene desactivado por
+  defecto; se activa por proyecto (dashboard o Management API,
+  `external_anonymous_users_enabled`). Ya está activado en el proyecto.
+* **Sesión anónima real**: `POST /auth/v1/signup` con cuerpo vacío
+  devuelve un JWT con `role=authenticated` y claim `is_anonymous=true`,
+  access token de 1 h y refresh token. La sesión se renueva
+  indefinidamente con el refresh token: **el usuario anónimo no caduca ni
+  se borra solo** — es una fila permanente en `auth.users`, así que sus
+  avistamientos no se pierden por expiración. Contrapartida: los anónimos
+  abandonados se acumulan; conviene una limpieza periódica post-MVP.
+* **Upgrade anónimo → registrado conserva `user.id`.** Verificado de
+  extremo a extremo en local: `updateUser({ email })` sobre la sesión
+  anónima envía el enlace de confirmación al correo; al seguirlo, la
+  **misma** fila de usuario pasa a tener `email` confirmado,
+  `is_anonymous=false` y una identidad `email` nueva. En el proyecto
+  hosted se verificó la primera mitad (mismo `id`, `new_email` pendiente).
+  Consecuencia: la consolidación de puntos y avistamientos al registrarse
+  es automática — no hay migración de datos, el `id` no cambia.
+* **Anti-abuso integrado**: GoTrue limita por defecto los sign-ins
+  anónimos a 30/hora por IP (configurable).
+
+**Decisión MVP** `Decidido`: **los usuarios anónimos SÍ pueden crear
+avistamientos desde el primer envío**, sin exigir magic link, con la cuota
+de §30 (1–2/día) aplicada en Postgres. Razones: (a) la fricción del email
+en la primera participación mataría el piloto vecinal; (b) la cuota diaria
+verificada limita el abuso; (c) como el `id` sobrevive al upgrade, no se
+pierde nada por empezar anónimo. El magic link se ofrece como mejora
+(«guarda tu historial y tus puntos»), no como barrera.
+
 Roles:
 
 ```text
@@ -1572,6 +1607,31 @@ Se puede implementar inicialmente en Postgres contando acciones por usuario/día
 
 Evitar guardar IP cruda si no es necesario. Si se usa IP, valorar hash y retención corta.
 
+### Prototipo verificado (spike LCHP-3 — enmienda 2026-07-06) `Decidido`
+
+El conteo por usuario/día en Postgres se prototipó y verificó contra el
+proyecto real con sesiones reales de ambos tipos:
+
+* Trigger `BEFORE INSERT` que llama a una función `security definer`; la
+  función cuenta las filas del usuario en el día (`created_at >=
+  date_trunc('day', now())`) y decide la cuota según el claim del JWT:
+  `coalesce((auth.jwt()->>'is_anonymous')::boolean, false)` → 2/día
+  anónimo, 5/día registrado.
+* Resultado observado: sesión anónima — inserciones 1 y 2 aceptadas, la
+  3.ª rechazada (`400`, «daily quota exceeded: 2 of 2 used»); sesión
+  registrada — 5 aceptadas, la 6.ª rechazada.
+* Las políticas RLS también distinguen ambos tipos: una policy con
+  `with check` sobre el mismo claim denegó (`42501`) el insert anónimo en
+  una tabla solo-registrados y aceptó el registrado.
+
+**Decisión para LCHP-12** `Decidido`: la cuota se aplica en Postgres con
+**trigger `BEFORE INSERT` + función `security definer`**, no en la Edge
+Function. El trigger protege la tabla por cualquier camino de entrada
+(PostgREST directo o Edge Function); la Edge Function puede además
+pre-comprobar la cuota para devolver un error amable, pero la fuente de
+verdad es el trigger. A escala del piloto el `count(*)` por usuario/día es
+trivial; basta un índice `(user_id, created_at)`.
+
 ## 31. Privacidad y lenguaje
 
 Reglas visibles al usuario:
@@ -1634,6 +1694,36 @@ pausar visualización de fotos;
 borrar rechazadas;
 mantener mapa visible.
 ```
+
+### Riesgos operativos del free tier (spike LCHP-3 — enmienda 2026-07-06) `Decidido`
+
+Comprobado de primera mano sobre el proyecto real:
+
+* **La pausa por inactividad es real y rápida.** El proyecto se creó el
+  2026-06-18, no se usó, y el 2026-07-05 estaba `INACTIVE` (pausado por el
+  free tier). La política oficial: pausa tras ~1 semana sin uso.
+* **Restaurar es barato**: un clic (o una llamada a la Management API) y
+  ~3–5 minutos observados hasta `ACTIVE_HEALTHY`. Los datos y la
+  configuración sobreviven a la pausa.
+* **Ventana de 90 días**: un proyecto pausado puede restaurarse durante
+  90 días; pasado ese plazo solo queda descargar el backup y los objetos
+  de Storage y restaurar a mano en un proyecto nuevo.
+
+Límites oficiales del plan Free (consultados 2026-07): 500 MB de base de
+datos, 1 GB de Storage, 5 GB de egress (+5 GB cacheado), 500 000
+invocaciones de Edge Functions/mes, 50 000 MAU, máximo 2 proyectos
+activos.
+
+Obligaciones operativas para el piloto:
+
+* **Keep-alive semanal.** El uso normal de la app ya cuenta como
+  actividad; para semanas muertas (vacaciones, pre-lanzamiento), un ping
+  programado (p. ej. GitHub Actions cron haciendo un `select` vía
+  PostgREST) evita la pausa.
+* **Si se pausa, no es un drama**: restaurar tarda minutos. Lo único
+  irreversible es dejar pasar los 90 días.
+* **Vigilar egress**: las fotos son el único consumo con riesgo real;
+  Storage privado + no mostrar fotos en el mapa ya lo mitigan.
 
 ## 33. Estructura frontend propuesta
 

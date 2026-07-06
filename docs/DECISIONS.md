@@ -231,3 +231,10 @@ Why / Trail**.
 **Alternatives:** overlaying the canvas streets on MapLibre via the affine transform (rejected: visible misalignment, and redundant — tiles already render streets) · re-seeding every mock sighting by hand (kept as fallback; more work, no accuracy need) · keeping nullable `styleUrl`/`rasterTiles` fields in the config (rejected: orphan fields, worse typing).
 **Why:** the spike's numbers say the transform is fine for approximate points but not for line geometry at high zoom; retiring the canvas layer removes an entire dataset instead of maintaining a lossy projection of it.
 **Trail:** LCHP-4 · brief-tecnico.md §21–§23 · D-016 · LCHP-13 (implementer).
+
+## D-032 · 2026-07-06 · Anonymous sightings allowed in the MVP; quota enforced by Postgres trigger (LCHP-3)
+
+**Decision:** anonymous users CAN create sightings from their first submission (no magic link gate); the per-day quota (2/day anonymous, 5/day registered, brief §30) is enforced in Postgres with a `BEFORE INSERT` trigger calling a `security definer` function that counts the user's rows for the current day and picks the quota from the JWT's `is_anonymous` claim. The Edge Function may pre-check for friendlier errors, but the trigger is the source of truth.
+**Alternatives:** require magic link from the first submission (kills first-touch participation in a neighborhood pilot; unnecessary — the upgrade preserves `user.id`, so nothing is lost by starting anonymous) · enforce the quota only in the Edge Function (bypassable via direct PostgREST; weaker guarantee than the data layer).
+**Why:** verified against the real free-tier project (LCHP-3 spike): real anonymous sessions work (`is_anonymous=true` claim, 1 h JWT + refresh, permanent `auth.users` row), the anonymous→registered upgrade keeps the same `user.id` end-to-end (magic-link email followed on a local stack), RLS policies distinguish both types via the claim, and the trigger blocked the 3rd anonymous / 6th registered insert of the day in live tests.
+**Trail:** LCHP-3 · brief §16, §30, §32 (enmiendas 2026-07-06) · PR of this spike.
