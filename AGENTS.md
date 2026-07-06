@@ -167,6 +167,16 @@ Resume procedure:
    D-033, doc sync rule, decision log).
 4. For Supabase work, read `docs/SUPABASE.md` first.
 
+Environment quirks worth knowing:
+
+- If the Linear MCP drops mid-session ("token expired" / tools vanish
+  from `/mcp`), run `/reload-plugins` — it relaunches plugin MCP servers
+  hot, no restart needed.
+- The Supabase CLI needs `supabase login` once per machine; `db push`
+  works without the database password (temporary role via Management
+  API). Only one local stack runs at a time (fixed ports) — `supabase
+  stop` other projects' stacks first.
+
 ## Maintainer
 
 David Monterroso ([@pyro-x](https://github.com/pyro-x)) — conversation in
