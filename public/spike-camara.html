@@ -148,6 +148,9 @@
     exifTrasReencode: "pendiente",
     geoCurrent: "pendiente",
     geoWatch: "pendiente",
+    geoCoords: "sin lectura",
+    rutaDecode: "sin foto",
+    muestraJpegAnalizada: false,
     fullscreen: "pendiente",
   };
 
@@ -167,9 +170,12 @@
       "EXIF en foto original: " + R.exifOriginal,
       "GPS en EXIF original: " + R.gpsOriginal,
       "re-codificado 1280px JPEG q0.8: " + R.reencode,
+      "ruta de decodificación: " + R.rutaDecode,
       "EXIF tras re-codificar: " + R.exifTrasReencode,
+      "¿alguna muestra JPEG analizada?: " + (R.muestraJpegAnalizada ? "SÍ ✅" : "NO ⚠️ — la conclusión GPS-EXIF queda INCONCLUYENTE"),
       "geolocalización (getCurrentPosition): " + R.geoCurrent,
       "geolocalización (watchPosition): " + R.geoWatch,
+      "coordenadas (última lectura): " + R.geoCoords,
       "requestFullscreen: " + R.fullscreen,
       "userAgent: " + navigator.userAgent,
     ];
@@ -255,16 +261,23 @@
       R.gpsOriginal = exif.exif ? (exif.gps ? "SÍ ⚠️ (hay que eliminarlo)" : "NO") : "NO (sin EXIF)";
       lineas.push("EXIF presente: " + (exif.exif ? "SÍ" : "NO") + " · GPS en EXIF: " + (exif.gps ? "SÍ ⚠️" : "NO"));
     } else {
-      R.exifOriginal = "no analizable (no es JPEG: " + (blob.type || "?") + ")";
-      R.gpsOriginal = R.exifOriginal;
-      lineas.push("No es JPEG (¿HEIC?): el parser EXIF de esta página no aplica; la re-codificación sí.");
+      R.exifOriginal = "INCONCLUYENTE ⚠️ (no es JPEG: " + (blob.type || "?") + " — el parser solo analiza JPEG)";
+      R.gpsOriginal = "INCONCLUYENTE ⚠️ — la pregunta GPS-en-EXIF NO queda respondida con esta muestra";
+      R.muestraJpegAnalizada = R.muestraJpegAnalizada || false;
+      lineas.push("⚠️ NO ES JPEG (¿HEIC?): el análisis EXIF/GPS de esta muestra es INCONCLUYENTE.");
+      lineas.push("   Para responder la pregunta del spike hace falta al menos una muestra JPEG");
+      lineas.push("   (prueba la otra entrada: cámara nativa vs galería).");
+      badge("b-foto", "warn", "INCONCLUYENTE");
     }
+    if (esJpeg) R.muestraJpegAnalizada = true;
 
     const t0 = performance.now();
     let bmp;
+    let rutaDecode = "createImageBitmap(from-image)";
     try {
       bmp = await createImageBitmap(blob, { imageOrientation: "from-image" });
     } catch {
+      rutaDecode = "fallback <img> — orientación EXIF NO verificada por esta ruta";
       bmp = await new Promise((res, rej) => {
         const img = new Image();
         img.onload = () => res(img);
@@ -272,6 +285,8 @@
         img.src = URL.createObjectURL(blob);
       });
     }
+    R.rutaDecode = rutaDecode;
+    lineas.push("ruta de decodificación: " + rutaDecode);
     const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
     const escala = Math.min(1, 1280 / Math.max(w0, h0));
     const w = Math.round(w0 * escala), h = Math.round(h0 * escala);
@@ -411,6 +426,8 @@
         const ms = Math.round(performance.now() - t0);
         const c = pos.coords;
         R.geoCurrent = "OK · ±" + Math.round(c.accuracy) + " m · " + ms + " ms";
+        R.geoCoords = c.latitude.toFixed(6) + ", " + c.longitude.toFixed(6) +
+          " (±" + Math.round(c.accuracy) + " m · getCurrentPosition · " + new Date().toISOString() + ")";
         badge("b-geo", "pass", "PASS");
         out.textContent = "PASS · lat " + c.latitude.toFixed(6) + " · lng " + c.longitude.toFixed(6) +
           "\nprecisión: ±" + Math.round(c.accuracy) + " m · latencia: " + ms + " ms";
@@ -455,6 +472,8 @@
         watchN++;
         const c = pos.coords;
         R.geoWatch = "OK · " + watchN + " updates · última ±" + Math.round(c.accuracy) + " m";
+        R.geoCoords = c.latitude.toFixed(6) + ", " + c.longitude.toFixed(6) +
+          " (±" + Math.round(c.accuracy) + " m · watchPosition · " + new Date().toISOString() + ")";
         out.textContent = "update #" + watchN + " (+" + Math.round(performance.now() - watchT0) + " ms)" +
           "\nlat " + c.latitude.toFixed(6) + " · lng " + c.longitude.toFixed(6) +
           " · ±" + Math.round(c.accuracy) + " m";
