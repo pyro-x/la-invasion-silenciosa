@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderRoute } from '@/test/render'
+import type { CameraPermission } from '@/lib/permissions'
 import type { NewSightingSubmission, SubmitSightingResult } from '@/services/sightings.service'
 
 // Fresh, retry:false query client per test (renderRoute) — avoids the shared
@@ -18,19 +19,34 @@ vi.mock('@/lib/photo', async (importOriginal) => {
   return { ...actual, processPhoto: () => processPhotoMock() }
 })
 
-// The MapLibre picker needs WebGL; the stub reports a valid La Latina center
-// once, exactly like the real map does after its initial load.
+// Controls whether the equipment gate shows: 'granted' (default) skips it,
+// like an Android return visit; 'prompt' arms it, like a first visit.
+const cameraStateMock = vi.fn<() => Promise<CameraPermission>>(() => Promise.resolve('granted'))
+vi.mock('@/lib/permissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/permissions')>()
+  return { ...actual, cameraPermissionState: () => cameraStateMock() }
+})
+
+// The MapLibre picker needs WebGL; the stub reports the initial-load center
+// once (like the real map) and, when a GPS fly is requested, its landing.
 vi.mock('@/components/map/LocationPickerMap', () => ({
   LocationPickerMap: ({
+    flyTo,
     onCenterChanged,
   }: {
+    flyTo: { lat: number; lng: number } | null
     onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
   }) => {
     const sent = useRef(false)
+    const flown = useRef(false)
     useEffect(() => {
       if (!sent.current) {
         sent.current = true
         onCenterChanged({ lat: 40.4118, lng: -3.7105 }, false)
+      }
+      if (flyTo && !flown.current) {
+        flown.current = true
+        onCenterChanged(flyTo, false)
       }
     })
     return <div data-testid="picker-map" />
@@ -45,11 +61,20 @@ vi.mock('@/services/sightings.service', () => ({
 beforeEach(() => {
   submitMock.mockReset()
   processPhotoMock.mockClear()
+  cameraStateMock.mockClear()
+  cameraStateMock.mockResolvedValue('granted')
+  localStorage.clear()
+})
+
+// stubs must not leak into the next test even when an assertion throws
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
   // step 1: pick a photo through the gallery input → pipeline → preview
-  const galleryInput = screen.getByLabelText(/Galería/)
+  // (findBy: the gate check resolves async before the step renders)
+  const galleryInput = await screen.findByLabelText(/Galería/)
   fireEvent.change(galleryInput, {
     target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
   })
@@ -72,7 +97,7 @@ describe('capture flow (Cazar)', () => {
 
     expect(screen.getByText('Captura la criatura')).toBeInTheDocument()
     expect(
-      screen.getAllByText('Nada de personas, matrículas ni datos privados.').length,
+      (await screen.findAllByText('Nada de personas, matrículas ni datos privados.')).length,
     ).toBeGreaterThan(0)
 
     await walkToReview(user)
@@ -146,7 +171,7 @@ describe('capture flow (Cazar)', () => {
     })
     renderHunt()
 
-    const galleryInput = screen.getByLabelText(/Galería/)
+    const galleryInput = await screen.findByLabelText(/Galería/)
     fireEvent.change(galleryInput, {
       target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
     })
@@ -155,19 +180,66 @@ describe('capture flow (Cazar)', () => {
     await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
 
     await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
-    expect(await screen.findByText(/Actívala en Ajustes → Safari/)).toBeInTheDocument()
+    // per-platform guidance (non-iOS test env → the padlock path)
+    expect(await screen.findByText(/candado de la barra/)).toBeInTheDocument()
     // the manual pin still works: the stubbed map center enables continuing
     expect(await screen.findByText('Pin colocado a mano')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
+  })
 
-    vi.unstubAllGlobals()
+  it('shows the equipment gate when camera permission is not granted; «Ahora no» skips it', async () => {
+    const user = userEvent.setup()
+    cameraStateMock.mockResolvedValue('prompt')
+    renderHunt()
+
+    expect(await screen.findByText('¡Prepara tu equipo!')).toBeInTheDocument()
+    // the gate replaces the step content — no viewfinder button yet
+    expect(screen.queryByRole('button', { name: /Abrir visor/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Ahora no/ }))
+    expect(await screen.findByRole('button', { name: /Abrir visor/ })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Galería/)).toBeInTheDocument()
+  })
+
+  it('the gate primes both permissions in one tap: viewfinder opens live, location step pre-centers', async () => {
+    const user = userEvent.setup()
+    cameraStateMock.mockResolvedValue('prompt')
+    // a real happy-dom MediaStream (srcObject type-checks its value), plus
+    // the getTracks its stub implementation lacks
+    const fakeStream = Object.assign(new MediaStream(), { getTracks: () => [] })
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      mediaDevices: { getUserMedia: () => Promise.resolve(fakeStream) },
+      geolocation: {
+        getCurrentPosition: (ok: (p: { coords: Record<string, number> }) => void) =>
+          ok({ coords: { latitude: 40.4116, longitude: -3.7102, accuracy: 9 } }),
+      },
+    })
+    renderHunt()
+
+    await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+
+    // the granted stream is handed straight to the viewfinder
+    expect(await screen.findByRole('button', { name: /Disparar/ })).toBeInTheDocument()
+
+    // continue on the gallery path (happy-dom video can't capture frames)
+    await user.click(screen.getByRole('button', { name: /Cerrar visor/ }))
+    fireEvent.change(screen.getByLabelText(/Galería/), {
+      target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
+    })
+    await user.click(await screen.findByRole('button', { name: /Usar foto/ }))
+    await user.click(await screen.findByRole('button', { name: 'CANDADÍN' }))
+    await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
+
+    // the cached gate fix pre-centers the map: GPS position without any tap
+    expect(await screen.findByText(/Tu posición · ±9 m/)).toBeInTheDocument()
   })
 
   it('keeps collected data when navigating back through the step indicator', async () => {
     const user = userEvent.setup()
     renderHunt()
 
-    const galleryInput = screen.getByLabelText(/Galería/)
+    const galleryInput = await screen.findByLabelText(/Galería/)
     fireEvent.change(galleryInput, {
       target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
     })

@@ -4,12 +4,17 @@
 // spike). Every source goes through processPhoto — nothing leaves the device
 // without the resize + EXIF-strip pipeline.
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
+import { CAMERA_CONSTRAINTS, cameraDenialGuidance } from '@/lib/permissions'
 import { PhotoError, processPhoto } from '@/lib/photo'
 import { PrivacyNote } from './PrivacyNote'
 import type { CapturePhoto } from './captureFlow'
 
 type Props = {
   photo: CapturePhoto | null
+  /** Open the viewfinder on mount (permission already granted or primed). */
+  autoStart: boolean
+  /** Hands over the gate's live camera stream at most once; null otherwise. */
+  takePrimedStream: () => MediaStream | null
   onPhotoReady: (photo: CapturePhoto) => void
   onRetake: () => void
   onConfirm: () => void
@@ -28,9 +33,17 @@ function photoErrorMessage(error: PhotoError | null): string {
   }
 }
 
-export function PhotoStep({ photo, onPhotoReady, onRetake, onConfirm }: Props) {
+export function PhotoStep({
+  photo,
+  autoStart,
+  takePrimedStream,
+  onPhotoReady,
+  onRetake,
+  onConfirm,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const autoStartAttempted = useRef(false)
   const [camera, setCamera] = useState<CameraState>('idle')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,22 +68,37 @@ export function PhotoStep({ photo, onPhotoReady, onRetake, onConfirm }: Props) {
     }
   }, [camera])
 
-  async function startCamera() {
+  // Frictionless entry (LCHP-28): when the gate just granted the camera, its
+  // live stream is handed straight to the viewfinder; when permission was
+  // already granted (no gate), the viewfinder opens silently — a failure just
+  // leaves the normal buttons, since the user didn't act yet.
+  useEffect(() => {
+    if (autoStartAttempted.current || photo || !autoStart) return
+    autoStartAttempted.current = true
+    void startCamera(true)
+  })
+
+  async function startCamera(silent = false) {
     setError(null)
+    const primed = takePrimedStream()
+    if (primed) {
+      streamRef.current = primed
+      setCamera('live')
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError('Este navegador no soporta el visor — usa la cámara del sistema o la galería.')
+      if (!silent) {
+        setError('Este navegador no soporta el visor — usa la cámara del sistema o la galería.')
+      }
       return
     }
     setCamera('starting')
     try {
-      streamRef.current = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1920 } },
-        audio: false,
-      })
+      streamRef.current = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       setCamera('live')
     } catch {
       setCamera('idle')
-      setError('No se pudo abrir la cámara — usa la cámara del sistema o la galería.')
+      if (!silent) setError(cameraDenialGuidance())
     }
   }
 

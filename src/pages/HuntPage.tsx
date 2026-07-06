@@ -1,8 +1,10 @@
 // 4-step capture flow against the real backend (LCHP-14): processed photo →
 // species → map position → POST /create-sighting. A failed submit keeps every
 // collected field (retry is pressing send again); success invalidates the map
-// query so the new pending marker blinks on return.
-import { useEffect, useReducer, useRef, type ReactNode } from 'react'
+// query so the new pending marker blinks on return. The equipment gate
+// (LCHP-28) fronts the flow whenever a native permission prompt is coming:
+// one tap primes camera + location, and both are handed to their steps.
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
@@ -12,11 +14,14 @@ import {
   initialCaptureFlowState,
   isStepComplete,
 } from '@/features/hunt/captureFlow'
+import { EquipmentGate, type Equipment } from '@/features/hunt/EquipmentGate'
 import { LocationStep } from '@/features/hunt/LocationStep'
 import { PhotoStep } from '@/features/hunt/PhotoStep'
 import { PrivacyNote } from '@/features/hunt/PrivacyNote'
+import { cameraPermissionState } from '@/lib/permissions'
 import { submitSighting } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
+import type { GeoFix } from '@/lib/geo'
 
 const STEP_TITLES = [
   'Captura la criatura',
@@ -30,13 +35,54 @@ const SUCCESS_MESSAGE = 'Avistamiento enviado · +10 puntos pendientes de valida
 
 const NETWORK_ERROR_MESSAGE = 'No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.'
 
+type GateState = 'checking' | 'open' | 'done'
+
 export function HuntPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(captureFlowReducer, initialCaptureFlowState)
   const { data: species } = useQuery({ queryKey: ['species'], queryFn: listSpecies })
 
-  // The preview object URL outlives React state; release it on unmount.
+  // Equipment gate (LCHP-28): shown unless the camera permission is already
+  // granted (Android remembers; iOS Safari re-asks per session, so the gate
+  // re-arms exactly when a native prompt is coming). The primed stream lives
+  // in a ref — it is a live resource, not render state.
+  const [gate, setGate] = useState<GateState>('checking')
+  const [autoStartCamera, setAutoStartCamera] = useState(false)
+  const [primedFix, setPrimedFix] = useState<GeoFix | null>(null)
+  const primedStreamRef = useRef<MediaStream | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void cameraPermissionState().then((camera) => {
+      if (!alive) return
+      if (camera === 'granted') {
+        setAutoStartCamera(true)
+        setGate('done')
+      } else {
+        setGate('open')
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  function onGateReady(equipment: Equipment) {
+    primedStreamRef.current = equipment.stream
+    setPrimedFix(equipment.fix)
+    setAutoStartCamera(true)
+    setGate('done')
+  }
+
+  function takePrimedStream(): MediaStream | null {
+    const stream = primedStreamRef.current
+    primedStreamRef.current = null
+    return stream
+  }
+
+  // The preview object URL and an unconsumed primed stream both outlive
+  // React state; release them on unmount.
   const previewUrlRef = useRef<string | null>(null)
   useEffect(() => {
     previewUrlRef.current = state.photo?.previewUrl ?? null
@@ -44,6 +90,8 @@ export function HuntPage() {
   useEffect(
     () => () => {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+      primedStreamRef.current?.getTracks().forEach((track) => track.stop())
+      primedStreamRef.current = null
     },
     [],
   )
@@ -69,6 +117,8 @@ export function HuntPage() {
       message: result.kind === 'rejected' ? result.message : NETWORK_ERROR_MESSAGE,
     })
   }
+
+  const showGate = gate === 'open' && state.step === 0 && !state.done
 
   if (state.done && state.speciesId !== null) {
     return (
@@ -127,30 +177,36 @@ export function HuntPage() {
         </div>
 
         {/* step indicator: completed segments navigate back without losing data */}
-        <div className="row" style={{ gap: 6 }}>
-          {([0, 1, 2, 3] as const).map((step) => (
-            <button
-              key={step}
-              type="button"
-              aria-label={`Paso ${step + 1}`}
-              disabled={step >= state.step}
-              onClick={() => dispatch({ type: 'STEP_SELECTED', step })}
-              className="grow"
-              style={{
-                height: 6,
-                borderRadius: 3,
-                border: 'none',
-                padding: 0,
-                cursor: step < state.step ? 'pointer' : 'default',
-                background: step <= state.step ? 'var(--accent)' : 'var(--line)',
-              }}
-            />
-          ))}
-        </div>
+        {!showGate && (
+          <div className="row" style={{ gap: 6 }}>
+            {([0, 1, 2, 3] as const).map((step) => (
+              <button
+                key={step}
+                type="button"
+                aria-label={`Paso ${step + 1}`}
+                disabled={step >= state.step}
+                onClick={() => dispatch({ type: 'STEP_SELECTED', step })}
+                className="grow"
+                style={{
+                  height: 6,
+                  borderRadius: 3,
+                  border: 'none',
+                  padding: 0,
+                  cursor: step < state.step ? 'pointer' : 'default',
+                  background: step <= state.step ? 'var(--accent)' : 'var(--line)',
+                }}
+              />
+            ))}
+          </div>
+        )}
 
-        {state.step === 0 && (
+        {showGate && <EquipmentGate onReady={onGateReady} onSkip={() => setGate('done')} />}
+
+        {!showGate && gate !== 'checking' && state.step === 0 && (
           <PhotoStep
             photo={state.photo}
+            autoStart={autoStartCamera}
+            takePrimedStream={takePrimedStream}
             onPhotoReady={(photo) => dispatch({ type: 'PHOTO_READY', photo })}
             onRetake={() => {
               if (state.photo) URL.revokeObjectURL(state.photo.previewUrl)
@@ -204,6 +260,7 @@ export function HuntPage() {
           <LocationStep
             position={state.position}
             approxOnly={state.approxOnly}
+            primedFix={primedFix}
             onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
             onApproxToggled={() => dispatch({ type: 'APPROX_TOGGLED' })}
             onNext={() => dispatch({ type: 'NEXT' })}
