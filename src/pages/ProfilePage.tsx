@@ -3,6 +3,7 @@
 // points reminder. The association-mode entry and the certificate are
 // post-MVP and intentionally omitted (LCHP-9 out of scope, D-028).
 import { useQuery } from '@tanstack/react-query'
+import { APP_VERSION } from '@/lib/version'
 import { MiniPix } from '@/components/pixel/PixelSprite'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { NAV_ICONS } from '@/components/pixel/sprites'
@@ -210,6 +211,21 @@ export function ProfilePage() {
               </span>
             </div>
           ))}
+        </div>
+
+        {/* Build identity for street bug reports (LCHP-24, D-040) — a
+            sanctioned divergence from the mockup, which has no version. */}
+        <div
+          className="mono"
+          style={{
+            textAlign: 'center',
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            color: 'var(--ink-dim)',
+            paddingTop: 4,
+          }}
+        >
+          {APP_VERSION}
         </div>
       </div>
     </div>
