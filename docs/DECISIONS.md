@@ -360,3 +360,24 @@ Why / Trail**.
 **Alternatives:** store only what the game shows (simpler, but throws away the association's future dataset) · a separate database for the association (duplicates capture effort; the sightings ARE the dataset).
 **Why:** David's call (2026-07-06): the neighbors' documentation effort should build the association's evidence base, not just game state. The privacy model already separates public from private surfaces, so richness and the golden rule don't conflict.
 **Trail:** David (LCHP-13 session) · LCHP-26 · D-037, D-046 · memory of the capture schema (lat/lng_private, location_accuracy_m).
+
+## D-050 · 2026-07-06 · Photo capture: in-app viewfinder primary, native input + gallery as fallback (LCHP-14)
+
+**Decision:** the photo step offers both techniques the LCHP-5 spike verified: an in-app `getUserMedia` rear-camera viewfinder («Abrir visor» → «Disparar») as the primary UX, and the native system camera (`<input capture="environment">`) plus a gallery picker as the always-works fallback. Every source — viewfinder frame, system-camera shot, gallery file — goes through the same `processPhoto` pipeline before anything leaves the device.
+**Alternatives:** native input only (simplest and instant, but loses the in-app framing experience the prototype promised) · viewfinder only (fragile: iOS viewfinder startup measured at 1.4–5.4 s in the spike, and any getUserMedia failure would dead-end the flow).
+**Why:** David's call at kickoff («ambos»). The spike proved both paths strip GPS identically, so offering both costs only UI code and removes every dead end: a slow/failed viewfinder degrades to the system camera in one tap.
+**Trail:** LCHP-14 · LCHP-5 device matrix · src/features/hunt/PhotoStep.tsx · D-051 (pipeline).
+
+## D-051 · 2026-07-06 · Deterministic client-side EXIF stripping: canvas re-encode + JPEG segment walker (LCHP-14)
+
+**Decision:** the golden-rule guarantee is enforced twice, both on the client: (1) decode → downscale to ≤1280 px → canvas JPEG re-encode (drops the original metadata wholesale; proven on Android/Chrome-iOS/Safari-iOS in LCHP-5), then (2) a byte-level JPEG walker (`stripJpegAppSegments`) removes every APP1–APP15 and COM segment the encoder re-added, keeping only APP0/JFIF. Quality steps down (0.8→0.5) until the stripped result fits the 512 KB server cap. Unit-tested against a hand-crafted GPS-bearing EXIF fixture.
+**Alternatives:** trust the canvas re-encode alone (WebKit re-writes orientation + colour-profile EXIF on export — GPS-free today, but the guarantee would rest on undocumented per-engine encoder behavior) · server-side reprocessing (post-MVP per brief §17; the free tier's Edge Function budget is better spent elsewhere and the photo must ALREADY be clean in transit).
+**Why:** the LCHP-5 Codex adversarial review recommended exactly this: make privacy deterministic, not an artifact of whichever encoder ships in next year's WebKit. Dropping re-added orientation tags is also correct, not just safe — orientation is already baked into the pixels, so a surviving tag could double-rotate.
+**Trail:** LCHP-14 · src/lib/photo.ts + photo.test.ts · LCHP-5 review comment · brief §17.1.
+
+## D-052 · 2026-07-06 · Location picking: fixed center pin, position = map center, GPS on tap (LCHP-14)
+
+**Decision:** the location step is a MapLibre picker where the pin is fixed at the viewport center and the user drags the map underneath (Uber pattern); the submitted position is ALWAYS the map center, at full precision (D-049 — the server snaps the public grid). «Usar mi ubicación» fires `getCurrentPosition` on the user's tap — never on load — recentering the map on the fix (accuracy shown, sent as `accuracy`); any later manual drag reverts the position to source=manual with no accuracy claim. Denial/unavailability (the iOS `code=1` case from LCHP-5) shows «Actívala en Ajustes → Safari…» guidance and the manual pin keeps working — geolocation is never required. A client-side mirror of the server bbox blocks continuing with an out-of-bounds pin before a doomed submit.
+**Alternatives:** tap-to-place pin (less precise with fingers on small screens) · draggable marker (fiddly on mobile; competes with map panning) · prompting for location on step load (lower grant rates; iOS may reject promptless calls — LCHP-5/LCHP-14 kickoff decision, with the onboarding primer split to LCHP-27).
+**Why:** David's call at kickoff; one interaction (drag) serves both the no-GPS fallback and GPS refinement, and "position = map center" leaves no ambiguity about what gets submitted.
+**Trail:** LCHP-14 · src/components/map/LocationPickerMap.tsx · src/features/hunt/LocationStep.tsx · src/lib/geo.ts · LCHP-5 Safari run · LCHP-27 · D-049.

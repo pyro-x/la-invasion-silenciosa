@@ -913,6 +913,38 @@ Lado largo máximo: 1280 px
 Formato preferente: WebP
 ```
 
+### 17.1 Pipeline de imagen en cliente (LCHP-14 — enmienda 2026-07-06) `Decidido`
+
+Verificado en dispositivo real por el spike LCHP-5 (Android + Chrome-iOS +
+Safari-iOS) e implementado en `src/lib/photo.ts` (D-051):
+
+```text
+Foto (visor getUserMedia · cámara del sistema · galería — D-050)
+↓
+Decodificar respetando orientación EXIF
+(createImageBitmap from-image; fallback <img>)
+↓
+Reducir a máx. 1280 px de lado largo
+↓
+Re-codificar JPEG en canvas (q0.8)
+— esto ya elimina el EXIF original, GPS incluido, en las 3 plataformas
+↓
+Stripper determinista de segmentos JPEG (byte a byte):
+fuera TODO APP1–APP15 y COM; se conserva solo APP0/JFIF
+— WebKit re-añade orientación/perfil de color al exportar; la garantía
+  de privacidad no depende del encoder de cada motor
+↓
+Si supera el tope de subida (512 KB, alineado con la Edge Function y el
+bucket), se baja la calidad por pasos (0.8 → 0.5)
+↓
+Blob image/jpeg SIN metadatos — nada sale del dispositivo sin pasar por aquí
+```
+
+La localización del avistamiento viene SIEMPRE de la Geolocation API o del
+pin manual, nunca del EXIF (que se elimina, no se lee). El pipeline servidor
+post-MVP (§27: thumbnails, blur, WebP) se añade por detrás de esta garantía,
+no la sustituye.
+
 ## 18. Flujo de mapa
 
 ### Implementado (LCHP-13 — enmienda 2026-07-06) `Decidido`
@@ -954,28 +986,47 @@ La foto es evidencia bajo demanda, no contenido principal del mapa. El
 
 ## 19. Flujo de captura
 
+### Implementado (LCHP-14 — enmienda 2026-07-06) `Decidido`
+
+Espejo del comportamiento real (`HuntPage` + `PhotoStep` + `LocationStep`):
+
 ```text
-Usuario pulsa “Cazar”
+Usuario pulsa “Cazar” (recordatorio de la regla de oro en pantalla)
 ↓
-Lee/acepta reglas básicas
+Foto: visor in-app (getUserMedia, cámara trasera) o cámara del
+sistema / galería (D-050) → pipeline §17.1 → previsualización
 ↓
-Hace o selecciona foto
+Elige especie (catálogo real)
 ↓
-Elige especie
+Ubicación: mapa MapLibre con pin fijo al centro — arrastra el mapa
+debajo del pin (D-052). «Usar mi ubicación» dispara getCurrentPosition
+EN EL TAP (nunca al cargar); si code=1 / no disponible → aviso
+(«Actívala en Ajustes → Safari…») y el pin manual sigue funcionando.
+Un pin fuera de La Latina bloquea el paso (espejo del bbox servidor)
 ↓
-Obtiene ubicación aproximada
+Revisa y envía → POST /create-sighting (multipart: foto limpia +
+species_id + lat/lng exactos + accuracy si es GPS)
 ↓
-Envía a Edge Function /create-sighting
-↓
-Se guarda imagen privada
+El servidor guarda la imagen privada, lat/lng_private exactos (D-049)
+y snapea lat/lng_public a la rejilla de privacidad
 ↓
 Se crea sighting con moderation_status = pending
 ↓
-Se muestra confirmación:
+Confirmación con la cadena EXACTA (§4):
 “Avistamiento enviado · +10 puntos pendientes de validación”
+↓
+Invalidación de la query del mapa → al volver, el nuevo pin
+parpadea como pendiente
 ```
 
-El avistamiento no aparece automáticamente en el mapa público hasta pasar a `approved`.
+Errores con estado conservado (reintentar no pierde nada): cuota agotada →
+«Has llegado al límite de hoy» (429, §30) · fuera del barrio → mensaje del
+servidor · red → «No se pudo enviar. Revisa tu conexión e inténtalo de
+nuevo.»
+
+Nota enmienda LCHP-1: los `pending` SÍ son visibles en el mapa desde el
+primer momento (con marcador de aviso); `approved` llega con la validación
+comunitaria (§20).
 
 ## 20. Flujo de validación (comunitaria — enmienda 2026-07-05)
 
