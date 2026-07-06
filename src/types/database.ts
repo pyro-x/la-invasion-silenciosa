@@ -59,6 +59,13 @@ export type Database = {
             foreignKeyName: 'point_events_sighting_id_fkey'
             columns: ['sighting_id']
             isOneToOne: false
+            referencedRelation: 'public_map_sightings'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'point_events_sighting_id_fkey'
+            columns: ['sighting_id']
+            isOneToOne: false
             referencedRelation: 'sightings'
             referencedColumns: ['id']
           },
@@ -134,6 +141,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: 'reports_sighting_id_fkey'
+            columns: ['sighting_id']
+            isOneToOne: false
+            referencedRelation: 'public_map_sightings'
+            referencedColumns: ['id']
+          },
           {
             foreignKeyName: 'reports_sighting_id_fkey'
             columns: ['sighting_id']
@@ -340,6 +354,13 @@ export type Database = {
             foreignKeyName: 'verifications_sighting_id_fkey'
             columns: ['sighting_id']
             isOneToOne: false
+            referencedRelation: 'public_map_sightings'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'verifications_sighting_id_fkey'
+            columns: ['sighting_id']
+            isOneToOne: false
             referencedRelation: 'sightings'
             referencedColumns: ['id']
           },
@@ -354,7 +375,47 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_map_sightings: {
+        Row: {
+          confidence: string | null
+          created_at: string | null
+          id: string | null
+          lat_public: number | null
+          lng_public: number | null
+          species_id: string | null
+          status: string | null
+          verification_count: number | null
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string | null
+          id?: string | null
+          lat_public?: number | null
+          lng_public?: number | null
+          species_id?: string | null
+          status?: string | null
+          verification_count?: number | null
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string | null
+          id?: string | null
+          lat_public?: number | null
+          lng_public?: number | null
+          species_id?: string | null
+          status?: string | null
+          verification_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'sightings_species_id_fkey'
+            columns: ['species_id']
+            isOneToOne: false
+            referencedRelation: 'species'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never

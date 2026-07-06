@@ -38,3 +38,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test
+
+  db-policies:
+    name: DB policy tests (pgTAP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Boots the local stack (applies every migration to a fresh Postgres)
+      # and runs supabase/tests/*.sql with pg_prove. Heavy services that the
+      # SQL-level tests never touch are excluded to keep the job fast.
+      - run: supabase start -x studio,imgproxy,inbucket,realtime,edge-runtime,analytics,vector
+      - run: supabase test db
+      - if: always()
+        run: supabase stop --no-backup
