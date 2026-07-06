@@ -179,5 +179,4 @@ Environment quirks worth knowing:
 
 ## Maintainer
 
-David Monterroso ([@pyro-x](https://github.com/pyro-x)) — conversation in
-Spanish. A project of A.V. La Chispera.
+David Monterroso ([@pyro-x](https://github.com/pyro-x)). A project of A.V. La Chispera.
