@@ -225,7 +225,14 @@ Why / Trail**.
 **Why:** Pages was already working (first deploy green, externally verified: root + deep links 200) before the stray merge; one platform, one config.
 **Trail:** LCHP-19 · PR #12 (accidental) reverted here · README (live URL).
 
-## D-031 · 2026-07-06 · Anonymous sightings allowed in the MVP; quota enforced by Postgres trigger (LCHP-3)
+## D-031 · 2026-07-06 · Canvas geodata retired at LCHP-13; seeds convert via affine transform (LCHP-4)
+
+**Decision:** the MapLibre + OSM raster stack is confirmed for the MVP with spike evidence (brief §21, now verified). The prototype's `lalatina-geo` canvas geometry (1000×527 space, D-016) **cannot overlay real tiles** — a best-fit affine transform (9 plaza anchors, Nominatim-geocoded) leaves 4–39 m residuals (RMS ~25 m), visibly cutting through buildings at z17 — so it is retired when MapLibre lands: OSM tiles already draw the streets. Canvas-space sighting seeds are converted once via the fitted affine transform (documented in §21; acceptable because the product shows approximate locations by design) or re-seeded by hand; the map frame uses the fitted bbox `[[-3.7173, 40.4093], [-3.7068, 40.4138]]`. The §21 `tileProvider` sketch is upgraded to a discriminated union (`kind: 'raster' | 'vector'`) with a `buildMapStyle()` that was exercised verbatim in the spike page.
+**Alternatives:** overlaying the canvas streets on MapLibre via the affine transform (rejected: visible misalignment, and redundant — tiles already render streets) · re-seeding every mock sighting by hand (kept as fallback; more work, no accuracy need) · keeping nullable `styleUrl`/`rasterTiles` fields in the config (rejected: orphan fields, worse typing).
+**Why:** the spike's numbers say the transform is fine for approximate points but not for line geometry at high zoom; retiring the canvas layer removes an entire dataset instead of maintaining a lossy projection of it.
+**Trail:** LCHP-4 · brief-tecnico.md §21–§23 · D-016 · LCHP-13 (implementer).
+
+## D-032 · 2026-07-06 · Anonymous sightings allowed in the MVP; quota enforced by Postgres trigger (LCHP-3)
 
 **Decision:** anonymous users CAN create sightings from their first submission (no magic link gate); the per-day quota (2/day anonymous, 5/day registered, brief §30) is enforced in Postgres with a `BEFORE INSERT` trigger calling a `security definer` function that counts the user's rows for the current day and picks the quota from the JWT's `is_anonymous` claim. The Edge Function may pre-check for friendlier errors, but the trigger is the source of truth.
 **Alternatives:** require magic link from the first submission (kills first-touch participation in a neighborhood pilot; unnecessary — the upgrade preserves `user.id`, so nothing is lost by starting anonymous) · enforce the quota only in the Edge Function (bypassable via direct PostgREST; weaker guarantee than the data layer).
