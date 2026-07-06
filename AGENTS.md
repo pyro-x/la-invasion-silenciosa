@@ -64,6 +64,14 @@ explains how they are kept alive.
     closes the ticket on merge.
 - **Nothing merges without green CI** (typecheck, lint, format, tests,
   gitleaks) — enforced by branch protection on `main`.
+- **Cross-model adversarial review (D-033)**: before opening a PR, run
+  `/codex:adversarial-review --base origin/main` on the branch (Codex/GPT
+  challenges the approach, not just the diff). **Mandatory** for the
+  security-critical zone (see below) and for substantive feature PRs;
+  skippable for trivial docs/chore changes. Triage every finding in the
+  PR body: fixed, ticketed (`tech-debt`), or explicitly dismissed with a
+  reason. Findings that change a design decision also land in
+  [`docs/DECISIONS.md`](./docs/DECISIONS.md).
 - Findings outside the current ticket's scope go to `FINDINGS.md` and get
   THEIR OWN ticket with the `tech-debt` label (max 2 weeks without a
   decision: schedule it or demote it to `post-mvp`).
@@ -126,8 +134,9 @@ them ahead of time.** Rule of thumb:
 ## Things that must make you stop and ask
 
 - Any change to **RLS policies, Storage policies or the Edge Function
-  auth** → this is the security-critical zone; it requires adversarial
-  review on the PR (another model/agent tries to break it before merge).
+  auth** → this is the security-critical zone; it requires the
+  cross-model adversarial review (`/codex:adversarial-review`) on the PR
+  before merge, with every finding triaged.
 - Anything affecting the **privacy golden rule** (photos, EXIF, location
   precision, which columns a public view exposes).
 - Adding a dependency that competes with the locked stack.
