@@ -144,6 +144,29 @@ them ahead of time.** Rule of thumb:
 - A ticket contradicting a doc, or a doc contradicting another.
 - Any action that moves the project closer to leaving the free tier.
 
+## Resuming work (for a fresh session/agent)
+
+The live state of the project is NOT in a status file (status files rot);
+it lives in two always-current places:
+
+1. **Linear** — the board is the truth. Anything `In Progress` is where
+   work stopped; the next `Backlog` ticket of the lowest open milestone is
+   what's next. Ticket comments carry each work session's trail
+   (plans, visual-loop rounds, spike conclusions, review triages).
+2. **Open PRs** — `gh pr list`. An open PR is work awaiting review/merge;
+   its body explains itself.
+
+Resume procedure:
+
+1. Read this file fully, then `docs/DECISIONS.md` (at least the last ~10
+   entries) — decisions are binding.
+2. `gh pr list` — deal with anything open before starting new work.
+3. Linear: check `In Progress` first, then the top of the current
+   milestone's backlog. The ticket is a self-contained brief; execute it
+   per the conventions above (visual loop for UI, adversarial review per
+   D-033, doc sync rule, decision log).
+4. For Supabase work, read `docs/SUPABASE.md` first.
+
 ## Maintainer
 
 David Monterroso ([@pyro-x](https://github.com/pyro-x)) — conversation in
