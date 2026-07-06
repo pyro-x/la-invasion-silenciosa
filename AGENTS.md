@@ -106,7 +106,7 @@ explains how they are kept alive.
 | Linear: tickets, milestones, new comments | **English** — same audience as the repo |
 | Product documents (`reglas-y-especificacion.md`, `brief-tecnico.md`) | **Spanish** — they belong to the neighborhood association |
 | UI strings visible to users | **Spanish** (quote them verbatim in Spanish inside tickets/PRs) |
-| Conversation with David | Spanish |
+| Conversation with David | No fixed default — mirror the language David uses in each exchange |
 
 ## Stack — locked, do not re-litigate
 
@@ -187,5 +187,4 @@ Environment quirks worth knowing:
 
 ## Maintainer
 
-David Monterroso ([@pyro-x](https://github.com/pyro-x)) — conversation in
-Spanish. A project of A.V. La Chispera.
+David Monterroso ([@pyro-x](https://github.com/pyro-x)). A project of A.V. La Chispera.

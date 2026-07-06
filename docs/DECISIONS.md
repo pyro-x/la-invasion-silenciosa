@@ -282,6 +282,13 @@ Why / Trail**.
 **Why:** the trigger runs inside the INSERT's own transaction (atomicity for free), keeps the Edge Function thin, and Postgres-level enforcement holds for every entry path. David chose it explicitly during LCHP-11 planning; LCHP-15 was notified in a ticket comment.
 **Trail:** LCHP-11 · LCHP-15 (comment 2026-07-06) · supabase/migrations/0004 · brief §12, §16 · D-032.
 
+## D-039 · 2026-07-06 · Conversation with David has no fixed language (amends D-014's scope)
+
+**Decision:** Spanish stops being the default for conversation with David (agent sessions, reviews, discussion). There is no fixed conversation language: agents mirror whatever language David uses in each exchange. Everything else in the D-014/D-015 audience split is untouched — English for code/commits/PRs/Linear/dev docs, Spanish for the two product documents and UI strings.
+**Alternatives:** keep Spanish as default (the original D-014 row) · hard-switch the default to English (rejected: the point is removing the fixed default, not replacing it).
+**Why:** David's call (branch `doc/remove-spanish-language-as-default`, PR #25): the fixed default added friction without serving any reader — the audience principle of D-014 applied to conversation resolves to "whatever the human in the conversation is using".
+**Trail:** PR #25 · AGENTS.md §Languages (table row) + §Maintainer · D-014, D-015.
+
 ## D-040 · 2026-07-06 · Versioning: semver-lite + build metadata, zero ceremony (LCHP-24)
 
 **Decision:** the app's version is `v{package.json version}+{short commit SHA}` (SemVer build-metadata syntax), composed at build time via Vite `define` constants (`__APP_VERSION__`, `__APP_COMMIT__`). The SHA resolves `CF_PAGES_COMMIT_SHA` → `git rev-parse --short HEAD` → `'dev'`, so every Cloudflare deployment and local build self-identifies with no manual step. The human version bumps only at **milestone completions** (M2 → 0.2.0, …, 1.0.0 at the M7 pilot), carried by the milestone-closing PR. Display: appended to the sample-data ribbon while test mode lasts, and a muted line at the bottom of Perfil permanently — **a sanctioned divergence from the mockup** (which has no version line), same nature as D-020/D-026. `src/lib/version.ts` is the single source; LCHP-17's service worker reuses it for update detection.
