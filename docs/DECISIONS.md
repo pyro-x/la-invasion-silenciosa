@@ -244,3 +244,17 @@ Why / Trail**.
 **Alternatives:** same-model review only (blind spots shared with the author model) · human-only review (David is one person).
 **Why:** the trial run on the LCHP-5 spike rig immediately caught a high-severity flaw no prior pass had seen (iOS HEIC samples silently treated as analyzed, which would have invalidated the next day's device conclusions) plus two evidence-quality gaps. A second model with a different training lineage sees different failure modes — cheap insurance at PR cadence.
 **Trail:** AGENTS.md §Linear and GitHub + §stop-and-ask · LCHP-5 rig commit "address Codex adversarial-review findings" · David's request 2026-07-06.
+
+## D-034 · 2026-07-06 · State fields are text + CHECK, not Postgres enums (LCHP-10)
+
+**Decision:** every state/vocabulary column (`sightings.moderation_status`, `sightings.confidence`, `profiles.role`, `point_events.type`, `verifications.type/status`, `reports.reason/status`, `species.rarity`) is `text` with a `CHECK (col IN (…))` constraint instead of a native enum type.
+**Alternatives:** `CREATE TYPE … AS ENUM` (native enums) · unconstrained text.
+**Why:** the schema is deliberately created in full as an escape valve (AGENTS.md §ceiling), so vocabularies WILL evolve; changing a CHECK is a drop+add in one migration, while enums need `ALTER TYPE` ceremony (no removal, ordering quirks, in-transaction limits on older PG). `supabase gen types` emits the same union types either way, so the TS surface is identical. Unconstrained text loses data integrity for zero gain.
+**Trail:** LCHP-10 · supabase/migrations/0001_initial_schema.sql · brief §14.
+
+## D-035 · 2026-07-06 · PostGIS enabled from day 0; MVP columns stay plain doubles (LCHP-10)
+
+**Decision:** `create extension postgis with schema extensions` ships in the initial migration, but `sightings` keeps `lat_public/lng_public/lat_private/lng_private` as `double precision` (brief §14).
+**Alternatives:** no PostGIS until a feature needs it · geography columns from day 0.
+**Why:** the brief §7 backend list already includes PostGIS and enabling it costs nothing on the free tier, while enabling it later would gate an M3+ feature (distance/nearby queries) on a migration touching a live table. Geography columns now would force every insert path through PostGIS types for an MVP that only reads/writes plain coordinates; a generated column or backfill can add them when a query actually needs them.
+**Trail:** LCHP-10 · supabase/migrations/0001_initial_schema.sql · brief §7, §21.
