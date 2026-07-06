@@ -7,7 +7,10 @@ import prettier from 'eslint-config-prettier'
 import { globalIgnores } from 'eslint/config'
 
 export default tseslint.config([
-  globalIgnores(['dist', 'node_modules', 'docs/prototype/fuentes']),
+  // supabase/functions is Deno code with its own toolchain (deno check +
+  // deno lint + deno test in CI); ESLint's browser/bundler assumptions
+  // don't apply there.
+  globalIgnores(['dist', 'node_modules', 'docs/prototype/fuentes', 'supabase/functions']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

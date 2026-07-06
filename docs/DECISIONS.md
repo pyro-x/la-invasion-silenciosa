@@ -288,3 +288,26 @@ Why / Trail**.
 **Alternatives:** git tags + GitHub Releases + changelog (ceremony without readers: with continuous deploy the SHA is the release) · bump-whenever-it-feels-right (numbers lose meaning; gets forgotten) · version in the header permanently (dev noise in the game's most valuable pixels).
 **Why:** during the street pilot "which build is this phone running?" is the first triage question, and the answer must be readable by a neighbor from their own screen; the SHA maps 1:1 to the Cloudflare dashboard and `git log`.
 **Trail:** LCHP-24 · vite.config.ts · src/lib/version.ts · src/components/ui/SampleDataBanner.tsx · src/pages/ProfilePage.tsx (+ tests) · D-020, D-026.
+**First bump (2026-07-06):** M2 (Supabase foundation) completed with LCHP-12 → `0.1.0` → `0.2.0`, carried by LCHP-12's PR #28 per this policy.
+
+## D-041 · 2026-07-06 · Quota trigger derives anonymity from auth.users, not the JWT (LCHP-12)
+
+**Decision:** migration 0005 ships the per-user/day quota trigger (D-032) with one redesign vs the LCHP-3 spike prototype: anonymity comes from `auth.users.is_anonymous` for the row's `created_by`, not from the caller's JWT claim. Authorless rows (`created_by` null) are exempt. Day boundary is UTC midnight.
+**Alternatives:** JWT claim (the spike's design — correct for direct PostgREST inserts, wrong under D-037 where inserts arrive via the Edge Function's service role, whose JWT carries no user identity) · passing the user's JWT through to the insert (fragile; couples the data layer to transport).
+**Why:** the trigger must stay the source of truth for EVERY entry path; deriving from the authoritative users table makes it path-independent.
+**Hardening (Codex adversarial review, HIGH):** count-then-insert races under READ COMMITTED — N parallel requests could all pass the count before any sibling commits. The trigger now takes a **transaction-scoped advisory lock keyed per user and UTC day** before counting, serializing same-user inserts while leaving different users uncontended. pgTAP asserts the lock is held during inserts (true multi-session racing is beyond its single connection — the canary proves the mechanism exists).
+**Trail:** LCHP-12 · supabase/migrations/0005 · brief §30 · pgTAP quota tests · D-032, D-037.
+
+## D-042 · 2026-07-06 · Edge Function data surface: explicit least-privilege grants for service_role (LCHP-12)
+
+**Decision:** migration 0006 grants `service_role` exactly what the function touches — `SELECT` on `species` and `app_config`, and **column-scoped** privileges on `sightings`: INSERT only on the eight columns create-sighting writes, SELECT only on the five its queries read (Codex review: full INSERT would let a future route bug set `moderation_status`/`points_awarded` at creation; full SELECT would expose private coordinates the function never needs). pgTAP asserts the positive paths and the negatives: DELETE denied, `moderation_status` not insertable, `lat_private` not readable.
+**Alternatives:** rely on implicit defaults (broken: the modern local stack creates public tables with NO DML for service_role — only REFERENCES/TRIGGER/TRUNCATE — while the hosted project, provisioned under classic defaults, still hands service_role implicit ALL; code that works on one silently fails on the other) · granting ALL to service_role (works, but resurrects the implicit-superuser pattern the 0004 hardening moved away from).
+**Why:** discovered live when the function failed against the local stack with 42501 on `species` while the identical query succeeded hosted. Explicit grants make the environments identical, the function's blast radius reviewable in one file, and future routes' needs a conscious migration. **Round 2 correction:** GRANT is additive, so on hosted the legacy implicit ALL would have survived alongside the narrow grants — 0006 now REVOKES ALL from service_role on the seven public tables first, then grants the minimum, producing the same privilege shape in every environment; pgTAP asserts the shape via has_table_privilege (no table-level DML) plus the column-level negatives. The FINDINGS.md parity entry is resolved by this and LCHP-25 canceled as superseded.
+**Trail:** LCHP-12 · supabase/migrations/0006 · pgTAP service_role tests · FINDINGS.md · D-037.
+
+## D-043 · 2026-07-06 · Photo evidence requires a session; map reading does not (LCHP-12)
+
+**Decision:** both Edge routes require a valid JWT — anonymous sessions included (D-032). Consequence: viewing photo evidence needs a session while reading the map stays sessionless via the public view.
+**Alternatives:** apikey-only for `get-photo-url` (any scraper holding the public anon key could enumerate map ids and bulk-download every photo) · registered-only (kills evidence-before-verifying for anonymous participants, contradicting D-032's first-touch participation).
+**Why:** the photos are the golden-rule asset; requiring a session makes bulk scraping cost at least GoTrue's anonymous-signup rate limit (30/h/IP) instead of being free, without adding any friction for real app users (the app holds a session for participation anyway).
+**Trail:** LCHP-12 · supabase/functions/api/index.ts · brief §13 (contract) · D-032, D-037.

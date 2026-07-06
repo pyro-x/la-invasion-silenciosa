@@ -372,54 +372,83 @@ Lista prohibida — **nunca** añadir a la vista: `photo_path`, `photo_blurred_p
 
 ## 13. Edge Function única
 
-Para evitar complejidad, se usará una única Edge Function tipo API router:
+Para evitar complejidad, se usa una única Edge Function tipo API router:
 
 ```text
 supabase/functions/api/index.ts
 ```
 
-Endpoints previstos:
+### Contrato implementado (LCHP-12 — enmienda 2026-07-06) `Decidido`
 
-```text
-POST /create-sighting
-POST /get-photo-url
-POST /report-sighting
-POST /verify-sighting
-POST /moderation/approve
-POST /moderation/reject
-POST /moderation/remove
-POST /moderation/analyze-image
-POST /admin/update-config
-```
+Esta sección es el espejo del código real (`supabase/functions/api/`),
+cubierto por tests unitarios Deno en CI. Reparto según D-037: la función
+posee exactamente las dos operaciones que necesitan servidor; el resto de
+la app va directo por PostgREST bajo RLS (§12).
 
-En el MVP inicial solo hacen falta (enmienda 2026-07-05):
+**Autenticación:** ambas rutas exigen un JWT válido (sesión anónima o
+registrada — D-032) en `Authorization: Bearer`. Ver la evidencia
+fotográfica requiere por tanto tener sesión (anti-scraping barato: crear
+sesiones anónimas está limitado por GoTrue a 30/h/IP), aunque leer el mapa
+siga sin exigirla. CORS restringido a producción, previews de Cloudflare
+Pages y localhost.
 
-```text
-POST /create-sighting
-POST /get-photo-url
-POST /verify-sighting
-```
+**`POST /create-sighting`** — multipart/form-data: `photo` (archivo),
+`species_id`, `lat`, `lng`, `accuracy` (opcional).
 
-Las rutas `moderation/*`, `report-sighting` y `admin/*` quedan previstas
-para post-MVP; el router deja el hueco pero no las implementa.
+* Validaciones server-side: especie existente y activa; coordenadas dentro
+  del bbox de La Latina (§21) con margen de deriva GPS ±0,002°; imagen
+  JPEG/WebP **por magic bytes** (el Content-Type declarado no se cree) y
+  ≤512 KB (alineado con los caps del bucket).
+* Privacidad: la coordenada exacta se guarda en `lat/lng_private`; la
+  pública se redondea a una rejilla de 0,0005° (~55 m) antes de insertar.
+* Cuota: pre-check amable (2/día anónimo · 5/día registrado) y, como
+  fuente de verdad, el trigger 0005 (§30); perder la carrera contra el
+  trigger devuelve el mismo error.
+* La foto sube al bucket privado con ruta generada en servidor
+  (`{uid}/{uuid}.{ext}`); si el insert posterior falla, la foto se borra
+  (sin huérfanos). `moderation_status='pending'` SIEMPRE (el cliente no
+  elige estado) y sin `PointEvent` (el +10 espera a la validación, §4).
+* Respuesta `201`: `{ id, status: 'pending', created_at }`.
 
-### Pros de una única Edge Function
+**`POST /get-photo-url`** — JSON: `{ sighting_id }`.
 
-* menos despliegues;
-* más simple para MVP;
-* permite usar secrets privados;
-* evita meter Next.js solo para tener backend;
-* mantiene bajo mantenimiento.
+* Solo avistamientos visibles (`pending|approved`); un id oculto o
+  inexistente responde **idéntico** (`404 not_found`) para no ser oráculo
+  de estados de moderación.
+* Respuesta `200`: `{ url, expires_in: 300 }` — URL firmada de 5 minutos.
+  `photo_path` no aparece jamás en ninguna respuesta (D-037).
 
-### Contras
+**Errores** — JSON `{ error, message }`; `error` es código máquina y
+`message` va en castellano para el usuario:
 
-* puede crecer demasiado si no se modulariza;
-* requiere routing interno;
-* quizá en el futuro convenga separarla.
+| HTTP | `error` |
+|---|---|
+| 400 | `invalid_payload` · `unknown_species` · `out_of_bounds` · `invalid_image` |
+| 401 | `unauthorized` |
+| 404 | `unknown_route` · `not_found` |
+| 405 | `method_not_allowed` |
+| 413 | `image_too_large` |
+| 429 | `daily_quota_exceeded` («Has llegado al límite de hoy») |
+| 500 | `internal_error` |
+
+Nota sobre tamaños (verificado en hosted): una imagen por encima de 512 KB
+pero con cuerpo dentro del margen la rechaza la función con `413`; un
+cuerpo descomunal lo corta antes la propia plataforma Edge de Supabase con
+un `503` (nunca llega a la función). Ambos casos se rechazan sin procesar
+ni tocar Storage; el guard de `Content-Length` de la función es defensa en
+profundidad para lo que sí le llega.
+
+**Huecos reservados (post-MVP, sin implementar):** `report-sighting`,
+`moderation/*`, `admin/update-config`. `verify-sighting` queda fuera a
+propósito: la verificación es INSERT directo bajo RLS consolidado por
+trigger (D-038); solo volvería aquí si LCHP-15 necesitara errores más
+amables.
 
 ### Decisión
 
-Usar una única Edge Function en MVP, pero modularizar internamente.
+Una única Edge Function, modularizada internamente (`routes/` + `lib/`,
+ver §34). Los datos que toca con `service_role` están concedidos de forma
+explícita y mínima (migración 0006, D-042).
 
 ## 14. Modelo de datos inicial
 
@@ -1674,6 +1703,15 @@ pre-comprobar la cuota para devolver un error amable, pero la fuente de
 verdad es el trigger. A escala del piloto el `count(*)` por usuario/día es
 trivial; basta un índice `(user_id, created_at)`.
 
+**Implementado (migración 0005 — enmienda 2026-07-06)** `Decidido`: con
+una diferencia respecto al prototipo del spike — como los inserts llegan
+vía `service_role` (D-037), el claim `is_anonymous` del JWT es el del
+servicio, no el del usuario; el trigger deriva la anonimia de
+`auth.users.is_anonymous` para el `created_by` de la fila (D-041). Las
+filas sin autor (`created_by` null: cuentas borradas, inserts
+administrativos) no consumen cuota. El corte de día es medianoche UTC
+(aprox. aceptable de Madrid para el piloto). Cubierto por pgTAP en CI.
+
 ## 31. Privacidad y lenguaje
 
 Reglas visibles al usuario:
@@ -1873,42 +1911,41 @@ src/
 ```text
 supabase/
   migrations/
-    0001_initial_schema.sql          # LCHP-10 (incluye RLS deny-all)
+    0001_initial_schema.sql          # LCHP-10 (RLS deny-all + triggers base)
     0002_seed_reference_data.sql     # LCHP-10 (species + app_config)
-    0003_rls_policies.sql            # LCHP-11
-    0004_storage_policies.sql        # LCHP-11
-    0005_points_and_ranking.sql
-    0006_image_moderation_optional.sql
+    0003_sighting_data_invariants.sql# LCHP-10 (CHECKs de la review adversarial)
+    0004_rls_policies_and_storage.sql# LCHP-11 (políticas + vista + bucket)
+    0005_sighting_daily_quota.sql    # LCHP-12 (trigger de cuota, D-032/D-041)
+    0006_service_role_grants.sql     # LCHP-12 (grants explícitos, D-042)
 
   functions/
-    api/
-      index.ts
+    api/                             # implementado en LCHP-12
+      deno.json                      # imports + fmt (toolchain Deno propia)
+      index.ts                       # router + CORS + auth + huecos post-MVP
       routes/
         create-sighting.ts
         get-photo-url.ts
-        moderation.ts
-        verification.ts
-        ranking.ts
-        analyze-image.ts
+        routes.test.ts               # contratos con Db fake, sin red
       lib/
-        auth.ts
-        cors.ts
-        rate-limit.ts
-        supabase-admin.ts
-        validation.ts
-        storage.ts
-        points.ts
-        image-processing.ts
-        image-moderation.ts
-        providers/
-          sightengine.ts
-          google-vision.ts
-          cloudflare-ai.ts
+        auth.ts                      # JWT → Caller {id, isAnonymous}
+        cors.ts (+ .test.ts)
+        db.ts                        # interfaz estrecha sobre service_role
+        config.ts                    # app_config con caché TTL 30 s
+        points.ts                    # vocabulario +10/+5 preparado (LCHP-15)
+        responses.ts                 # contrato de errores (§13)
+        validation.ts (+ .test.ts)   # bbox, rejilla pública, magic bytes
+
+  tests/
+    rls_policies.test.sql            # pgTAP: §12 + cuota + grants (CI)
 
   seed.sql
 ```
 
-Aunque haya una única Edge Function desplegada, el código interno puede estar modularizado.
+Post-MVP (el esqueleto original preveía `moderation.ts`, `ranking.ts`,
+`analyze-image.ts`, `image-processing`, `providers/…`): siguen siendo la
+referencia de la fase C/D y se añadirán a esta estructura cuando toquen.
+
+Aunque haya una única Edge Function desplegada, el código interno está modularizado.
 
 ## 35. Testing
 
