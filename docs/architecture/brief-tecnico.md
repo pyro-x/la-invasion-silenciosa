@@ -631,7 +631,9 @@ verification_requires_registration = true
                            (D-054: con true, la confirmación de una sesión
                             anónima queda como apoyo provisional — no suma
                             al umbral ni acuña puntos hasta que su autor se
-                            registre; con false cuenta de pleno derecho.
+                            registre; con false cuenta de pleno derecho —
+                            y al abrirlo se activan también las provisionales
+                            YA guardadas (trigger sobre app_config).
                             Cambiarla es un UPDATE, no un deploy)
 ```
 

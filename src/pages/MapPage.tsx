@@ -80,8 +80,14 @@ export function MapPage() {
   const onVerifyResult = (outcome: VerifyOutcome) => {
     setVerifying(false)
     showToast(VERIFY_TOASTS[outcome.kind])
-    if (outcome.kind === 'validated' || outcome.kind === 'counted') {
-      // The pin stops blinking / the count moves: re-read the public view.
+    if (
+      outcome.kind === 'validated' ||
+      outcome.kind === 'counted' ||
+      outcome.kind === 'saved_provisional'
+    ) {
+      // The pin may stop blinking / the count may move: re-read the public
+      // view on every stored confirmation (a provisional one can still have
+      // validated the sighting when the operational switch is open).
       void queryClient.invalidateQueries({ queryKey: ['sightings', 'map'] })
     }
   }

@@ -14,7 +14,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(41);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: three registered users (author + two verifiers), two anonymous
@@ -26,7 +26,8 @@ insert into auth.users (id, instance_id, aud, role, is_anonymous) values
   ('b0000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false), -- verifier 1 (registered)
   ('c0000000-0000-0000-0000-00000000000c', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false), -- verifier 2 (registered)
   ('d0000000-0000-0000-0000-00000000000d', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true),  -- anonymous verifier
-  ('e0000000-0000-0000-0000-00000000000e', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true);  -- anonymous verifier 2
+  ('e0000000-0000-0000-0000-00000000000e', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true),  -- anonymous verifier 2
+  ('f0000000-0000-0000-0000-0000000000ff', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true);  -- anonymous verifier 3 (switch-flip scenario)
 
 insert into public.species (id, slug, dex_number, name, rarity, description, habitat, tracking_tip)
 values ('99999999-0000-0000-0000-000000000098', 'test-consolidation', '#998', 'Consolidada', 'común', 'x', 'x', 'x');
@@ -40,7 +41,7 @@ select
   'a0000000-0000-0000-0000-00000000000a',
   40.411, -3.711,
   now() - interval '1 day'
-from (values ('1'), ('2'), ('3'), ('4'), ('5'), ('6'), ('7')) as t (n);
+from (values ('1'), ('2'), ('3'), ('4'), ('5'), ('6'), ('7'), ('8')) as t (n);
 
 -- The suite assumes the seeded pilot defaults; assert them so a drifted
 -- local database fails loudly instead of producing confusing results.
@@ -288,6 +289,38 @@ select is(
   'approved', 'the malformed threshold falls back to 1 (never to 0, never an exception)');
 
 update public.app_config set value = '1' where key = 'validation_threshold';
+
+-- ---------------------------------------------------------------------------
+-- Scenario 10 · opening the switch activates ALREADY STORED provisional
+-- confirmations (Codex review round 2, HIGH): without the app_config
+-- trigger, support collected while the switch was closed would stay inert
+-- after the operator flips it.
+-- ---------------------------------------------------------------------------
+
+insert into public.verifications (sighting_id, user_id, type)
+values ('f0000000-0000-0000-0000-000000000008', 'f0000000-0000-0000-0000-0000000000ff', 'confirm_exists');
+
+select is(
+  (select moderation_status from public.sightings where id = 'f0000000-0000-0000-0000-000000000008'),
+  'pending', 'switch closed: the anonymous confirmation waits as provisional');
+
+update public.app_config set value = 'false'
+ where key = 'verification_requires_registration';
+
+select is(
+  (select moderation_status from public.sightings where id = 'f0000000-0000-0000-0000-000000000008'),
+  'approved', 'flipping the switch open consolidates the stored provisional confirmation');
+select is(
+  (select count(*)::int from public.point_events
+    where user_id = 'f0000000-0000-0000-0000-0000000000ff' and type = 'verification_accepted'),
+  1, 'the provisional verifier collected their +5 on the flip');
+select is(
+  (select count(*)::int from public.point_events
+    where sighting_id = 'f0000000-0000-0000-0000-000000000008' and type = 'sighting_validated'),
+  1, 'the author +10 was paid exactly once on the flip');
+
+update public.app_config set value = 'true'
+ where key = 'verification_requires_registration';
 
 select * from finish();
 rollback;

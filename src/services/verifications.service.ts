@@ -38,17 +38,21 @@ export async function submitVerification(sightingId: string): Promise<VerifyOutc
       return { kind: 'error' }
     }
 
-    if (user.is_anonymous) return { kind: 'saved_provisional' }
-
-    // Did this confirmation tip the threshold? The public view answers; a
-    // failed read-back degrades to the modest outcome, never to an error —
-    // the verification itself is already stored.
+    // The outcome comes from authoritative post-insert state, not from local
+    // assumptions (Codex review round 2): with the operational switch open,
+    // an anonymous confirmation counts and can validate — the public view is
+    // what knows. A failed read-back degrades to the modest outcome, never
+    // to an error: the verification itself is already stored. One honest
+    // approximation remains: an anonymous confirmation that counted but sits
+    // below a threshold > 1 (non-default config) still reads as provisional —
+    // the trigger stays authoritative and the points appear on validation.
     const { data } = await supabase
       .from('public_map_sightings')
       .select('status')
       .eq('id', sightingId)
       .single()
-    return data?.status === 'approved' ? { kind: 'validated' } : { kind: 'counted' }
+    if (data?.status === 'approved') return { kind: 'validated' }
+    return user.is_anonymous ? { kind: 'saved_provisional' } : { kind: 'counted' }
   } catch {
     return { kind: 'error' }
   }

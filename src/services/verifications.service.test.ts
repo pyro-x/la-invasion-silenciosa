@@ -48,10 +48,15 @@ describe('submitVerification outcome mapping', () => {
     expect(await submitVerification('s-1')).toEqual({ kind: 'counted' })
   })
 
-  it('anonymous session → saved_provisional, without reading the view back', async () => {
+  it('anonymous session + sighting still pending → saved_provisional', async () => {
     sessionWith(true)
     expect(await submitVerification('s-1')).toEqual({ kind: 'saved_provisional' })
-    expect(statusMock).not.toHaveBeenCalled()
+  })
+
+  it('anonymous session + sighting now approved → validated (open-switch case: the view is authoritative)', async () => {
+    sessionWith(true)
+    statusMock.mockResolvedValue({ data: { status: 'approved' } })
+    expect(await submitVerification('s-1')).toEqual({ kind: 'validated' })
   })
 
   it('UNIQUE violation → already_verified', async () => {

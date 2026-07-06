@@ -310,3 +310,44 @@ create trigger on_auth_user_registered
   for each row
   when (coalesce(old.is_anonymous, false) and not coalesce(new.is_anonymous, false))
   execute function private.activate_verifications_on_registration();
+
+-- ---------------------------------------------------------------------------
+-- Trigger 3: opening the switch activates what was already stored (Codex
+-- adversarial review round 2, HIGH). Without this, provisional confirmations
+-- collected while the switch was closed would stay inert after the operator
+-- flips it — counted only if some unrelated event re-consolidated their
+-- sighting. Any write that leaves the switch open re-consolidates every
+-- sighting with unpaid confirmations; consolidate_sighting is idempotent,
+-- so a redundant flip is harmless.
+-- ---------------------------------------------------------------------------
+
+create function private.activate_provisional_on_switch_open()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target uuid;
+begin
+  if new.key <> 'verification_requires_registration' or new.value <> 'false' then
+    return new;
+  end if;
+
+  for target in
+    select distinct v.sighting_id
+      from public.verifications v
+     where v.type = 'confirm_exists'
+       and v.points_awarded = false
+  loop
+    perform private.consolidate_sighting(target);
+  end loop;
+  return new;
+end;
+$$;
+
+revoke execute on function private.activate_provisional_on_switch_open() from public;
+
+create trigger activate_provisional_on_switch_open
+  after insert or update on public.app_config
+  for each row execute function private.activate_provisional_on_switch_open();
