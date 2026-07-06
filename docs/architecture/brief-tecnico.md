@@ -945,6 +945,12 @@ pin manual, nunca del EXIF (que se elimina, no se lee). El pipeline servidor
 post-MVP (§27: thumbnails, blur, WebP) se añade por detrás de esta garantía,
 no la sustituye.
 
+Refuerzo en la frontera de confianza (review adversarial LCHP-14): la Edge
+Function `/create-sighting` **rechaza** (400) cualquier JPEG con segmentos
+APP1–APP15/COM y cualquier WebP con chunks EXIF/XMP — un cliente legítimo
+nunca los envía (el pipeline los elimina), así que metadatos entrantes =
+cliente modificado. La garantía no depende del cliente.
+
 ## 18. Flujo de mapa
 
 ### Implementado (LCHP-13 — enmienda 2026-07-06) `Decidido`

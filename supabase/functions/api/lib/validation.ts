@@ -68,6 +68,48 @@ export function detectImageMime(bytes: Uint8Array): ImageMime | null {
   return null
 }
 
+// Golden rule, enforced at the trust boundary (LCHP-14 Codex review): a
+// legitimate client only ever sends pipeline-cleaned JPEGs (src/lib/photo.ts
+// strips every APPn/COM segment and never produces WebP), so ANY metadata
+// reaching this route means a modified client. Fail closed: malformed
+// structures count as carrying metadata.
+export function imageCarriesMetadata(bytes: Uint8Array, mime: ImageMime): boolean {
+  return mime === 'image/jpeg' ? jpegCarriesMetadata(bytes) : webpCarriesMetadata(bytes)
+}
+
+// Walks JPEG segments up to SOS: APP1–APP15 (EXIF/XMP/ICC/…) and COM are
+// metadata. APP0/JFIF is a plain header and stays allowed.
+function jpegCarriesMetadata(bytes: Uint8Array): boolean {
+  let i = 2
+  while (i + 4 <= bytes.length) {
+    if (bytes[i] !== 0xff) return true
+    let j = i
+    while (bytes[j + 1] === 0xff) j++
+    const marker = bytes[j + 1]
+    if (marker === 0xda) return false
+    if ((marker >= 0xe1 && marker <= 0xef) || marker === 0xfe) return true
+    const size = (bytes[j + 2] << 8) | bytes[j + 3]
+    if (size < 2 || j + 2 + size > bytes.length) return true
+    i = j + 2 + size
+  }
+  return true // no scan data → not a JPEG our client would produce
+}
+
+// Walks RIFF chunks: EXIF and XMP chunks are metadata (the client never
+// produces WebP at all, so any hit is a hostile upload by definition).
+function webpCarriesMetadata(bytes: Uint8Array): boolean {
+  const fourCC = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3])
+  let i = 12
+  while (i + 8 <= bytes.length) {
+    const id = fourCC(i)
+    if (id === 'EXIF' || id === 'XMP ') return true
+    const size = bytes[i + 4] | (bytes[i + 5] << 8) | (bytes[i + 6] << 16) | (bytes[i + 7] << 24)
+    if (size < 0) return true
+    i += 8 + size + (size % 2) // chunks are padded to even sizes
+  }
+  return false
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function isUuid(value: string): boolean {
