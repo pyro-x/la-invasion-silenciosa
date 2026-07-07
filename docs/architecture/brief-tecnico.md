@@ -859,7 +859,11 @@ Verificado de extremo a extremo contra GoTrue local con Mailpit
   hay fusión de cuentas: limitación conocida de linkIdentity/updateUser);
 * la plantilla del hosted (dashboard → Email Templates → Change Email
   Address) debe espejar la del repo y el `otp_length` bajarse de 8 a 6 —
-  paso post-merge de LCHP-29;
+  **paso PRE-merge de LCHP-29** (review adversarial: Cloudflare publica
+  main al instante del merge y un despliegue con la plantilla vieja
+  enviaría el email de enlace sin código; cambiarla antes es riesgo
+  cero porque ningún código en producción envía emails de email_change
+  hasta que esta rama despliega);
 * **SMTP propio pendiente ANTES del piloto** (LCHP-31): el remitente
   integrado de Supabase envía ~2 correos/hora, inservible en la calle.
 
