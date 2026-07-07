@@ -163,19 +163,22 @@ export function RegistrationPanel({
           onSubmit={(e) => void confirmCode(e, view.email)}
         >
           <span style={{ fontSize: 12.5, color: 'var(--ink-dim)' }}>
-            Te hemos enviado un código de 6 dígitos a{' '}
+            Te hemos enviado un código a{' '}
             <strong style={{ color: 'var(--ink)' }}>{view.email}</strong>. Escríbelo aquí. ¿No
             llega? Mira en la carpeta de spam.
           </span>
+          {/* 6 digits is the target config (D-056), but the input tolerates 8
+              so a deploy that outruns the hosted otp_length change can never
+              strand a neighbor mid-registration (Codex review, HIGH). */}
           <input
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            maxLength={6}
+            maxLength={8}
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             placeholder="000000"
-            aria-label="Código de 6 dígitos"
+            aria-label="Código del correo"
             className="mono"
             style={{
               border: 'var(--bw) solid var(--line)',

@@ -33,7 +33,7 @@ describe('registration panel', () => {
     await user.type(screen.getByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
     expect(requestMock).toHaveBeenCalledWith('rosa@test.local')
-    expect(await screen.findByText(/código de 6 dígitos/)).toBeInTheDocument()
+    expect(await screen.findByText(/Te hemos enviado un código/)).toBeInTheDocument()
     expect(screen.getByText(/spam/)).toBeInTheDocument()
   })
 
@@ -44,7 +44,7 @@ describe('registration panel', () => {
     render(<RegistrationPanel onRegistered={onRegistered} />)
     await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
-    await user.type(await screen.findByLabelText('Código de 6 dígitos'), '123456')
+    await user.type(await screen.findByLabelText('Código del correo'), '123456')
     await user.click(screen.getByRole('button', { name: /Confirmar código/ }))
     expect(confirmMock).toHaveBeenCalledWith('rosa@test.local', '123456')
     expect(await screen.findByText('✓ Cuenta guardada')).toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('registration panel', () => {
     render(<RegistrationPanel />)
     await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
-    await user.type(await screen.findByLabelText('Código de 6 dígitos'), '999999')
+    await user.type(await screen.findByLabelText('Código del correo'), '999999')
     await user.click(screen.getByRole('button', { name: /Confirmar código/ }))
     expect(await screen.findByText(/no es válido o ha caducado/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Reenviar código/ })).toBeEnabled()
@@ -76,7 +76,7 @@ describe('registration panel', () => {
   it('a pending upgrade resumes at the code step across sessions', async () => {
     stateMock.mockResolvedValue({ kind: 'pending', email: 'rosa@test.local' })
     render(<RegistrationPanel />)
-    expect(await screen.findByText(/código de 6 dígitos/)).toBeInTheDocument()
+    expect(await screen.findByText(/Te hemos enviado un código/)).toBeInTheDocument()
     expect(screen.getByText('rosa@test.local')).toBeInTheDocument()
   })
 
@@ -87,16 +87,20 @@ describe('registration panel', () => {
     expect(screen.queryByLabelText('Tu correo')).not.toBeInTheDocument()
   })
 
-  it('the code input only accepts digits and gates the button until 6', async () => {
+  it('the code input only accepts digits, gates at 6 and tolerates 8 (hosted rollout skew)', async () => {
     const user = userEvent.setup()
     render(<RegistrationPanel />)
     await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
-    const codeInput = await screen.findByLabelText('Código de 6 dígitos')
+    const codeInput = await screen.findByLabelText('Código del correo')
     await user.type(codeInput, '12ab34')
     expect(codeInput).toHaveValue('1234')
     expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeDisabled()
     await user.type(codeInput, '56')
+    expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeEnabled()
+    // an 8-digit code (hosted default until its config is patched) still fits
+    await user.type(codeInput, '78')
+    expect(codeInput).toHaveValue('12345678')
     expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeEnabled()
   })
 })
