@@ -65,8 +65,7 @@ export async function confirmUpgrade(email: string, token: string): Promise<Conf
       return { kind: 'error' }
     }
     const after = await ownTotalPoints()
-    const pointsRecovered =
-      before !== null && after !== null ? Math.max(0, after - before) : 0
+    const pointsRecovered = before !== null && after !== null ? Math.max(0, after - before) : 0
     return { kind: 'registered', pointsRecovered }
   } catch {
     return { kind: 'error' }
@@ -79,10 +78,6 @@ async function ownTotalPoints(): Promise<number | null> {
   const { data: sessionData } = await supabase.auth.getSession()
   const userId = sessionData.session?.user?.id
   if (!userId) return null
-  const { data } = await supabase
-    .from('profiles')
-    .select('total_points')
-    .eq('id', userId)
-    .single()
+  const { data } = await supabase.from('profiles').select('total_points').eq('id', userId).single()
   return data?.total_points ?? null
 }

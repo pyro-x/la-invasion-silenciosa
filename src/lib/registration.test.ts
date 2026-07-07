@@ -1,12 +1,10 @@
-import {
-  confirmUpgrade,
-  registrationState,
-  requestUpgrade,
-} from '@/lib/registration'
+import { confirmUpgrade, registrationState, requestUpgrade } from '@/lib/registration'
 
 const getSessionMock = vi.fn()
 const updateUserMock =
-  vi.fn<(attrs: { email: string }) => Promise<{ error: { code?: string; status?: number } | null }>>()
+  vi.fn<
+    (attrs: { email: string }) => Promise<{ error: { code?: string; status?: number } | null }>
+  >()
 const verifyOtpMock = vi.fn<(params: object) => Promise<{ error: { status?: number } | null }>>()
 const totalPointsMock = vi.fn<() => Promise<{ data: { total_points: number } | null }>>()
 

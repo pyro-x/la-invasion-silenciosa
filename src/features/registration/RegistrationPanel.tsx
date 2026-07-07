@@ -4,11 +4,7 @@
 // is pending — a late or never-typed code must be harmless.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Toast } from '@/components/ui/Toast'
-import {
-  confirmUpgrade,
-  registrationState,
-  requestUpgrade,
-} from '@/lib/registration'
+import { confirmUpgrade, registrationState, requestUpgrade } from '@/lib/registration'
 
 type View =
   | { kind: 'loading' }
@@ -161,7 +157,11 @@ export function RegistrationPanel({
       )}
 
       {view.kind === 'code' && (
-        <form className="stack" style={{ gap: 10 }} onSubmit={(e) => void confirmCode(e, view.email)}>
+        <form
+          className="stack"
+          style={{ gap: 10 }}
+          onSubmit={(e) => void confirmCode(e, view.email)}
+        >
           <span style={{ fontSize: 12.5, color: 'var(--ink-dim)' }}>
             Te hemos enviado un código de 6 dígitos a{' '}
             <strong style={{ color: 'var(--ink)' }}>{view.email}</strong>. Escríbelo aquí. ¿No
