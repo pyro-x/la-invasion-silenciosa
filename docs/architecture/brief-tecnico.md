@@ -826,6 +826,43 @@ verificada limita el abuso; (c) como el `id` sobrevive al upgrade, no se
 pierde nada por empezar anónimo. El magic link se ofrece como mejora
 («guarda tu historial y tus puntos»), no como barrera.
 
+### Registro progresivo implementado (LCHP-29 — 2026-07-07) `Decidido`
+
+El upgrade se hace con un **código OTP de 6 dígitos**, no con un enlace
+clicable (D-055/D-056): en una PWA instalada en iOS el enlace se abre en
+Safari, que no comparte almacenamiento con la PWA, y la sesión queda
+huérfana. El flujo implementado (`src/lib/registration.ts` + panel «Guarda
+tu cuenta» en Perfil):
+
+```text
+updateUser({ email }) sobre la sesión anónima
+↓
+llega un código de 6 dígitos por correo
+(plantilla en supabase/templates/email_change.html, versionada;
+ asunto «Tu código para La Invasión Silenciosa»)
+↓
+verifyOtp({ type: 'email_change', email, token }) EN la app
+↓
+misma fila de auth.users: is_anonymous=false, mismo id
+↓
+el trigger de LCHP-15 activa sus apoyos provisionales:
+cuentan para el umbral y cobra sus +5 acumulados
+(«+N puntos recuperados» en el panel)
+```
+
+Verificado de extremo a extremo contra GoTrue local con Mailpit
+(confirmaciones activadas para espejar el hosted). Notas operativas:
+
+* la sesión anónima sigue plenamente usable mientras el código está
+  pendiente — que caduque o no llegue es inofensivo;
+* un correo ya registrado en otra cuenta se rechaza con explicación (no
+  hay fusión de cuentas: limitación conocida de linkIdentity/updateUser);
+* la plantilla del hosted (dashboard → Email Templates → Change Email
+  Address) debe espejar la del repo y el `otp_length` bajarse de 8 a 6 —
+  paso post-merge de LCHP-29;
+* **SMTP propio pendiente ANTES del piloto** (LCHP-31): el remitente
+  integrado de Supabase envía ~2 correos/hora, inservible en la calle.
+
 Roles:
 
 ```text
