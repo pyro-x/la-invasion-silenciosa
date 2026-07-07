@@ -867,6 +867,15 @@ Verificado de extremo a extremo contra GoTrue local con Mailpit
 * **SMTP propio pendiente ANTES del piloto** (LCHP-31): el remitente
   integrado de Supabase envía ~2 correos/hora, inservible en la calle.
 
+Las **invitaciones al registro** (LCHP-30, D-055) disparan en los tres
+momentos decididos — tras la primera caza (tarjeta descartable con el
+progreso dotado), tras la primera confirmación provisional (panel con el
+flujo de registro embebido, en el sitio), y en Perfil cuando hay apoyos
+provisionales esperando («N apoyos y +N×5 puntos») — una sola vez por
+hito, nunca por sesión (flags en localStorage), y jamás para usuarios ya
+registrados. El suelo pasivo («Guarda tu cuenta» en Perfil) existe
+siempre.
+
 Roles:
 
 ```text

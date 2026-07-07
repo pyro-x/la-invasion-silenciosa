@@ -3,6 +3,7 @@
 // account, upgraded. The anonymous session stays fully usable while a code
 // is pending — a late or never-typed code must be harmless.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Toast } from '@/components/ui/Toast'
 import { confirmUpgrade, registrationState, requestUpgrade } from '@/lib/registration'
 
@@ -32,6 +33,7 @@ export function RegistrationPanel({
   /** Fires after a successful upgrade (LCHP-30 closes its modal with this). */
   onRegistered?: (pointsRecovered: number) => void
 }) {
+  const queryClient = useQueryClient()
   const [view, setView] = useState<View>({ kind: 'loading' })
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -99,6 +101,11 @@ export function RegistrationPanel({
           ? `Cuenta guardada 🎉 · +${result.pointsRecovered} puntos recuperados`
           : 'Cuenta guardada 🎉',
       )
+      // Every consumer of registration-derived data refreshes, whichever
+      // door this panel was opened through (Codex review: the Perfil
+      // pending-value banner must not keep inviting a saved account).
+      void queryClient.invalidateQueries({ queryKey: ['registration'] })
+      void queryClient.invalidateQueries({ queryKey: ['profile'] })
       onRegistered?.(result.pointsRecovered)
       return
     }

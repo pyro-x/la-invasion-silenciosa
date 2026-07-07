@@ -20,6 +20,35 @@ export type VerifyOutcome =
   | { kind: 'not_verifiable' }
   | { kind: 'error' }
 
+/** Own stored confirmations not yet paid AND still able to pay — the
+ * neighbor's pending value (LCHP-30's Perfil banner: «N apoyos y +N×5
+ * puntos esperando»). RLS scopes the first read to the caller's rows; the
+ * second filters through the public map view, which only serves pending and
+ * approved sightings — a confirmation whose sighting was rejected/removed
+ * will never pay out (Codex review: promising those +5s would be a false
+ * incentive), so it must not be counted. Without a session there is nothing
+ * to count, and none is ever minted just for this. */
+export async function countOwnProvisionalConfirmations(): Promise<number> {
+  try {
+    const { data } = await supabase.auth.getSession()
+    if (!data.session) return 0
+    const { data: rows } = await supabase
+      .from('verifications')
+      .select('sighting_id')
+      .eq('type', 'confirm_exists')
+      .eq('points_awarded', false)
+    const ids = (rows ?? []).flatMap((row) => (row.sighting_id ? [row.sighting_id] : []))
+    if (ids.length === 0) return 0
+    const { count } = await supabase
+      .from('public_map_sightings')
+      .select('id', { count: 'exact', head: true })
+      .in('id', ids)
+    return count ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export async function submitVerification(sightingId: string): Promise<VerifyOutcome> {
   try {
     await ensureSession()

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RegistrationPanel } from './RegistrationPanel'
@@ -24,10 +25,22 @@ beforeEach(() => {
   confirmMock.mockResolvedValue({ kind: 'registered', pointsRecovered: 0 })
 })
 
+// The panel invalidates registration/profile queries on success, so it needs
+// a query client — returned so tests can assert the invalidation.
+function renderPanel(onRegistered?: (points: number) => void) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RegistrationPanel onRegistered={onRegistered} />
+    </QueryClientProvider>,
+  )
+  return queryClient
+}
+
 describe('registration panel', () => {
   it('anonymous: explains why and sends the code to the typed email', async () => {
     const user = userEvent.setup()
-    render(<RegistrationPanel />)
+    renderPanel()
     expect(await screen.findByText('Guarda tu cuenta')).toBeInTheDocument()
     expect(screen.getByText(/sin contraseña/)).toBeInTheDocument()
     await user.type(screen.getByLabelText('Tu correo'), 'rosa@test.local')
@@ -41,7 +54,7 @@ describe('registration panel', () => {
     confirmMock.mockResolvedValue({ kind: 'registered', pointsRecovered: 15 })
     const onRegistered = vi.fn()
     const user = userEvent.setup()
-    render(<RegistrationPanel onRegistered={onRegistered} />)
+    renderPanel(onRegistered)
     await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
     await user.type(await screen.findByLabelText('Código del correo'), '123456')
@@ -55,7 +68,7 @@ describe('registration panel', () => {
   it('a wrong code shows the friendly error and allows retrying', async () => {
     confirmMock.mockResolvedValue({ kind: 'bad_code' })
     const user = userEvent.setup()
-    render(<RegistrationPanel />)
+    renderPanel()
     await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
     await user.type(await screen.findByLabelText('Código del correo'), '999999')
@@ -67,7 +80,7 @@ describe('registration panel', () => {
   it('an email already registered elsewhere is explained, not mystified', async () => {
     requestMock.mockResolvedValue({ kind: 'email_taken' })
     const user = userEvent.setup()
-    render(<RegistrationPanel />)
+    renderPanel()
     await user.type(await screen.findByLabelText('Tu correo'), 'taken@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
     expect(await screen.findByText(/ya tiene una cuenta aquí/)).toBeInTheDocument()
@@ -75,21 +88,21 @@ describe('registration panel', () => {
 
   it('a pending upgrade resumes at the code step across sessions', async () => {
     stateMock.mockResolvedValue({ kind: 'pending', email: 'rosa@test.local' })
-    render(<RegistrationPanel />)
+    renderPanel()
     expect(await screen.findByText(/Te hemos enviado un código/)).toBeInTheDocument()
     expect(screen.getByText('rosa@test.local')).toBeInTheDocument()
   })
 
   it('a registered user sees their saved account, no form', async () => {
     stateMock.mockResolvedValue({ kind: 'registered', email: 'rosa@test.local' })
-    render(<RegistrationPanel />)
+    renderPanel()
     expect(await screen.findByText('✓ Cuenta guardada')).toBeInTheDocument()
     expect(screen.queryByLabelText('Tu correo')).not.toBeInTheDocument()
   })
 
   it('the code input only accepts digits, gates at 6 and tolerates 8 (hosted rollout skew)', async () => {
     const user = userEvent.setup()
-    render(<RegistrationPanel />)
+    renderPanel()
     await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
     await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
     const codeInput = await screen.findByLabelText('Código del correo')
@@ -102,5 +115,19 @@ describe('registration panel', () => {
     await user.type(codeInput, '78')
     expect(codeInput).toHaveValue('12345678')
     expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeEnabled()
+  })
+
+  it('a successful upgrade invalidates registration + profile queries (Perfil banner refresh)', async () => {
+    const user = userEvent.setup()
+    const queryClient = renderPanel()
+    queryClient.setQueryData(['registration', 'pending-value'], { show: true, count: 2 })
+    queryClient.setQueryData(['profile'], { points: 0 })
+    await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
+    await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
+    await user.type(await screen.findByLabelText('Código del correo'), '123456')
+    await user.click(screen.getByRole('button', { name: /Confirmar código/ }))
+    await screen.findByText('✓ Cuenta guardada')
+    expect(queryClient.getQueryState(['registration', 'pending-value'])?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(['profile'])?.isInvalidated).toBe(true)
   })
 })

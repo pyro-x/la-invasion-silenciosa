@@ -7,6 +7,7 @@ import { APP_VERSION } from '@/lib/version'
 import { MiniPix } from '@/components/pixel/PixelSprite'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { NAV_ICONS } from '@/components/pixel/sprites'
+import { PendingValueBanner } from '@/features/registration/PendingValueBanner'
 import { RegistrationPanel } from '@/features/registration/RegistrationPanel'
 import { getBadges, getProfile, LEVELS, levelForPoints } from '@/services/profile.service'
 import { listSpecies } from '@/services/species.service'
@@ -94,7 +95,8 @@ export function ProfilePage() {
           </div>
         </div>
 
-        {/* progressive registration (LCHP-29): the permanent passive floor */}
+        {/* pending provisional value (LCHP-30) + the passive floor (LCHP-29) */}
+        <PendingValueBanner />
         <RegistrationPanel />
 
         {/* points stats */}

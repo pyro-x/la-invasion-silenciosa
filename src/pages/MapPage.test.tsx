@@ -43,9 +43,18 @@ const submitVerificationMock = vi.fn<(id: string) => Promise<{ kind: string }>>(
 
 vi.mock('@/services/verifications.service', () => ({
   submitVerification: (id: string) => submitVerificationMock(id),
+  countOwnProvisionalConfirmations: () => Promise.resolve(0),
+}))
+
+// The first-confirm invitation modal (LCHP-30) embeds the RegistrationPanel.
+vi.mock('@/lib/registration', () => ({
+  registrationState: () => Promise.resolve({ kind: 'anonymous' }),
+  requestUpgrade: () => Promise.resolve({ kind: 'sent', email: 'x@x.com' }),
+  confirmUpgrade: () => Promise.resolve({ kind: 'registered', pointsRecovered: 0 }),
 }))
 
 beforeEach(() => {
+  localStorage.clear()
   listMapSightingsMock.mockResolvedValue(FIXTURES)
   submitVerificationMock.mockResolvedValue({ kind: 'validated' })
   getEvidenceUrlMock.mockImplementation((id: string) =>
@@ -159,7 +168,7 @@ describe('map screen', () => {
     expect(listMapSightingsMock.mock.calls.length).toBeGreaterThan(readsBefore)
   })
 
-  it('an anonymous confirmation toasts the provisional-support message', async () => {
+  it('the FIRST provisional confirmation opens the invitation; later ones toast (LCHP-30)', async () => {
     submitVerificationMock.mockResolvedValue({ kind: 'saved_provisional' })
     getEvidenceUrlMock.mockResolvedValue({ kind: 'ready', url: 'https://x/p.jpg', expiresIn: 300 })
     const user = userEvent.setup()
@@ -168,9 +177,24 @@ describe('map screen', () => {
     await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
     await screen.findByRole('img', { name: /Evidencia/ })
     await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
+
+    // first time: the invitation modal with the real registration flow inside
+    expect(await screen.findByText('Apoyo guardado 🛡')).toBeInTheDocument()
+    expect(screen.getByText('Guarda tu cuenta')).toBeInTheDocument()
+    expect(localStorage.getItem('lis.invite.first-confirm.seen')).toBe('1')
+    expect(
+      screen.queryByText('Apoyo guardado · regístrate para que cuente y cobrar tus +5'),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Ahora no →' }))
+
+    // second confirmation: the milestone already fired — a discreet toast
+    await user.click(await screen.findByRole('button', { name: '✔ Verificar' }))
+    await screen.findByRole('img', { name: /Evidencia/ })
+    await user.click(await screen.findByRole('button', { name: /Confirmar \(\+5 pts\)/ }))
     expect(
       await screen.findByText('Apoyo guardado · regístrate para que cuente y cobrar tus +5'),
     ).toBeInTheDocument()
+    expect(screen.queryByText('Apoyo guardado 🛡')).not.toBeInTheDocument()
   })
 
   it('an already-verified duplicate is told so, without fake success', async () => {
