@@ -11,7 +11,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { VerifyModal } from '@/components/sightings/VerifyModal'
 import { Toast } from '@/components/ui/Toast'
+import { InvitationModal } from '@/features/registration/InvitationModal'
 import { formatAge } from '@/lib/age'
+import { invitationSeen, markInvitationSeen } from '@/lib/invitations'
 import { getEvidenceUrl, type EvidenceResult } from '@/services/evidence.service'
 import { listMapSightings } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
@@ -62,6 +64,7 @@ export function MapPage() {
   const [heat, setHeat] = useState(false)
   const [sel, setSel] = useState<string | null>(null)
   const [verifying, setVerifying] = useState(false)
+  const [inviteConfirm, setInviteConfirm] = useState(false)
   const [evidence, setEvidence] = useState<EvidenceState>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -79,7 +82,16 @@ export function MapPage() {
 
   const onVerifyResult = (outcome: VerifyOutcome) => {
     setVerifying(false)
-    showToast(VERIFY_TOASTS[outcome.kind])
+    // First provisional confirmation (LCHP-30, D-055): the one moment the
+    // deferral turns into an invitation — a panel instead of the toast, once
+    // ever. saved_provisional implies an anonymous session, so no extra
+    // registered-user check is needed.
+    if (outcome.kind === 'saved_provisional' && !invitationSeen('first-confirm')) {
+      markInvitationSeen('first-confirm')
+      setInviteConfirm(true)
+    } else {
+      showToast(VERIFY_TOASTS[outcome.kind])
+    }
     if (
       outcome.kind === 'validated' ||
       outcome.kind === 'counted' ||
@@ -342,6 +354,15 @@ export function MapPage() {
           </button>
         ))}
       </div>
+
+      {/* first-confirmation invitation (LCHP-30) */}
+      {inviteConfirm && (
+        <InvitationModal
+          eyebrow="Apoyo guardado 🛡"
+          message="Tu confirmación queda guardada. Para que cuente en la validación y cobrar tus +5, guarda tu cuenta con tu correo — sin contraseña."
+          onClose={() => setInviteConfirm(false)}
+        />
+      )}
 
       {/* verification modal (LCHP-15): only over a pending selection */}
       {verifying && selS && selS.status === 'pending' && (

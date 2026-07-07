@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderRoute } from '@/test/render'
 import type { CameraPermission } from '@/lib/permissions'
+import type { RegistrationState } from '@/lib/registration'
 import type { NewSightingSubmission, SubmitSightingResult } from '@/services/sightings.service'
 
 // Fresh, retry:false query client per test (renderRoute) — avoids the shared
@@ -53,6 +54,17 @@ vi.mock('@/components/map/LocationPickerMap', () => ({
   },
 }))
 
+// The first-hunt invitation (LCHP-30) consults the registration state; the
+// RegistrationPanel inside the invitation modal uses the same module.
+const registrationStateMock = vi.fn<() => Promise<RegistrationState>>(() =>
+  Promise.resolve({ kind: 'anonymous' }),
+)
+vi.mock('@/lib/registration', () => ({
+  registrationState: () => registrationStateMock(),
+  requestUpgrade: () => Promise.resolve({ kind: 'sent', email: 'x@x.com' }),
+  confirmUpgrade: () => Promise.resolve({ kind: 'registered', pointsRecovered: 0 }),
+}))
+
 const submitMock = vi.fn<(s: NewSightingSubmission) => Promise<SubmitSightingResult>>()
 vi.mock('@/services/sightings.service', () => ({
   submitSighting: (submission: NewSightingSubmission) => submitMock(submission),
@@ -66,6 +78,8 @@ beforeEach(() => {
   processPhotoMock.mockClear()
   cameraStateMock.mockClear()
   cameraStateMock.mockResolvedValue('granted')
+  registrationStateMock.mockClear()
+  registrationStateMock.mockResolvedValue({ kind: 'anonymous' })
   localStorage.clear()
 })
 
@@ -286,5 +300,44 @@ describe('capture flow (Cazar)', () => {
     // and back to the photo step: the preview is still there
     await user.click(screen.getByRole('button', { name: 'Paso 1' }))
     expect(screen.getByAltText('Foto del avistamiento')).toBeInTheDocument()
+  })
+
+  it('the first success invites saving the account — once ever, dismissible', async () => {
+    const user = userEvent.setup()
+    submitMock.mockResolvedValue({ kind: 'created', id: 'new-sighting' })
+    renderHunt()
+    await walkToReview(user)
+    await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+
+    // the endowed-progress card, with a stated reason and an escape hatch
+    expect(await screen.findByText('Guarda tus puntos')).toBeInTheDocument()
+    expect(screen.getByText(/por si cambias/)).toBeInTheDocument()
+    // shown once per milestone: the flag is set the moment it appears
+    expect(localStorage.getItem('lis.invite.first-hunt.seen')).toBe('1')
+    await user.click(screen.getByRole('button', { name: 'Ahora no' }))
+    expect(screen.queryByText('Guarda tus puntos')).not.toBeInTheDocument()
+  })
+
+  it('«Guardar» opens the registration flow in place (the invitation modal)', async () => {
+    const user = userEvent.setup()
+    submitMock.mockResolvedValue({ kind: 'created', id: 'new-sighting' })
+    renderHunt()
+    await walkToReview(user)
+    await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+    await user.click(await screen.findByRole('button', { name: /Guardar$/ }))
+    expect(await screen.findByText('Guarda tu cuenta')).toBeInTheDocument()
+    expect(screen.getByLabelText('Tu correo')).toBeInTheDocument()
+  })
+
+  it('an already-seen milestone or a registered user never sees the invitation', async () => {
+    const user = userEvent.setup()
+    submitMock.mockResolvedValue({ kind: 'created', id: 'new-sighting' })
+    registrationStateMock.mockResolvedValue({ kind: 'registered', email: 'rosa@test.local' })
+    renderHunt()
+    await walkToReview(user)
+    await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+    await screen.findByText('Avistamiento enviado · +10 puntos pendientes de validación')
+    await new Promise((r) => setTimeout(r, 30))
+    expect(screen.queryByText('Guarda tus puntos')).not.toBeInTheDocument()
   })
 })

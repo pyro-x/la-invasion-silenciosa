@@ -20,6 +20,25 @@ export type VerifyOutcome =
   | { kind: 'not_verifiable' }
   | { kind: 'error' }
 
+/** Own stored confirmations not yet paid — the neighbor's pending value
+ * (LCHP-30's Perfil banner: «N apoyos y +N×5 puntos esperando»). RLS scopes
+ * the read to the caller's rows; without a session there is nothing to
+ * count, and none is ever minted just for this. */
+export async function countOwnProvisionalConfirmations(): Promise<number> {
+  try {
+    const { data } = await supabase.auth.getSession()
+    if (!data.session) return 0
+    const { count } = await supabase
+      .from('verifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('type', 'confirm_exists')
+      .eq('points_awarded', false)
+    return count ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export async function submitVerification(sightingId: string): Promise<VerifyOutcome> {
   try {
     await ensureSession()

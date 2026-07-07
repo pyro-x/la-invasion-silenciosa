@@ -18,7 +18,9 @@ import { EquipmentGate } from '@/features/hunt/EquipmentGate'
 import { LocationStep } from '@/features/hunt/LocationStep'
 import { PhotoStep } from '@/features/hunt/PhotoStep'
 import { PrivacyNote } from '@/features/hunt/PrivacyNote'
+import { InvitationModal } from '@/features/registration/InvitationModal'
 import { getGeoFix, type GeoFix } from '@/lib/geo'
+import { markInvitationSeen, shouldInvite } from '@/lib/invitations'
 import { CAMERA_CONSTRAINTS, cameraPermissionState } from '@/lib/permissions'
 import { submitSighting } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
@@ -53,6 +55,22 @@ export function HuntPage() {
   const [primedFix, setPrimedFix] = useState<GeoFix | null>(null)
   const primedStreamRef = useRef<MediaStream | null>(null)
   const aliveRef = useRef(true)
+
+  // First-hunt invitation (LCHP-30, D-055): the best-measured moment to ask
+  // is right after the first success — a dismissible card, never a wall.
+  // Marked seen the moment it shows (once per milestone, never per session);
+  // registered users are filtered inside shouldInvite.
+  const [invite, setInvite] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  useEffect(() => {
+    if (!state.done) return
+    void shouldInvite('first-hunt').then((should) => {
+      if (should && aliveRef.current) {
+        markInvitationSeen('first-hunt')
+        setInvite(true)
+      }
+    })
+  }, [state.done])
 
   useEffect(() => {
     void cameraPermissionState().then((camera) => {
@@ -174,6 +192,37 @@ export function HuntPage() {
           >
             Volver al mapa
           </button>
+
+          {invite && (
+            <div
+              className="panel pad slidein"
+              style={{ zIndex: 2, maxWidth: 300, padding: 14, textAlign: 'left' }}
+            >
+              <div className="eyebrow" style={{ marginBottom: 6 }}>
+                Guarda tus puntos
+              </div>
+              <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--ink-dim)' }}>
+                Tu primer bicho está en el mapa. Guarda tus puntos con tu correo — por si cambias de
+                móvil o se borra el navegador.
+              </p>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn grow" onClick={() => setInvite(false)}>
+                  Ahora no
+                </button>
+                <button className="btn btn-accent grow" onClick={() => setInviteOpen(true)}>
+                  📮 Guardar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {inviteOpen && (
+            <InvitationModal
+              eyebrow="Guarda tus puntos"
+              message="Sin contraseña: tu correo, un código de vuelta, y tus puntos te siguen a cualquier móvil."
+              onClose={() => setInviteOpen(false)}
+            />
+          )}
         </div>
       </Frame>
     )
