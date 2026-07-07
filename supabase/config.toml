@@ -196,7 +196,11 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Raised from the default 2 for LOCAL development (LCHP-29): registration
+# tests exercise the OTP flow repeatedly and everything lands in Mailpit,
+# never a real inbox. The hosted limit is governed by the dashboard + the
+# custom SMTP provider (pre-pilot requirement, see LCHP-31).
+email_sent = 100
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -223,7 +227,11 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# ON to mirror the hosted project (LCHP-29): with autoconfirm, GoTrue applies
+# email changes instantly and the OTP step the real app depends on never
+# happens locally — the registration flow must be developed against the
+# same behavior production has.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -242,6 +250,15 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# LCHP-29 (D-055): the account-upgrade email carries a 6-digit OTP code, not
+# a clickable link — links open in Safari, which does not share storage with
+# an installed PWA on iOS, stranding the session. This file is ALSO the
+# reference for the hosted project's Email Templates → "Change Email Address"
+# entry (dashboard), which must render {{ .Token }} the same way.
+[auth.email.template.email_change]
+subject = "Tu código para La Invasión Silenciosa"
+content_path = "./supabase/templates/email_change.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

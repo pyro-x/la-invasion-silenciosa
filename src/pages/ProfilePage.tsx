@@ -7,6 +7,7 @@ import { APP_VERSION } from '@/lib/version'
 import { MiniPix } from '@/components/pixel/PixelSprite'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { NAV_ICONS } from '@/components/pixel/sprites'
+import { RegistrationPanel } from '@/features/registration/RegistrationPanel'
 import { getBadges, getProfile, LEVELS, levelForPoints } from '@/services/profile.service'
 import { listSpecies } from '@/services/species.service'
 
@@ -92,6 +93,9 @@ export function ProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* progressive registration (LCHP-29): the permanent passive floor */}
+        <RegistrationPanel />
 
         {/* points stats */}
         <div className="row" style={{ gap: 8 }}>
