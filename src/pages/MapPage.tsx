@@ -245,9 +245,13 @@ export function MapPage() {
           ))}
         </div>
 
-        {/* pin popover */}
+        {/* pin popover — z-index keeps it above the «Cerca de ti» list's
+            absolutely-positioned sprites when the two overlap (LCHP-32, D-057) */}
         {selS && (
-          <div className="panel pad slidein" style={{ padding: 14 }}>
+          <div
+            className="panel pad slidein"
+            style={{ padding: 14, position: 'relative', zIndex: 1 }}
+          >
             <div className="row" style={{ gap: 12 }}>
               <div
                 className="panel-2 center"
