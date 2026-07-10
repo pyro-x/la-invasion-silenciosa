@@ -245,11 +245,8 @@ export function MapPage() {
           ))}
         </div>
 
-        {/* pin popover — on a short viewport the flex column squeezes this pad
-            below its content, so the popover overflows down over the «Cerca de
-            ti» list. That list is a later sibling in the same stacking context
-            and its sprites are absolutely positioned, so they'd paint over the
-            popover; a positive z-index keeps the popover on top (LCHP-32). */}
+        {/* pin popover — z-index keeps it above the «Cerca de ti» list's
+            absolutely-positioned sprites when the two overlap (LCHP-32, D-056) */}
         {selS && (
           <div
             className="panel pad slidein"
