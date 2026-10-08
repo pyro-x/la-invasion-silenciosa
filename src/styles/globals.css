@@ -523,11 +523,44 @@ body {
   padding: 0 14px;
   cursor: pointer;
 }
-.map-species {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  padding: 4px 0 6px;
+/* Blinks at the pace of the pending pins: it is what ties their orange
+   ring to «Por verificar». Round, because a square read as a checkbox. */
+.chip-ring {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 3px solid var(--card);
+  animation: blinkdot 1.4s ease-in-out infinite;
+}
+.map-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+}
+.map-card-text {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.map-card-hint {
+  margin-top: 2px;
+  color: var(--ink-dim);
+}
+.map-card-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .map-float {
   position: absolute;
@@ -635,7 +668,8 @@ body {
   .map-screen .maplibregl-ctrl-bottom-left {
     transition: none;
   }
-  .map-fab.is-busy svg {
+  .map-fab.is-busy svg,
+  .chip-ring {
     animation: none;
   }
 }

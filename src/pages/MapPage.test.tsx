@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetGeoWatchForTests } from '@/lib/geoWatch'
 import { renderRoute } from '@/test/render'
@@ -354,17 +354,30 @@ describe('map screen', () => {
       expect(pins).toHaveAttribute('aria-pressed', 'false')
     })
 
-    it('the species legend lives in the sheet, folded until asked, never over the map', async () => {
+    it('has no legend box: the card of a pin says what the creature is and what the blinking means', async () => {
       const user = userEvent.setup()
       renderRoute('/mapa')
-      const toggle = await screen.findByRole('button', { name: /Especies/ })
-      expect(screen.getByRole('region', { name: 'Avistamientos cerca de ti' })).toContainElement(
-        toggle,
-      )
-      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      const sheet = within(await screen.findByRole('region', { name: 'Avistamientos cerca de ti' }))
       expect(screen.queryByRole('button', { name: 'Leyenda' })).not.toBeInTheDocument()
-      await user.click(toggle)
-      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      expect(sheet.queryByRole('button', { name: /Especies/ })).not.toBeInTheDocument()
+
+      await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+      expect(
+        sheet.getByText('Edificio con actividad turística observable desde el espacio público.'),
+      ).toBeInTheDocument()
+      expect(
+        sheet.getByText('Parpadea en el mapa hasta que otros vecinos lo confirmen.'),
+      ).toBeInTheDocument()
+      expect(sheet.getByRole('link', { name: 'Ver todas las especies →' })).toHaveAttribute(
+        'href',
+        '/especies',
+      )
+
+      await user.click(screen.getByRole('button', { name: 'pin s-approved' }))
+      expect(
+        sheet.getByText('Candado o caja de llaves instalada en la vía pública.'),
+      ).toBeInTheDocument()
+      expect(sheet.queryByText(/Parpadea en el mapa/)).not.toBeInTheDocument()
     })
 
     it('the whole «Cerca de ti» row folds and unfolds the sheet', async () => {

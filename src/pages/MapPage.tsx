@@ -11,6 +11,7 @@
 // card and the «Cerca de ti» rows.
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router'
 import { LocateFixed } from 'lucide-react'
 import { MapSheet } from '@/components/map/MapSheet'
 import type { MapFocus } from '@/components/map/BarrioMap'
@@ -102,7 +103,6 @@ export function MapPage() {
   const evidenceReq = useRef(0)
 
   const [sheetOpen, setSheetOpen] = useState(true)
-  const [speciesOpen, setSpeciesOpen] = useState(false)
   const [sheetHeight, setSheetHeight] = useState(0)
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [zoomStep, setZoomStep] = useState<{ delta: number } | null>(null)
@@ -181,6 +181,7 @@ export function MapPage() {
   }
 
   const speciesName = (id: string) => species.find((c) => c.id === id)?.name ?? ''
+  const speciesMeaning = (id: string) => species.find((c) => c.id === id)?.description ?? ''
   const pending = sightings.filter((s) => s.status === 'pending')
   const selS = sightings.find((s) => s.id === sel)
 
@@ -199,41 +200,13 @@ export function MapPage() {
       onClick={() => setSheetOpen((open) => !open)}
     >
       <span className="eyebrow">Cerca de ti</span>
-      {!isError && <span className="chip chip-warn">{pending.length} Por verificar</span>}
-    </button>
-  )
-
-  // The legend lives in the sheet, not on the map, where it covered the
-  // pins it explains (design panel, D-061).
-  const speciesLegend = (
-    <div>
-      <button
-        type="button"
-        className="map-sheet-row"
-        aria-expanded={speciesOpen}
-        onClick={() => setSpeciesOpen((open) => !open)}
-      >
-        <span className="eyebrow">Especies</span>
-        <span className="mono" aria-hidden style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-          {speciesOpen ? '▾' : '▸'}
+      {!isError && (
+        <span className="chip chip-warn">
+          <span className="chip-ring" aria-hidden />
+          {pending.length} Por verificar
         </span>
-      </button>
-      {speciesOpen && (
-        <div className="map-species">
-          {species.map((c) => (
-            <div key={c.id} className="stack center" style={{ gap: 4 }}>
-              <CreatureSprite id={c.id} scale={2} />
-              <span
-                className="mono"
-                style={{ fontSize: 8.5, color: 'var(--ink-dim)', lineHeight: 1 }}
-              >
-                {c.name}
-              </span>
-            </div>
-          ))}
-        </div>
       )}
-    </div>
+    </button>
   )
 
   const sheetVars: CSSProperties & Record<'--sheet-h', string> = { '--sheet-h': `${sheetHeight}px` }
@@ -370,17 +343,28 @@ export function MapPage() {
                   <CreatureSprite id={selS.speciesId} scale={3} />
                 </div>
                 <div className="grow">
-                  <div className="display" style={{ fontSize: 12 }}>
-                    {speciesName(selS.speciesId)}
+                  <div className="map-card-title">
+                    <span className="display" style={{ fontSize: 12 }}>
+                      {speciesName(selS.speciesId)}
+                    </span>
+                    <span
+                      className={'chip ' + (selS.status === 'pending' ? 'chip-warn' : 'chip-good')}
+                    >
+                      {selS.status === 'pending' && <span className="chip-ring" aria-hidden />}
+                      {selS.status === 'pending' ? 'Por verificar' : 'Validado'}
+                    </span>
                   </div>
                   <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
                     Ubicación aproximada · La Latina · {formatAge(selS.createdAt)}
                   </div>
                 </div>
-                <span className={'chip ' + (selS.status === 'pending' ? 'chip-warn' : 'chip-good')}>
-                  {selS.status === 'pending' ? 'Por verificar' : 'Validado'}
-                </span>
               </div>
+              <p className="map-card-text">{speciesMeaning(selS.speciesId)}</p>
+              {selS.status === 'pending' && (
+                <p className="map-card-text map-card-hint">
+                  Parpadea en el mapa hasta que otros vecinos lo confirmen.
+                </p>
+              )}
               <div className="row" style={{ gap: 8, marginTop: 12 }}>
                 <button
                   type="button"
@@ -401,12 +385,12 @@ export function MapPage() {
                   </button>
                 )}
               </div>
+              <Link to="/especies" className="map-card-link">
+                Ver todas las especies →
+              </Link>
             </div>
           ) : (
-            <div className="stack" style={{ gap: 4 }}>
-              {nearbyHeader}
-              {speciesLegend}
-            </div>
+            nearbyHeader
           )
         }
       >

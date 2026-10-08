@@ -1126,8 +1126,7 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 │ (i)                   [+][−] │  crédito · zoom (solo con ratón)
 ├──────────────────────────────┤
 │ ▬  HOJA INFERIOR             │  ficha del avistamiento (si hay uno
-│ Cerca de ti · N por verificar│  elegido) + lista «Cerca de ti»
-│ Especies ▸                   │  leyenda plegada, dentro de la hoja
+│ Cerca de ti · ◉ N por verific│  elegido) + lista «Cerca de ti»
 └──────────────────────────────┘
 │ Mapa · Especies · ◉ · …      │  barra de pestañas
 ```
@@ -1138,11 +1137,19 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   ya dice dónde estás — y los dos chips sueltos pasan a ser **un conmutador
   centrado** «Avistamientos | Mapa de calor» sobre fondo opaco. En las
   esquinas, únicamente el crédito (i) y «Ir a mi posición».
-* **La leyenda vive en la hoja**, no sobre el mapa (donde tapaba los
-  pines que explica y se apilaba con el (i)): una fila «Especies» plegada
-  que al tocarla muestra los cuatro sprites con su nombre. No aparece
-  mientras hay un avistamiento elegido. El (i) es el crédito de datos del
-  mapa, no la leyenda.
+* **No hay leyenda** (segunda ronda de opinión de diseño, 2026-10-08;
+  David descartó tanto el botón «Leyenda» sobre el mapa como una fila
+  «Especies» plegada en la hoja). Lo que faltaba no era una tabla de
+  especies sino dos frases, y se dicen donde surge la duda:
+  * los chips «Por verificar» (el contador de la hoja y el de la ficha)
+    llevan un **aro que parpadea al ritmo de los pines pendientes**: une el
+    aro naranja del mapa con su significado sin añadir nada a la pantalla;
+  * la **ficha del avistamiento** dice qué es el bicho (la `description`
+    de la especie, la misma del catálogo), y si está pendiente añade
+    «Parpadea en el mapa hasta que otros vecinos lo confirmen.»;
+  * la ficha enlaza a «Ver todas las especies →» (`/especies`), que es la
+    referencia completa.
+  El (i) es el crédito de datos del mapa, no una leyenda.
 * **La fila «Cerca de ti · N por verificar» es un botón entero** que
   pliega y despliega la hoja: el contador naranja parecía un botón y no
   hacía nada.
