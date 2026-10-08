@@ -1203,7 +1203,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   entrega varias posiciones en el primer segundo y, si no, cada una
   cortaba el movimiento anterior (visto en iPhone: el punto aparecía y el
   mapa no se movía). Solo el seguimiento hereda el zoom: un pin elegido en
-  ese instante se centra con el zoom que encuentra. En una
+  ese instante se centra con el zoom que encuentra. Un cambio de altura de
+  la hoja durante un paso de +/− tampoco lo corta: el paso se vuelve a
+  lanzar. En una
   visita posterior **el punto reaparece** sin preguntar solo si el
   navegador confirma que el permiso sigue concedido; el mapa **no** se
   recentra solo (seguir exige tocar el botón). Al volver de segundo plano

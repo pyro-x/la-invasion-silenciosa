@@ -176,7 +176,7 @@ describe('createBarrioMap', () => {
 
   it("a zoom button pressed during a move to a pin is still the user's choice", () => {
     const { controller } = mount()
-    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+    controller.goTo({ lat: 40.4115, lng: -3.712 })
     controller.zoomBy(1)
     expect(stored()).toBeNull()
     emit('moveend')
@@ -420,6 +420,57 @@ describe('createBarrioMap', () => {
     emit('moveend')
     controller.follow({ lat: 40.4113, lng: -3.71 })
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a zoom-button step pressed during the zoom-in to the position is carried on by the next fix', () => {
+    const { controller } = mount()
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
+    controller.zoomBy(1)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 16 })
+  })
+
+  it('with reduced motion a zoom step has landed before the next fix: nothing to carry', () => {
+    recorded.reducedMotion = true
+    const { controller } = mount()
+    controller.zoomBy(1)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+    controller.follow({ lat: 40.4112, lng: -3.71 }, 17)
+    controller.follow({ lat: 40.4113, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a tap on locate during a zoom step ends at least at street level, and never cuts a step beyond it', () => {
+    const { controller } = mount()
+    recorded.zoom = 17.5
+    controller.zoomBy(-1)
+    recorded.zoom = 17.2
+    controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
+    expect(recorded.eases.at(-1)?.zoom).toBe(17)
+    emit('moveend')
+    recorded.zoom = 16.5
+    controller.zoomBy(1)
+    recorded.zoom = 16.8
+    controller.follow({ lat: 40.4112, lng: -3.71 }, 17)
+    expect(recorded.eases.at(-1)?.zoom).toBe(17.5)
+  })
+
+  it('a sheet resize during a zoom-button step lets the step finish, in both directions', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    controller.setBottomPadding(300)
+    expect(recorded.paddings.at(-1)?.bottom).toBe(300)
+    expect(recorded.eases.at(-1)?.zoom).toBe(16)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+    controller.zoomBy(-1)
+    controller.setBottomPadding(120)
+    expect(recorded.eases.at(-1)?.zoom).toBe(14)
+    emit('moveend')
+    controller.setBottomPadding(200)
+    expect(recorded.eases).toHaveLength(4)
   })
 
   it('a zoom-out step is carried on too, and a sheet resize keeps it', () => {
