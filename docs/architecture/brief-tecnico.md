@@ -1209,8 +1209,8 @@ openfreemap-styles (MIT). Cumplimiento:
   atribución del mapa: vive en la página **`/perfil/creditos` «Créditos y
   licencias»**, enlazada desde el pie de Perfil, que muestra el crédito
   (MapTiler/OpenMapTiles, CartoDB, Stamen y Paul Norman, enlace a CC BY
-  4.0) y el texto completo de la licencia, importado del fichero
-  vendorizado para que página y código no puedan divergir.
+  4.0) y el texto completo de ambas licencias, importado de los ficheros
+  vendorizados para que página y código no puedan divergir.
 * **Datos (OpenStreetMap + OpenMapTiles):** esos créditos sí son
   obligatorios en el mapa — ver «Atribución» más abajo.
 
@@ -1281,8 +1281,11 @@ da el tilejson («OpenFreeMap © OpenMapTiles Data from OpenStreetMap»):
 a los **5 s** o al primer movimiento del usuario (arrastre, pellizco,
 rueda o doble toque; MapLibre por sí solo solo pliega al arrastrar). Los
 cinco segundos cuentan **desde que el crédito está en pantalla** — el
-texto llega con el tilejson, que en una red lenta puede tardar — y con la
-pestaña visible; un movimiento programático (recentrado GPS) no pliega. Medido: abierto
+texto llega con el tilejson, que en una red lenta puede tardar — y solo
+con la pestaña visible: si se oculta, el reloj se detiene y vuelve a
+contar cinco segundos completos al regresar. El pliegue ocurre **una sola
+vez**: si el usuario reabre el crédito con (i), nuestro código ya no lo
+vuelve a plegar. Un movimiento programático (recentrado GPS) no pliega. Medido: abierto
 ocupa 351×24 px a 412 px de ancho (una línea) y 308×44 / 268×44 px a
 360 / 320 px (dos líneas); plegado, 24×24 px. La licencia de
 OpenMapTiles no menciona el plegado: entender que el control compacto

@@ -85,6 +85,7 @@ export function CreditsPage() {
                 fontSize: 10,
                 lineHeight: 1.45,
                 whiteSpace: 'pre-wrap',
+                overflowWrap: 'anywhere',
                 color: 'var(--ink-dim)',
                 marginTop: 8,
               }}
@@ -102,6 +103,7 @@ export function CreditsPage() {
                 fontSize: 10,
                 lineHeight: 1.45,
                 whiteSpace: 'pre-wrap',
+                overflowWrap: 'anywhere',
                 color: 'var(--ink-dim)',
                 marginTop: 8,
               }}

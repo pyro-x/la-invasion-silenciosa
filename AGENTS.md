@@ -128,7 +128,7 @@ change anything in this table, read the corresponding brief section first.
 ## The spec is the ceiling, not the floor (MVP scope)
 
 The technical brief covers entire post-MVP phases (automatic moderation,
-blur, OCR, Turnstile, vector tiles, association mode). **Do not build
+blur, OCR, Turnstile, association mode). **Do not build
 them ahead of time.** Rule of thumb:
 
 - If a problem would be caught by a user screaming one minute after it
