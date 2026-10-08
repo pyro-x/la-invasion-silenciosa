@@ -365,6 +365,25 @@ describe('createBarrioMap', () => {
     expect(calls.userMoves).toBe(2)
   })
 
+  it('a recentre during a zoom-in keeps the zoom; after it has landed, it does not zoom', () => {
+    const { controller } = mount()
+    controller.goTo({ lat: 40.411, lng: -3.71 }, 17)
+    controller.goTo({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 17 })
+    emit('moveend')
+    controller.goTo({ lat: 40.4112, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a recentre after the user interrupted a zoom-in does not resume it', () => {
+    const { controller } = mount()
+    controller.goTo({ lat: 40.411, lng: -3.71 }, 17)
+    emit('moveend')
+    userDrag()
+    controller.goTo({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
   it('goTo zooms in only when the map is further out than asked', () => {
     const { controller } = mount()
     controller.goTo({ lat: 40.411, lng: -3.71 }, 17)

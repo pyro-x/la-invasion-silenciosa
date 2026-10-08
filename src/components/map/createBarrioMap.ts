@@ -285,10 +285,12 @@ export function createBarrioMap(
     },
 
     goTo(target, minZoom) {
-      ease({
-        center: [target.lng, target.lat],
-        ...(minZoom !== undefined && map.getZoom() < minZoom ? { zoom: minZoom } : {}),
-      })
+      // A move still in flight keeps the zoom it was heading for. A phone
+      // sends several fixes in its first second, and each recentre would
+      // otherwise stop the zoom-in of the one before.
+      const wanted = minZoom ?? flight?.zoom
+      const zoomIn = wanted !== undefined && map.getZoom() < wanted
+      ease({ center: [target.lng, target.lat], ...(zoomIn ? { zoom: wanted } : {}) })
     },
 
     zoomBy(delta) {
