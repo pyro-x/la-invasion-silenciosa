@@ -1004,9 +1004,10 @@ Usuario abre mapa (sin sesión: lectura pública)
 La app lee public_map_sightings: pending Y approved
 (enmienda LCHP-1: los pending son visibles desde el primer momento)
 ↓
-Iconos de especie sobre MapLibre + raster OSM teñido «pergamino suave»
-(elegido por David en el loop visual entre 4 variantes; filtro CSS sobre
-el canvas + velo crema multiply — los sprites conservan su color)
+Iconos de especie sobre MapLibre + vector tiles de OpenFreeMap con el
+estilo propio «chispera» (LCHP-33, D-059; antes raster OSM teñido por CSS,
+D-045 — paleta «papel», elegida por David en el loop visual entre 4
+candidatas)
 ↓
 Los pending llevan anillo ámbar y parpadean (blinkdot); los validados no
 ↓
@@ -1175,14 +1176,37 @@ iconos propios encima
 ```
 
 Condiciones del proveedor (verificadas 2026-10-08 en
-<https://openfreemap.org/>): sin registro, sin API key, sin cookies, sin
-límite declarado de peticiones ni de vistas, uso comercial permitido,
-**atribución obligatoria** (OpenStreetMap + OpenMapTiles; OpenFreeMap
-opcional). **Sin SLA**: la instancia pública se financia con donaciones.
-Vía de escape post-MVP: todo el servidor es open source y publican
-extractos semanales del planeta, así que un extracto del tamaño de La
-Latina servido desde R2/Pages (§22 opción C) sustituye la instancia
-pública si desapareciera (`// TODO(post-mvp)` en `tileProvider.ts`).
+<https://openfreemap.org/> y en sus términos
+<https://openfreemap.org/tos/>, actualizados 2026-09-09): sin registro,
+sin API key, sin cookies, sin límite declarado de peticiones ni de vistas,
+uso comercial permitido, **atribución obligatoria** (OpenStreetMap +
+OpenMapTiles; OpenFreeMap opcional), **prohibida la recolección
+automatizada** de datos del servicio sin permiso, servicio «tal cual» que
+**puede discontinuarse sin aviso**. **Sin SLA**: la instancia pública se
+financia con donaciones. Vía de escape post-MVP: el servidor es open
+source, pero solo publica volcados del planeta completo (Btrfs/MBTiles
+semanales), así que la opción C de §22 implica **cortar nuestro propio
+extracto** de La Latina (planetiler o Geofabrik) y servir `z/x/y` desde
+R2/Pages; mientras tanto, `OSM_RASTER_FALLBACK` en `tileProvider.ts`
+vuelve al raster OSM (con atribución no compacta y sin precaché, por su
+policy). Marcado como `// TODO(post-mvp)`.
+
+**Licencia del estilo:** `positron` es BSD-3 (código) + CC-BY 4.0 (diseño,
+derivado de CartoDB Basemaps de Stamen/Paul Norman, CC-BY 3.0), vía
+openfreemap-styles (MIT). El aviso completo se conserva en la cabecera de
+`chispera.ts` y el crédito de diseño («Estilo basado en Positron © CARTO,
+CC-BY 4.0», `STYLE_CREDIT`) se muestra en el control de atribución del
+mapa, como exige la licencia (accesible desde el mapa).
+
+**Peso (medido 2026-10-08, app compilada, 412×892 @3x):** la primera carga
+pide 4 tiles vectoriales z14 ≈ 1,5 MB gzip (2,5 MB descomprimidos) + 3
+rangos de glifos + el tilejson ≈ 1,6–1,7 MB, frente a 284 KB de 9 PNG z16
+del raster (577 KB tras cargar + zoom + arrastre). A cambio, el mapa
+acotado necesita como mucho 9 celdas z14 en toda su vida, servidas con
+`max-age` de diez años: las visitas siguientes son casi gratis y el
+service worker (LCHP-17) puede conservarlas. Privacidad: las peticiones de
+tiles revelan ahora solo la celda z14 (~1,7×1,3 km) alrededor de la vista,
+no celdas z16–z19.
 
 El estilo `chispera.ts` es `positron` con estas modificaciones y nada
 más (la procedencia y la lista viven en la cabecera del módulo):
@@ -1197,22 +1221,37 @@ más (la procedencia y la lista viven en la cabecera del módulo):
   debajo de z6, inalcanzable dentro de `maxBounds`);
 * eliminados los `icon-*` de las etiquetas de lugar (punto de sprite por
   debajo de z10);
+* etiquetas de fuentes y estanques (`water_name_point_label`) reducidas de
+  14 px a 10–12 px: gritaban más que los nombres de calle;
+* añadida una capa `park_label` (positron no etiqueta parques; los vecinos
+  se orientan por plazas y parques — espacios públicos, nunca locales);
 * corregido `["linear", 1]` → `["linear"]` en `boundary_3` (positron lo
   escribe así; MapLibre lo tolera, el tipo `StyleSpecification` no).
 
+Regeneración: `node scripts/build-map-style.mjs <paleta>` (descarga
+positron, aplica la paleta y las modificaciones de arriba, escribe el
+módulo); luego `pnpm format`. Las cuatro paletas candidatas (pergamino, papel, tierra, verde) viven en
+el script; la vigente es **papel** (elegida por David, 2026-10-08).
+
 **Regla de oro (D-046):** el estilo **no dibuja números de portal ni
-puntos de interés** (`housenumber`, `poi`) — un basemap que etiqueta la
-puerta o el local anularía la ubicación aproximada. Fijado por test en
-`tileProvider.test.ts`, junto con «una sola fuente, OpenFreeMap», «sin
-key/token en el estilo», «etiquetas en castellano primero» y «sin sprite».
+puntos de interés** (`housenumber`, `poi`, tampoco `mountain_peak` ni
+`aerodrome_label`) — un basemap que etiqueta la puerta o el local anularía
+la ubicación aproximada. Fijado por test en `tileProvider.test.ts` con una
+**lista blanca** de `source-layer` de espacio público, junto con «una sola
+fuente, OpenFreeMap», «sin key/token en el estilo», «la expresión exacta
+`coalesce(name:es, name:latin, name)` en toda capa con nombre», «sin
+sprite» y «el fallback raster sigue construyéndose». Pérdida asumida
+frente al raster OSM: no hay etiquetas de locales, metro ni iglesias; sí
+plazas y parques.
 
 Atribución: control compacto de MapLibre, visible al cargar y plegable
 al interactuar (lo que permiten las guías de atribución de la OSMF); nunca
 plegado a la fuerza al cargar.
 
 Caché (para LCHP-17): tiles, glifos y estilo pueden cachearse en runtime
-(stale-while-revalidate) — OpenFreeMap no tiene policy anti-caché —; el
-basemap **nunca se precachea** (por tamaño, no por policy). Si algún día
+(stale-while-revalidate: es uso interactivo normal, que los términos
+permiten); el basemap **nunca se precachea** — por tamaño y porque los
+términos prohíben la recolección automatizada. Si algún día
 hay CSP: `tiles.openfreemap.org` en `connect-src` e `img-src`,
 `worker-src 'self' blob:`, y la CSP solo en páginas HTML (un worker
 cacheado conserva una CSP vieja durante días — lección de Alcorqueando,
@@ -1972,7 +2011,7 @@ Decisiones:
 Cloudflare Pages para frontend.
 Supabase Free para backend.
 Supabase Storage privado para fotos.
-OSM raster tiles para MVP pequeño.
+Vector tiles de OpenFreeMap (sin cuenta ni key) con estilo propio (LCHP-33).
 No realtime.
 No push notifications.
 No fotos en mapa.

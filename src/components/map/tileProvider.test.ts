@@ -1,10 +1,34 @@
 import type { LayerSpecification, StyleSpecification, SymbolLayerSpecification } from 'maplibre-gl'
-import { buildMapStyle, tileProvider } from './tileProvider'
+import { buildMapStyle, OSM_RASTER_FALLBACK, tileProvider } from './tileProvider'
+
+function inlineStyle(style: StyleSpecification | string): StyleSpecification {
+  if (typeof style === 'string') throw new Error('expected an inline style')
+  return style
+}
 
 function layersOf(style: StyleSpecification | string): LayerSpecification[] {
-  if (typeof style === 'string') throw new Error('expected an inline style')
-  return style.layers
+  return inlineStyle(style).layers
 }
+
+// Every OpenMapTiles layer the basemap may draw. Anything else — poi,
+// housenumber, mountain_peak, aerodrome_label… — labels a door, a venue or
+// a landmark precise enough to pin a sighting down (golden rule, D-046).
+const ALLOWED_SOURCE_LAYERS = [
+  'park',
+  'water',
+  'landcover',
+  'landuse',
+  'waterway',
+  'building',
+  'transportation',
+  'aeroway',
+  'boundary',
+  'water_name',
+  'transportation_name',
+  'place',
+]
+
+const SPANISH_FIRST = ['coalesce', ['get', 'name:es'], ['get', 'name:latin'], ['get', 'name']]
 
 describe('tileProvider', () => {
   const style = buildMapStyle(tileProvider)
@@ -15,8 +39,7 @@ describe('tileProvider', () => {
   })
 
   it('reads tiles from OpenFreeMap only — no key, no other host', () => {
-    if (typeof style === 'string') throw new Error('expected an inline style')
-    const sources = Object.values(style.sources)
+    const sources = Object.values(inlineStyle(style).sources)
     expect(sources).toHaveLength(1)
     const [source] = sources
     expect(source.type).toBe('vector')
@@ -24,41 +47,37 @@ describe('tileProvider', () => {
     expect(JSON.stringify(style)).not.toMatch(/key=|token=|openstreetmap\.org\/\{z\}/)
   })
 
-  // Golden rule (D-046): the public map shows approximate locations, so the
-  // basemap must not label doors or venues that would pin a sighting down.
-  it('draws no house numbers and no points of interest', () => {
-    const sourceLayers = layersOf(style).map((l) => ('source-layer' in l ? l['source-layer'] : ''))
-    expect(sourceLayers).not.toContain('housenumber')
-    expect(sourceLayers).not.toContain('poi')
+  it('draws only public-space layers: no house numbers, no points of interest', () => {
+    for (const l of layersOf(style)) {
+      if (l.type === 'background') continue
+      expect(l, l.id).toHaveProperty('source-layer')
+      expect(
+        ALLOWED_SOURCE_LAYERS,
+        `${l.id} → ${'source-layer' in l && l['source-layer']}`,
+      ).toContain('source-layer' in l ? l['source-layer'] : '')
+    }
   })
 
-  it('labels every named feature in Spanish first', () => {
+  it('labels every named feature with exactly the Spanish-first expression', () => {
     const named = layersOf(style).filter(
       (l): l is SymbolLayerSpecification => l.type === 'symbol' && !!l.layout?.['text-field'],
     )
     expect(named.length).toBeGreaterThan(5)
     for (const l of named) {
-      expect(JSON.stringify(l.layout?.['text-field'])).toContain('"name:es"')
+      expect(l.layout?.['text-field'], l.id).toEqual(SPANISH_FIRST)
     }
   })
 
   it('needs no sprite sheet', () => {
-    if (typeof style === 'string') throw new Error('expected an inline style')
-    expect(style.sprite).toBeUndefined()
+    expect(inlineStyle(style).sprite).toBeUndefined()
     for (const l of layersOf(style)) {
-      expect(l.layout && 'icon-image' in l.layout).toBeFalsy()
+      expect(l.layout && 'icon-image' in l.layout, l.id).toBeFalsy()
     }
   })
 
-  it('still builds an inline raster style for a raster provider', () => {
-    const raster = buildMapStyle({
-      id: 'osm-raster',
-      kind: 'raster',
-      tiles: ['https://example.test/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: 'test',
-    })
+  it('keeps the OSM raster fallback buildable', () => {
+    const raster = buildMapStyle(OSM_RASTER_FALLBACK)
     expect(layersOf(raster)[0]?.type).toBe('raster')
+    expect(JSON.stringify(raster)).toContain('tile.openstreetmap.org')
   })
 })

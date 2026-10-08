@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { STYLE_CREDIT } from './styles/chispera'
 import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 
 type Props = {
@@ -37,9 +38,12 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
       dragRotate: false,
       pitchWithRotate: false,
     })
-    // Attribution required by OpenFreeMap/OSM; shown on load, collapses on
-    // interaction (MapLibre default) — never force-collapsed.
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
+    // Same credits as BarrioMap: data (OSM + OpenMapTiles) and the style's
+    // CC-BY design credit; open on load, folds after the first interaction.
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true, customAttribution: STYLE_CREDIT }),
+      'bottom-right',
+    )
     map.on('moveend', () => {
       const byUser = !movedByCode.current
       movedByCode.current = false
