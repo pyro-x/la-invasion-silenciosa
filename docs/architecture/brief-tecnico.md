@@ -1146,6 +1146,10 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 * **La fila «Cerca de ti · N por verificar» es un botón entero** que
   pliega y despliega la hoja: el contador naranja parecía un botón y no
   hacía nada.
+* **Cada fila de «Cerca de ti» tiene dos gestos:** tocar la fila elige el
+  bicho (el mapa va a su pin y aparece su ficha); solo su botón
+  «Verificar» abre la ventana de verificación directamente. Así se puede
+  mirar antes de confirmar.
 * **Los pines parpadeantes se mantienen** para los pendientes (decisión de
   David). El punto de la posición del vecino se dibuja **debajo** de los
   pines: encima parecía una insignia del bicho.

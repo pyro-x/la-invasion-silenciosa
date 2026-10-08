@@ -430,36 +430,38 @@ export function MapPage() {
           </div>
         )}
         {selS && nearbyHeader}
+        {/* Two taps, two meanings: the row shows the creature on the map
+            first; its «Verificar» goes straight to the modal (the second
+            door, LCHP-15). Verifying means "I have seen it too", so the
+            neighbour can look before committing. */}
         {pending.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className="panel pad"
-            onClick={() => {
-              pick(s.id)
-              setVerifying(true) // the list is the second door to the modal
-            }}
-            style={{
-              padding: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              textAlign: 'left',
-              cursor: 'pointer',
-              width: '100%',
-              flexShrink: 0,
-              boxShadow: 'none',
-            }}
-          >
-            <CreatureSprite id={s.speciesId} scale={2.8} />
-            <div className="grow">
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{speciesName(s.speciesId)}</div>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-                La Latina · {formatAge(s.createdAt)}
-              </div>
-            </div>
-            <span className="chip chip-accent">Verificar</span>
-          </button>
+          <div key={s.id} className="panel map-nearby-row">
+            <button type="button" className="map-nearby-show" onClick={() => pick(s.id)}>
+              <CreatureSprite id={s.speciesId} scale={2.8} />
+              <span className="grow">
+                <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>
+                  {speciesName(s.speciesId)}
+                </span>
+                <span
+                  className="mono"
+                  style={{ display: 'block', fontSize: 11, color: 'var(--ink-dim)' }}
+                >
+                  La Latina · {formatAge(s.createdAt)}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="chip chip-accent map-nearby-verify"
+              aria-label={`Verificar ${speciesName(s.speciesId)}`}
+              onClick={() => {
+                pick(s.id)
+                setVerifying(true)
+              }}
+            >
+              Verificar
+            </button>
+          </div>
         ))}
       </MapSheet>
 

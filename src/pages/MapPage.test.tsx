@@ -185,11 +185,22 @@ describe('map screen', () => {
     ).toBeInTheDocument()
   })
 
-  it('a «Cerca de ti» row opens the verification modal directly (door 2)', async () => {
+  it('the «Verificar» of a «Cerca de ti» row opens the verification modal directly (door 2)', async () => {
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: /^Verificar \S/ }))
+    expect(await screen.findByText('Verificar avistamiento')).toBeInTheDocument()
+  })
+
+  it('tapping a «Cerca de ti» row shows the creature first, without opening the modal', async () => {
     const user = userEvent.setup()
     renderRoute('/mapa')
     await user.click(await screen.findByText('La Latina · hace 35 min'))
-    expect(await screen.findByText('Verificar avistamiento')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Ubicación aproximada · La Latina · hace 35 min'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '✔ Verificar' })).toBeInTheDocument()
+    expect(screen.queryByText('Verificar avistamiento')).not.toBeInTheDocument()
   })
 
   it('confirming toasts the validated outcome and re-reads the map (pin stops blinking)', async () => {

@@ -460,6 +460,6 @@ After trying the first version on his phone, David asked two models (Fable, Code
 - **The whole «Cerca de ti · N por verificar» row is a button** that folds and unfolds the sheet (both reviewers: the orange counter looked like a button and did nothing).
 - **The user's dot is drawn under the pins** (Fable: on top it read as a green badge on a creature).
 - **Pending pins keep blinking** — David's call, against both reviewers' advice to rely on the orange ring alone. The existing `prefers-reduced-motion` rule still stops it for those who ask.
-- **Not changed:** a tap on a list row still opens the verification window directly (the "second door", LCHP-15). Fable suggested the row should show the pin first and only its «Verificar» chip open the window; left for David to decide.
+- **A list row now does two things** (Fable's suggestion, accepted by David): tapping the row selects the creature — the map moves to its pin and its card appears — and only the row's «Verificar» button opens the verification window directly. It is still the "second door" of LCHP-15, but a neighbour can look before confirming: the row itself only says «La Latina · hace 35 min».
 Also fixed while re-rendering: the opening frame double-counted the sheet (the map's own padding plus the same height again in `fitBounds`), which opened the map zoomed far out. Open question both reviewers raised and no opinion can settle: whether first-time neighbours understand the four creatures with the legend folded — a test with residents.
 
