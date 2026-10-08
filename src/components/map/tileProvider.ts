@@ -1,31 +1,14 @@
-// Tile source abstraction (brief §21). A discriminated union so a raster
-// source (inline JSON style) and a vector source (a full style, or a style
-// URL passed straight to MapLibre) don't leak each other's orphan fields.
-// MVP ships OpenFreeMap vector tiles with the vendored chispera style
-// (LCHP-33, D-059) — no key, no account.
+// The basemap provider (brief §21): the one place that names it. MVP ships
+// OpenFreeMap vector tiles with the vendored chispera style (LCHP-33, D-059)
+// — no key, no account. A style is either an inline spec or a URL; MapLibre
+// takes both.
 import type { StyleSpecification } from 'maplibre-gl'
 import { chisperaStyle } from './styles/chispera'
 
-export type TileProviderId = 'openfreemap-vector' | 'osm-raster'
-
-// compactAttribution: whether the provider's terms let the credit fold to
-// an (i) button (attribution.ts). OSM's own tile servers do not.
-export type TileProviderConfig =
-  | {
-      id: TileProviderId
-      kind: 'raster'
-      tiles: string[]
-      tileSize: 256
-      maxzoom: number
-      attribution: string
-      compactAttribution: boolean
-    }
-  | {
-      id: TileProviderId
-      kind: 'vector'
-      style: StyleSpecification | string
-      compactAttribution: boolean
-    }
+export type TileProvider = {
+  id: 'openfreemap-vector'
+  style: StyleSpecification | string
+}
 
 // OpenFreeMap terms (https://openfreemap.org/tos/, read 2026-10-08): no
 // registration, no API key, no stated request limits, commercial use allowed,
@@ -33,50 +16,12 @@ export type TileProviderConfig =
 // collection forbidden, service provided as-is and may be discontinued without
 // notice. No SLA — the public instance is donation-funded.
 // TODO(post-mvp): if the public instance disappears, OpenFreeMap's server
-// setup is open source but publishes full-planet dumps only; the fallback is
+// setup is open source but publishes full-planet dumps only; the way out is
 // cutting a La Latina extract ourselves (planetiler/Geofabrik) and serving
-// z/x/y from R2/Pages (brief §22, option C), or OSM_RASTER_FALLBACK meanwhile.
-export const tileProvider: TileProviderConfig = {
+// z/x/y from R2/Pages (brief §22, option C).
+export const tileProvider: TileProvider = {
   id: 'openfreemap-vector',
-  kind: 'vector',
   style: chisperaStyle,
-  compactAttribution: true,
-}
-
-// The MVP's original basemap (brief §21, LCHP-4/LCHP-13), kept as the
-// emergency fallback. The OSM Tile Usage Policy wants the credit always
-// visible (hence compactAttribution: false) and tiles never precached.
-export const OSM_RASTER_FALLBACK: TileProviderConfig = {
-  id: 'osm-raster',
-  kind: 'raster',
-  tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-  tileSize: 256,
-  maxzoom: 19,
-  attribution: '© OpenStreetMap contributors',
-  compactAttribution: false,
-}
-
-export function buildMapStyle(provider: TileProviderConfig): StyleSpecification | string {
-  if (provider.kind === 'vector') return provider.style
-  return {
-    version: 8,
-    sources: {
-      [provider.id]: {
-        type: 'raster',
-        tiles: provider.tiles,
-        tileSize: provider.tileSize,
-        maxzoom: provider.maxzoom,
-        attribution: provider.attribution,
-      },
-    },
-    layers: [
-      {
-        id: provider.id,
-        type: 'raster',
-        source: provider.id,
-      },
-    ],
-  }
 }
 
 // The real La Latina frame verified by the spike (brief §21). The map OPENS

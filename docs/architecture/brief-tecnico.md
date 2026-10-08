@@ -1187,9 +1187,11 @@ financia con donaciones. Vía de escape post-MVP: el servidor es open
 source, pero solo publica volcados del planeta completo (Btrfs/MBTiles
 semanales), así que la opción C de §22 implica **cortar nuestro propio
 extracto** de La Latina (planetiler o Geofabrik) y servir `z/x/y` desde
-R2/Pages; mientras tanto, `OSM_RASTER_FALLBACK` en `tileProvider.ts`
-vuelve al raster OSM (con atribución no compacta y sin precaché, por su
-policy). Marcado como `// TODO(post-mvp)`.
+R2/Pages. Marcado como `// TODO(post-mvp)`. **No se conserva un fallback
+raster en el código** (David, 2026-10-08): era una ruta que nadie
+ejecutaba y arrastraba una rama del constructor de estilos, un flag por
+proveedor y sus tests; si hiciera falta, volver al raster OSM es un revert
+pequeño y su policy sigue documentada más abajo.
 
 **Licencia del estilo:** `positron` es BSD-3 (código) + CC-BY 4.0 (diseño,
 derivado de CartoDB Basemaps de Stamen/Paul Norman, CC-BY 3.0), vía
@@ -1260,7 +1262,7 @@ de `transportation_name`, `water_name`, `waterway` y `place`** (una
 etiqueta sobre `building`, `landuse` o `park` nombraría un local), junto
 con «una sola fuente, OpenFreeMap», «sin key/token en el estilo», «la
 expresión exacta `coalesce(name:es, name:latin, name)` en toda capa con
-nombre», «sin sprite» y «el fallback raster sigue construyéndose». Pérdida
+nombre» y «sin sprite». Pérdida
 asumida frente al raster OSM: no hay etiquetas de locales, metro, iglesias
 ni parques — el mapa nombra calles, agua y barrios (las plazas aparecen
 cuando son vía en `transportation_name`). Se probó una capa `park_label`
@@ -1276,14 +1278,15 @@ interactuar con el mapa o pasados cinco segundos siempre que siga siendo
 localizable. El mapa usa el control compacto de MapLibre con el texto que
 da el tilejson («OpenFreeMap © OpenMapTiles Data from OpenStreetMap»):
 **abierto al cargar — nunca plegado de inicio —** y plegado al botón (i)
-a los **5 s** o al primer movimiento del usuario (arrastre, pellizco o
-doble toque; MapLibre por sí solo solo pliega al arrastrar). Medido: abierto
+a los **5 s** o al primer movimiento del usuario (arrastre, pellizco,
+rueda o doble toque; MapLibre por sí solo solo pliega al arrastrar). Los
+cinco segundos cuentan **desde que el crédito está en pantalla** — el
+texto llega con el tilejson, que en una red lenta puede tardar — y con la
+pestaña visible; un movimiento programático (recentrado GPS) no pliega. Medido: abierto
 ocupa 351×24 px a 412 px de ancho (una línea) y 308×44 / 268×44 px a
 360 / 320 px (dos líneas); plegado, 24×24 px. La licencia de
 OpenMapTiles no menciona el plegado: entender que el control compacto
-estándar cumple «esquina del mapa» es interpretación nuestra. Si el
-crédito puede plegarse viaja con el proveedor (`compactAttribution`):
-`true` para OpenFreeMap, `false` para `OSM_RASTER_FALLBACK`.
+estándar cumple «esquina del mapa» es interpretación nuestra.
 
 Caché (para LCHP-17): tiles, glifos y estilo pueden cachearse en runtime
 (stale-while-revalidate: es uso interactivo normal, que los términos
@@ -1337,8 +1340,8 @@ Evidencia del spike (2026-07-06, capturas en el ticket LCHP-4):
 ### Límites concretos de la OSM Tile Usage Policy (verificados 2026-07-06; histórico desde LCHP-33)
 
 > Ya no aplican al basemap (OpenFreeMap tiene sus propias condiciones,
-> arriba). Se conservan por si el raster OSM vuelve a usarse como
-> alternativa de emergencia a través de `kind: 'raster'`.
+> arriba). Se conservan como referencia por si alguna vez hubiera que
+> volver al raster OSM.
 
 Fuente: <https://operations.osmfoundation.org/policies/tiles/>. Lo que nos
 aplica, en concreto:
@@ -1421,58 +1424,36 @@ Camino de migración decidido para LCHP-13:
    mano o derivado del límite administrativo de OSM —, no el marco del
    lienzo.
 
-### Abstracción `tileProvider` (validada en LCHP-4; rama vector implementada en LCHP-33)
+### `tileProvider`: un único punto que nombra el proveedor (LCHP-4; simplificado en LCHP-33)
 
-Un estilo vectorial se pasa tal cual a `new Map({ style })` — como URL o
-como objeto `StyleSpecification` —, mientras que raster exige construir
-un estilo JSON inline (source `type: 'raster'` + una capa `raster`). Una
-unión discriminada evita los campos huérfanos:
+El spike LCHP-4 dejó una unión discriminada raster | vector con un
+`buildMapStyle()` que construía el estilo raster inline. Con el paso a
+vector y la retirada del fallback raster (D-059) queda lo mínimo: un
+objeto con el estilo, que MapLibre acepta tal cual como objeto
+`StyleSpecification` o como URL.
 
 ```ts
 import type { StyleSpecification } from 'maplibre-gl'
 import { chisperaStyle } from './styles/chispera'
 
-export type TileProviderId = 'openfreemap-vector' | 'osm-raster'
-
-export type TileProviderConfig =
-  | {
-      id: TileProviderId
-      kind: 'raster'
-      tiles: string[]
-      tileSize: 256
-      maxzoom: number
-      attribution: string
-      compactAttribution: boolean
-    }
-  | {
-      id: TileProviderId
-      kind: 'vector'
-      style: StyleSpecification | string
-      compactAttribution: boolean
-    }
-
-export const tileProvider: TileProviderConfig = {
-  id: 'openfreemap-vector',
-  kind: 'vector',
-  style: chisperaStyle,
-  compactAttribution: true,
+export type TileProvider = {
+  id: 'openfreemap-vector'
+  style: StyleSpecification | string
 }
 
-// Fallback de emergencia: el raster OSM original (crédito siempre visible).
-export const OSM_RASTER_FALLBACK: TileProviderConfig = { /* … */ compactAttribution: false }
-
-export function buildMapStyle(provider: TileProviderConfig): StyleSpecification | string {
-  if (provider.kind === 'vector') return provider.style
-  return { /* estilo raster inline, como en el spike LCHP-4 */ }
+export const tileProvider: TileProvider = {
+  id: 'openfreemap-vector',
+  style: chisperaStyle,
 }
 ```
 
-El estilo se vendoriza como **módulo TypeScript tipado**
+Los dos mapas (`BarrioMap`, `LocationPickerMap`) leen `tileProvider.style`
+y añaden el crédito con `addAttribution(map)`; ningún componente nombra al
+proveedor. El estilo se vendoriza como **módulo TypeScript tipado**
 (`export const chisperaStyle: StyleSpecification = {…}`), no como JSON:
 el compilador valida cada capa contra la especificación de MapLibre (así
 se detectó el `["linear", 1]` de positron) y no hace falta ningún cast.
-Cambiar de proveedor = cambiar el objeto de config; ningún componente
-toca el proveedor.
+Cambiar de proveedor = cambiar ese objeto.
 
 ## 22. Opciones futuras para mapas (resuelto en LCHP-33)
 

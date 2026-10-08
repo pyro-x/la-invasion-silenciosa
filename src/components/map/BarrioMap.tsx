@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addAttribution } from './attribution'
-import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 import type { MapSightingGeo } from '@/types/sighting'
 
 type Props = {
@@ -37,7 +37,7 @@ export function BarrioMap({ sightings, selectedId, onPick, renderMarker }: Props
     const objs = markerObjs.current
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildMapStyle(tileProvider),
+      style: tileProvider.style,
       bounds: LA_LATINA_BOUNDS,
       maxBounds: LA_LATINA_MAX_BOUNDS,
       fitBoundsOptions: { padding: 16 },
@@ -45,7 +45,7 @@ export function BarrioMap({ sightings, selectedId, onPick, renderMarker }: Props
       dragRotate: false,
       pitchWithRotate: false,
     })
-    const stopAttributionFold = addAttribution(map, tileProvider)
+    const stopAttributionFold = addAttribution(map)
     mapRef.current = map
     map.on('load', () => setReady(true))
     return () => {

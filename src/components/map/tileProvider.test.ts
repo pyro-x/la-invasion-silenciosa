@@ -1,5 +1,5 @@
 import type { LayerSpecification, StyleSpecification, SymbolLayerSpecification } from 'maplibre-gl'
-import { buildMapStyle, OSM_RASTER_FALLBACK, tileProvider } from './tileProvider'
+import { tileProvider } from './tileProvider'
 
 function inlineStyle(style: StyleSpecification | string): StyleSpecification {
   if (typeof style === 'string') throw new Error('expected an inline style')
@@ -36,10 +36,9 @@ const LABEL_SOURCE_LAYERS = ['water_name', 'waterway', 'transportation_name', 'p
 const SPANISH_FIRST = ['coalesce', ['get', 'name:es'], ['get', 'name:latin'], ['get', 'name']]
 
 describe('tileProvider', () => {
-  const style = buildMapStyle(tileProvider)
+  const style = tileProvider.style
 
   it('ships the vendored vector style, not a provider URL', () => {
-    expect(tileProvider.kind).toBe('vector')
     expect(typeof style).toBe('object')
   })
 
@@ -81,21 +80,10 @@ describe('tileProvider', () => {
     }
   })
 
-  it('lets the credit fold for OpenFreeMap but never for OSM raster', () => {
-    expect(tileProvider.compactAttribution).toBe(true)
-    expect(OSM_RASTER_FALLBACK.compactAttribution).toBe(false)
-  })
-
   it('needs no sprite sheet', () => {
     expect(inlineStyle(style).sprite).toBeUndefined()
     for (const l of layersOf(style)) {
       expect(l.layout && 'icon-image' in l.layout, l.id).toBeFalsy()
     }
-  })
-
-  it('keeps the OSM raster fallback buildable', () => {
-    const raster = buildMapStyle(OSM_RASTER_FALLBACK)
-    expect(layersOf(raster)[0]?.type).toBe('raster')
-    expect(JSON.stringify(raster)).toContain('tile.openstreetmap.org')
   })
 })

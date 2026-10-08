@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addAttribution } from './attribution'
-import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 
 type Props = {
   /** Programmatic recenter (a GPS fix). Same object identity = no move. */
@@ -30,7 +30,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
     if (!containerRef.current) return
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildMapStyle(tileProvider),
+      style: tileProvider.style,
       bounds: LA_LATINA_BOUNDS,
       maxBounds: LA_LATINA_MAX_BOUNDS,
       fitBoundsOptions: { padding: 16 },
@@ -38,7 +38,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
       dragRotate: false,
       pitchWithRotate: false,
     })
-    const stopAttributionFold = addAttribution(map, tileProvider)
+    const stopAttributionFold = addAttribution(map)
     map.on('moveend', () => {
       const byUser = !movedByCode.current
       movedByCode.current = false
