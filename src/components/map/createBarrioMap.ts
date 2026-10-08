@@ -202,6 +202,7 @@ export function createBarrioMap(
       // is "not measured yet", not a height.
       if (!framed && px > 0) {
         framed = true
+        userChoseView = false
         map.fitBounds(LA_LATINA_BOUNDS, {
           padding: { top: TOP_CHROME_PX, bottom: px + 16, left: 16, right: 16 },
           duration: 0,
@@ -210,6 +211,9 @@ export function createBarrioMap(
     },
 
     goTo(target, minZoom) {
+      // A user gesture that moved nothing (a wheel at the zoom limit) must
+      // not make this move look chosen.
+      userChoseView = false
       map.easeTo({
         center: [target.lng, target.lat],
         ...(minZoom !== undefined && map.getZoom() < minZoom ? { zoom: minZoom } : {}),

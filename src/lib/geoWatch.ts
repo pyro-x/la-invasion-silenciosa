@@ -147,9 +147,11 @@ export function startGeoWatch() {
 /** Starts without a tap only when the browser says it will not ask again. */
 export async function resumeGeoWatchIfGranted(): Promise<void> {
   if (watchId !== null || !grantedBefore() || !navigator.permissions?.query) return
+  const asked = generation
   try {
     const status = await navigator.permissions.query({ name: 'geolocation' })
-    if (status.state === 'granted') startGeoWatch()
+    // The map may have been left while the browser was answering.
+    if (asked === generation && status.state === 'granted') startGeoWatch()
   } catch {
     // Some Safari versions have no geolocation entry in the Permissions API.
   }

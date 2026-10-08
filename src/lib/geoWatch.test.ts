@@ -156,6 +156,19 @@ describe('geoWatch', () => {
       expect(watchPosition).toHaveBeenCalledTimes(2)
     })
 
+    it('does not start if the map was left while the browser was answering', async () => {
+      act(() => startGeoWatch())
+      act(() => watcher().success(fix(40.4115, -3.712, 12)))
+      stopGeoWatch()
+      let answer: (status: { state: PermissionState }) => void = () => {}
+      permissionsQuery.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+      const resuming = resumeGeoWatchIfGranted()
+      stopGeoWatch()
+      answer({ state: 'granted' })
+      await resuming
+      expect(watchPosition).toHaveBeenCalledTimes(1)
+    })
+
     it('does not start when the browser would ask again', async () => {
       act(() => startGeoWatch())
       act(() => watcher().success(fix(40.4115, -3.712, 12)))
