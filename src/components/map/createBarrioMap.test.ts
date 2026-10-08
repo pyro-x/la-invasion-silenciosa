@@ -127,6 +127,17 @@ describe('createBarrioMap', () => {
     expect(localStorage.getItem('lis.map.view')).toBeNull()
   })
 
+  it('a gesture landing in the middle of a programmatic move does not store that move', () => {
+    const { controller } = mount()
+    controller.goTo({ lat: 40.4115, lng: -3.712 }, 17)
+    emit('wheel')
+    emit('moveend')
+    expect(localStorage.getItem('lis.map.view')).toBeNull()
+    emit('movestart', { originalEvent: new Event('touchstart') })
+    emit('moveend')
+    expect(localStorage.getItem('lis.map.view')).not.toBeNull()
+  })
+
   it('stores a view once per user move, including the zoom buttons', () => {
     const { controller } = mount()
     emit('movestart', { originalEvent: new Event('touchstart') })

@@ -505,22 +505,6 @@ body {
     display: grid;
   }
 }
-.map-legend {
-  left: calc(env(safe-area-inset-left, 0px) + var(--map-edge));
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-.map-legend-row {
-  display: flex;
-  gap: 10px;
-  padding: 6px 10px;
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  border: var(--bw) solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
-}
 .map-sheet {
   position: absolute;
   left: 0;
@@ -575,14 +559,10 @@ body {
   border: 3px solid #fff;
   box-shadow: 0 0 0 2px rgba(16, 80, 22, 0.3);
 }
-/* The data credit rides above the sheet, bottom-left; the legend toggle
-   sits just over its (i). */
+/* The data credit rides above the sheet, bottom-left. */
 .map-screen .maplibregl-ctrl-bottom-left {
   bottom: var(--sheet-h);
   transition: bottom 0.16s ease;
-}
-.map-screen .map-legend {
-  bottom: calc(var(--sheet-h) + var(--map-edge) + 30px);
 }
 @media (prefers-reduced-motion: reduce) {
   .map-float,

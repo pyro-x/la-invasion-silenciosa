@@ -1,5 +1,5 @@
 // Map screen (LCHP-13; full-bleed layout LCHP-34, D-061): the map IS the
-// screen. Title, mode chips, legend and the locate button float over it; one
+// screen. Title, mode chips and the locate button float over it; one
 // bottom sheet carries the sighting detail and the «Cerca de ti» list, and
 // the map centres itself in the part the sheet leaves free.
 //
@@ -103,7 +103,6 @@ export function MapPage() {
 
   const [sheetOpen, setSheetOpen] = useState(true)
   const [sheetHeight, setSheetHeight] = useState(0)
-  const [legendOpen, setLegendOpen] = useState(false)
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [zoomStep, setZoomStep] = useState<{ delta: number } | null>(null)
   const [following, setFollowing] = useState(false)
@@ -283,32 +282,6 @@ export function MapPage() {
           </span>
         </div>
       )}
-
-      <div className="map-float map-legend">
-        {legendOpen && (
-          <div className="map-legend-row">
-            {species.map((c) => (
-              <div key={c.id} className="stack center" style={{ gap: 3 }}>
-                <CreatureSprite id={c.id} scale={2} />
-                <span
-                  className="mono"
-                  style={{ fontSize: 8, color: 'var(--ink-dim)', lineHeight: 1 }}
-                >
-                  {c.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <button
-          type="button"
-          className="chip chip-ghost map-chip"
-          aria-expanded={legendOpen}
-          onClick={() => setLegendOpen((open) => !open)}
-        >
-          Leyenda
-        </button>
-      </div>
 
       <div className="map-float map-fabs">
         <button

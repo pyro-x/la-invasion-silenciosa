@@ -1123,7 +1123,7 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 │                              │
 │          MAPA                │  pines; al tocar uno se centra en la
 │                              │  parte visible
-│ [Leyenda]             [◎]    │  leyenda plegable · «Ir a mi posición»
+│                       [◎]    │  «Ir a mi posición»
 │ (i)                   [+][−] │  crédito · zoom (solo con ratón)
 ├──────────────────────────────┤
 │ ▬  HOJA INFERIOR             │  ficha del avistamiento (si hay uno

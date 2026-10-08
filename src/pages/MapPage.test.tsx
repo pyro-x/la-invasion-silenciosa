@@ -128,7 +128,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('map screen', () => {
-  it('renders the toggle, the legend and the pending list from real data', async () => {
+  it('renders the toggle and the pending list from real data', async () => {
     renderRoute('/mapa')
     expect(await screen.findByText('Avistamientos en La Latina')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Avistamientos' })).toBeInTheDocument()
@@ -331,13 +331,10 @@ describe('map screen', () => {
       expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
     })
 
-    it('the legend is a toggle, closed until asked', async () => {
-      const user = userEvent.setup()
+    it('has no species legend: the sprites are named in the sheet', async () => {
       renderRoute('/mapa')
-      const toggle = await screen.findByRole('button', { name: 'Leyenda' })
-      expect(toggle).toHaveAttribute('aria-expanded', 'false')
-      await user.click(toggle)
-      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      await screen.findByText('Avistamientos en La Latina')
+      expect(screen.queryByRole('button', { name: 'Leyenda' })).not.toBeInTheDocument()
     })
   })
 

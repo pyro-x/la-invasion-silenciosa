@@ -142,6 +142,10 @@ export function createBarrioMap(
   // opening fit, easing to a pin, and above all following the user's own
   // position — must never be written to storage.
   let userChoseView = false
+  // Set while a programmatic move is in flight: its moveend is skipped even
+  // if a gesture landed in the middle of it (a wheel that interrupts an
+  // ease ends that ease with the app's centre, not the user's).
+  let programmaticMove = false
   const userMoved = () => {
     userChoseView = true
     handlers.onUserMove()
@@ -151,6 +155,10 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
+    if (programmaticMove) {
+      programmaticMove = false
+      return
+    }
     if (!userChoseView) return
     userChoseView = false
     const center = map.getCenter()
@@ -203,6 +211,7 @@ export function createBarrioMap(
       if (!framed && px > 0) {
         framed = true
         userChoseView = false
+        programmaticMove = true
         map.fitBounds(LA_LATINA_BOUNDS, {
           padding: { top: TOP_CHROME_PX, bottom: px + 16, left: 16, right: 16 },
           duration: 0,
@@ -214,6 +223,7 @@ export function createBarrioMap(
       // A user gesture that moved nothing (a wheel at the zoom limit) must
       // not make this move look chosen.
       userChoseView = false
+      programmaticMove = true
       map.easeTo({
         center: [target.lng, target.lat],
         ...(minZoom !== undefined && map.getZoom() < minZoom ? { zoom: minZoom } : {}),
