@@ -424,3 +424,244 @@ body {
     animation: none !important;
   }
 }
+
+/* ============ MAP SCREEN (LCHP-34, D-061) ============
+   The map is the screen: it fills everything above the tabbar and the
+   chrome floats over it. --sheet-h is the height the bottom sheet covers,
+   kept in sync from MapSheet so the floating controls ride above it. */
+.map-screen {
+  overflow: hidden;
+  --sheet-h: 0px;
+  --map-edge: 12px;
+}
+.map-top {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + var(--map-edge));
+  left: calc(env(safe-area-inset-left, 0px) + var(--map-edge));
+  right: calc(env(safe-area-inset-right, 0px) + var(--map-edge));
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.map-top > * {
+  pointer-events: auto;
+}
+/* One switch between two views of the same map, on an opaque card so it
+   reads over any street. */
+.map-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--card);
+  border: var(--bw) solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+.map-mode {
+  min-height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.map-mode[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.map-note {
+  background: var(--card);
+  color: var(--ink-dim);
+  box-shadow: var(--shadow);
+}
+.map-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.map-nearby-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 12px 6px 0;
+  box-shadow: none;
+}
+.map-nearby-show {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 6px 12px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.map-nearby-verify {
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+.map-pin.is-pending {
+  animation: blinkdot 1.4s ease-in-out infinite;
+}
+/* Blinks at the pace of the pending pins: it is what ties their orange
+   ring to «Por verificar». Round, because a square read as a checkbox. */
+.chip-ring {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 3px solid var(--card);
+  animation: blinkdot 1.4s ease-in-out infinite;
+}
+.map-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+}
+.map-card-text {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.map-card-hint {
+  margin-top: 2px;
+  color: var(--ink-dim);
+}
+.map-float {
+  position: absolute;
+  bottom: calc(var(--sheet-h) + var(--map-edge));
+  z-index: 3;
+  transition: bottom 0.16s ease;
+}
+.map-fabs {
+  right: calc(env(safe-area-inset-right, 0px) + var(--map-edge));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.map-fab {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--ink);
+  border: var(--bw) solid var(--line);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1;
+}
+.map-fab.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.map-fab.is-busy svg {
+  animation: blinkdot 1s ease-in-out infinite;
+}
+.only-fine {
+  display: none;
+}
+@media (pointer: fine) {
+  .only-fine {
+    display: grid;
+  }
+}
+.map-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  /* Leaves more than half of the map visible; the list scrolls inside. */
+  max-height: 44%;
+  background: var(--card);
+  border: var(--bw) solid var(--line);
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -6px 20px rgba(74, 22, 12, 0.16);
+}
+.map-sheet-handle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 26px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  touch-action: none;
+}
+.map-sheet-handle::before {
+  content: '';
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.map-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.map-sheet-body::-webkit-scrollbar {
+  width: 0;
+}
+.map-me-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(16, 80, 22, 0.3);
+}
+/* The data credit rides above the sheet, bottom-left. */
+.map-screen .maplibregl-ctrl-bottom-left {
+  bottom: var(--sheet-h);
+  transition: bottom 0.16s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-float,
+  .map-screen .maplibregl-ctrl-bottom-left {
+    transition: none;
+  }
+  .map-fab.is-busy svg,
+  .map-pin.is-pending,
+  .chip-ring {
+    animation: none;
+  }
+}

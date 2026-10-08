@@ -1,0 +1,83 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MapSheet } from './MapSheet'
+
+function renderSheet(open: boolean) {
+  const onToggle = vi.fn<(open: boolean) => void>()
+  const onHeight = vi.fn<(px: number) => void>()
+  render(
+    <MapSheet
+      label="Avistamientos cerca de ti"
+      open={open}
+      onToggle={onToggle}
+      onHeight={onHeight}
+      header={<span>cabecera</span>}
+      headerKey=""
+    >
+      <span>lista</span>
+    </MapSheet>,
+  )
+  return { onToggle, onHeight }
+}
+
+describe('MapSheet', () => {
+  it('shows the header always and the content only when open', () => {
+    renderSheet(false)
+    expect(screen.getByText('cabecera')).toBeInTheDocument()
+    expect(screen.queryByText('lista')).not.toBeInTheDocument()
+  })
+
+  it('is a named region whose header changes are announced politely', () => {
+    renderSheet(true)
+    const region = screen.getByRole('region', { name: 'Avistamientos cerca de ti' })
+    expect(region).toContainElement(screen.getByText('cabecera'))
+    expect(screen.getByText('cabecera').parentElement).toHaveAttribute('aria-live', 'polite')
+  })
+
+  it('reports the height it covers', () => {
+    const { onHeight } = renderSheet(true)
+    expect(onHeight).toHaveBeenCalled()
+  })
+
+  it('a tap on the handle toggles', async () => {
+    const { onToggle } = renderSheet(true)
+    await userEvent.click(screen.getByRole('button', { name: 'Plegar la lista' }))
+    expect(onToggle).toHaveBeenCalledWith(false)
+  })
+
+  it('a swipe down folds and a swipe up unfolds, without the click toggling it back', () => {
+    const { onToggle } = renderSheet(true)
+    const handle = screen.getByRole('button', { name: 'Plegar la lista' })
+    fireEvent.pointerDown(handle, { clientY: 100 })
+    fireEvent.pointerUp(handle, { clientY: 160 })
+    fireEvent.click(handle)
+    expect(onToggle.mock.calls).toEqual([[false]])
+    fireEvent.pointerDown(handle, { clientY: 160 })
+    fireEvent.pointerUp(handle, { clientY: 90 })
+    fireEvent.click(handle)
+    expect(onToggle.mock.calls).toEqual([[false], [true]])
+  })
+
+  it('scrolls back up when the header shows something else', () => {
+    const sheet = (headerKey: string) => (
+      <MapSheet
+        label="Avistamientos cerca de ti"
+        open
+        onToggle={() => {}}
+        onHeight={() => {}}
+        header={<span>cabecera</span>}
+        headerKey={headerKey}
+      >
+        <span>lista</span>
+      </MapSheet>
+    )
+    const { rerender } = render(sheet('a'))
+    const body = screen.getByText('lista').parentElement
+    if (!body) throw new Error('the sheet has no body')
+    body.scrollTop = 240
+    rerender(sheet('a'))
+    expect(body.scrollTop).toBe(240)
+    rerender(sheet('b'))
+    expect(body.scrollTop).toBe(0)
+  })
+})

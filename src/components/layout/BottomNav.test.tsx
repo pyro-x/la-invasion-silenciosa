@@ -1,12 +1,13 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderRoute as renderAt } from '@/test/render'
 
 describe('shell navigation', () => {
   it('renders the 5 destinations of the bottom bar', () => {
     renderAt('/mapa')
+    const bar = within(screen.getByRole('navigation', { name: 'Navegación principal' }))
     for (const label of ['Mapa', 'Especies', 'Ranking', 'Perfil']) {
-      expect(screen.getByText(label)).toBeInTheDocument()
+      expect(bar.getByText(label)).toBeInTheDocument()
     }
     expect(screen.getByRole('button', { name: 'Cazar' })).toBeInTheDocument()
   })

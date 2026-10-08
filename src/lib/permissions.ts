@@ -39,6 +39,14 @@ export function locationDenialGuidance(): string {
     : 'Sin permiso de ubicación. Permítela desde el candado de la barra del navegador — o coloca el pin a mano arrastrando el mapa.'
 }
 
+/** The same recovery path for the map's «dónde estoy», where there is no
+ * pin to place by hand. */
+export function locationSettingsGuidance(): string {
+  return isIos()
+    ? 'Sin permiso de ubicación. En el iPhone: Ajustes → Privacidad y seguridad → Localización → Sitios web de Safari → «Preguntar» (o en Safari: ᴀA → Ajustes del sitio web → Ubicación).'
+    : 'Sin permiso de ubicación. Permítela desde el candado de la barra del navegador.'
+}
+
 export function cameraDenialGuidance(): string {
   return isIos()
     ? 'Sin permiso de cámara. En Safari: ᴀA → Ajustes del sitio web → Cámara → «Preguntar» o «Permitir». Mientras tanto puedes usar la cámara del sistema o la galería.'

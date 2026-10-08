@@ -1,22 +1,41 @@
-// Map screen (LCHP-13): real MapLibre map reading public_map_sightings.
+// Map screen (LCHP-13; full-bleed layout LCHP-34, D-061): the map IS the
+// screen. The mode switch and the locate button float over it; one bottom
+// sheet carries the sighting detail and the «Cerca de ti» list, and the map
+// centres itself in the part the sheet leaves free.
+//
 // Validated sightings show the species sprite; pending ones blink with an
-// amber ring. The detail sheet shows species · status · age · approximate
-// location — NO author and NO exact street (the public view exposes neither;
-// golden rule / D-037). «Ver evidencia» loads the photo on demand.
-// «Verificar» (LCHP-15) opens the real verification modal from its two
-// doors — the pin card and the «Cerca de ti» list — and the outcome toast
-// mirrors what the consolidation trigger actually did.
-import { lazy, Suspense, useRef, useState } from 'react'
+// amber ring. The detail shows species · status · age · approximate location
+// — NO author and NO exact street (the public view exposes neither; golden
+// rule / D-046). «Ver evidencia» loads the photo on demand. «Verificar»
+// (LCHP-15) opens the verification modal from its two doors — the detail
+// card and the «Cerca de ti» rows.
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { LocateFixed } from 'lucide-react'
+import { MapSheet } from '@/components/map/MapSheet'
+import type { MapFocus } from '@/components/map/BarrioMap'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { VerifyModal } from '@/components/sightings/VerifyModal'
 import { Toast } from '@/components/ui/Toast'
 import { formatAge } from '@/lib/age'
+import { isWithinLaLatina } from '@/lib/geo'
+import {
+  resumeGeoWatchIfGranted,
+  startGeoWatch,
+  stopGeoWatch,
+  useGeoWatch,
+  type GeoWatchState,
+} from '@/lib/geoWatch'
+import { locationSettingsGuidance } from '@/lib/permissions'
 import { getEvidenceUrl, type EvidenceResult } from '@/services/evidence.service'
 import { listMapSightings } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
 import type { VerifyOutcome } from '@/services/verifications.service'
 import type { MapSightingGeo } from '@/types/sighting'
+
+// One shared empty list: a fresh [] on every render would make the map
+// reconcile its pins again for nothing.
+const NO_SIGHTINGS: MapSightingGeo[] = []
 
 // MapLibre is ~210 KB gzipped (spike LCHP-4): load it only on /mapa.
 const BarrioMap = lazy(() =>
@@ -27,6 +46,7 @@ function SightingMarker({ sighting, selected }: { sighting: MapSightingGeo; sele
   const pending = sighting.status === 'pending'
   return (
     <div
+      className={pending ? 'map-pin is-pending' : 'map-pin'}
       style={{
         width: 34,
         height: 34,
@@ -36,7 +56,6 @@ function SightingMarker({ sighting, selected }: { sighting: MapSightingGeo; sele
         background: 'var(--card)',
         border: `2px solid ${selected ? 'var(--accent)' : pending ? 'var(--warn)' : 'var(--line)'}`,
         boxShadow: selected ? '0 0 0 3px var(--accent)' : '0 1px 3px rgba(0,0,0,0.25)',
-        animation: pending ? 'blinkdot 1.4s ease-in-out infinite' : 'none',
       }}
     >
       <CreatureSprite id={sighting.speciesId} scale={2} />
@@ -57,6 +76,19 @@ const VERIFY_TOASTS: Record<VerifyOutcome['kind'], string> = {
   error: 'No se pudo enviar, inténtalo de nuevo',
 }
 
+// What to tell the neighbour about «dónde estoy», if anything. The map is a
+// barrio game: a position outside La Latina is shown no map to follow.
+function locateNotice(geo: GeoWatchState, outsideBarrio: boolean): string | null {
+  if (geo.kind === 'denied') return locationSettingsGuidance()
+  if (geo.kind === 'unavailable' || geo.kind === 'timeout') {
+    return 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.'
+  }
+  if (geo.kind === 'unsupported') return 'Este navegador no ofrece tu ubicación.'
+  if (geo.kind === 'paused') return 'Toca «Ir a mi posición» para volver a ver dónde estás.'
+  if (outsideBarrio) return 'Estás fuera de La Latina: el mapa se queda en el barrio.'
+  return null
+}
+
 export function MapPage() {
   const queryClient = useQueryClient()
   const [heat, setHeat] = useState(false)
@@ -70,11 +102,45 @@ export function MapPage() {
   // older response (even a late error) never clobbers a newer one.
   const evidenceReq = useRef(0)
 
+  const [sheetOpen, setSheetOpen] = useState(true)
+  const [sheetHeight, setSheetHeight] = useState(0)
+  const [focus, setFocus] = useState<MapFocus | null>(null)
+  const [zoomStep, setZoomStep] = useState<{ delta: number } | null>(null)
+  const [following, setFollowing] = useState(false)
+  // Notices answer a tap. A watch resumed on arrival feeds the same state,
+  // and must not greet the neighbour with «Estás fuera de La Latina».
+  const [askedWhere, setAskedWhere] = useState(false)
+  const [pickCount, setPickCount] = useState(0)
+  const [locateCount, setLocateCount] = useState(0)
+  const [dismissedNotice, setDismissedNotice] = useState<string | null>(null)
+  const geo = useGeoWatch()
+
+  // Resuming never prompts: it only starts when the browser already granted.
+  useEffect(() => {
+    void resumeGeoWatchIfGranted()
+    return stopGeoWatch
+  }, [])
+
+  const {
+    data: sightings = NO_SIGHTINGS,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['sightings', 'map'],
+    queryFn: listMapSightings,
+  })
+  const { data: species = [] } = useQuery({ queryKey: ['species'], queryFn: listSpecies })
+
   const pick = (id: string) => {
     setSel(id)
+    setPickCount((count) => count + 1)
     setVerifying(false)
     setEvidence(null)
     evidenceReq.current++ // drop any in-flight request from the previous pin
+    setSheetOpen(true)
+    setFollowing(false)
+    const target = sightings.find((s) => s.id === id)
+    if (target) setFocus({ lat: target.lat, lng: target.lng })
   }
 
   const onVerifyResult = (outcome: VerifyOutcome) => {
@@ -113,239 +179,297 @@ export function MapPage() {
     toastTimer.current = setTimeout(() => setToast(null), 2200)
   }
 
-  const {
-    data: sightings = [],
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ['sightings', 'map'],
-    queryFn: listMapSightings,
-  })
-  const { data: species = [] } = useQuery({ queryKey: ['species'], queryFn: listSpecies })
+  // Folding the sheet puts the open card away with it: a neighbour who
+  // pulls it down is done with that creature.
+  const foldSheet = (open: boolean) => {
+    if (!open) setSel(null)
+    setSheetOpen(open)
+  }
+
+  // The native permission prompt fires here and only here: on this tap.
+  const locate = () => {
+    setDismissedNotice(null)
+    setAskedWhere(true)
+    setLocateCount((count) => count + 1)
+    setFollowing(true)
+    startGeoWatch()
+  }
 
   const speciesName = (id: string) => species.find((c) => c.id === id)?.name ?? ''
+  const speciesMeaning = (id: string) => species.find((c) => c.id === id)?.description ?? ''
   const pending = sightings.filter((s) => s.status === 'pending')
   const selS = sightings.find((s) => s.id === sel)
 
-  return (
-    <div
-      className="screen"
-      style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+  const me = geo.kind === 'ok' ? geo.position : null
+  const outsideBarrio = me !== null && !isWithinLaLatina(me.lat, me.lng)
+  const notice = askedWhere ? locateNotice(geo, outsideBarrio) : null
+  const follow = following && me !== null && !outsideBarrio
+
+  // The whole row is the control: the orange counter looks like a button,
+  // so it is one.
+  const nearbyHeader = (
+    <button
+      type="button"
+      className="map-sheet-row"
+      aria-expanded={sheetOpen}
+      onClick={() => foldSheet(!sheetOpen)}
     >
-      <div
-        className="pad"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 11,
-          flex: '1 1 auto',
-          minHeight: 0,
-          paddingBottom: 8,
-        }}
+      <span className="eyebrow">Cerca de ti</span>
+      {!isError && (
+        <span className="chip chip-warn">
+          <span className="chip-ring" aria-hidden />
+          {pending.length} Por verificar
+        </span>
+      )}
+    </button>
+  )
+
+  // In the part of the sheet that stays when it is folded: the answer to a
+  // tap on «Ir a mi posición» must not depend on the list being open.
+  const noticeBox = notice && notice !== dismissedNotice && (
+    <div
+      className="panel panel-2 pad row"
+      role="status"
+      style={{ padding: 10, gap: 8, fontSize: 12, boxShadow: 'none' }}
+    >
+      <span className="grow" style={{ color: 'var(--ink-dim)' }}>
+        {notice}
+      </span>
+      <button
+        type="button"
+        className="chip chip-ghost"
+        aria-label="Cerrar aviso"
+        onClick={() => setDismissedNotice(notice)}
       >
-        <div>
-          <div className="eyebrow">Mapa del barrio</div>
-          <div className="scr-title" style={{ fontSize: 20 }}>
-            Avistamientos en La Latina
-          </div>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
+        ✕
+      </button>
+    </div>
+  )
+
+  const sheetVars: CSSProperties & Record<'--sheet-h', string> = { '--sheet-h': `${sheetHeight}px` }
+
+  return (
+    <div className="screen map-screen" style={sheetVars}>
+      <Suspense
+        fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg2)' }} />}
+      >
+        <BarrioMap
+          sightings={heat || isError ? NO_SIGHTINGS : sightings}
+          selectedId={sel}
+          onPick={pick}
+          onMapTap={() => setSel(null)}
+          onUserMove={() => setFollowing(false)}
+          renderMarker={(s, selected) => <SightingMarker sighting={s} selected={selected} />}
+          me={me && !outsideBarrio ? me : null}
+          follow={follow}
+          followRequest={locateCount}
+          bottomPadding={sheetHeight}
+          focus={focus}
+          zoomStep={zoomStep}
+        />
+      </Suspense>
+
+      <div className="map-top">
+        <div className="map-modes" role="group" aria-label="Vista del mapa">
           <button
-            className={'chip ' + (!heat ? 'chip-accent' : 'chip-ghost')}
-            style={{ flex: 1, justifyContent: 'center' }}
+            type="button"
+            className="map-mode"
+            aria-pressed={!heat}
             onClick={() => setHeat(false)}
           >
             Avistamientos
           </button>
           <button
-            className={'chip ' + (heat ? 'chip-accent' : 'chip-ghost')}
-            style={{ flex: 1, justifyContent: 'center' }}
+            type="button"
+            className="map-mode"
+            aria-pressed={heat}
             onClick={() => setHeat(true)}
           >
             Mapa de calor
           </button>
         </div>
+      </div>
 
+      {/* a failed read must LOOK failed, never like a valid empty map */}
+      {isError && (
         <div
           style={{
-            flex: '1 1 0',
-            minHeight: 120,
-            position: 'relative',
-            overflow: 'hidden',
-            borderRadius: 12,
+            position: 'absolute',
+            inset: 0,
+            zIndex: 2,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'color-mix(in srgb, var(--bg) 75%, transparent)',
           }}
         >
-          <Suspense
-            fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg2)' }} />}
-          >
-            <BarrioMap
-              sightings={heat || isError ? [] : sightings}
-              selectedId={sel}
-              onPick={pick}
-              renderMarker={(s, selected) => <SightingMarker sighting={s} selected={selected} />}
-            />
-          </Suspense>
-          {/* a failed read must LOOK failed, never like a valid empty map */}
-          {isError && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'grid',
-                placeItems: 'center',
-                background: 'color-mix(in srgb, var(--bg) 75%, transparent)',
-              }}
-            >
-              <div className="panel pad stack center" style={{ padding: 16, gap: 10 }}>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-                  No se pudieron cargar los avistamientos
-                </span>
-                <button type="button" className="btn btn-accent" onClick={() => void refetch()}>
-                  Reintentar
-                </button>
-              </div>
-            </div>
-          )}
-          {heat && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'grid',
-                placeItems: 'center',
-                pointerEvents: 'none',
-              }}
-            >
-              <span className="chip chip-ghost mono" style={{ fontSize: 10 }}>
-                Mapa de calor · próximamente
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* legend (4 in one row) */}
-        <div
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, flexShrink: 0 }}
-        >
-          {species.map((c) => (
-            <div key={c.id} className="stack center" style={{ gap: 3 }}>
-              <CreatureSprite id={c.id} scale={2} />
-              <span
-                className="mono"
-                style={{
-                  fontSize: 8.5,
-                  color: 'var(--ink-dim)',
-                  textAlign: 'center',
-                  lineHeight: 1,
-                }}
-              >
-                {c.name}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* pin popover — z-index keeps it above the «Cerca de ti» list's
-            absolutely-positioned sprites when the two overlap (LCHP-32, D-057) */}
-        {selS && (
-          <div
-            className="panel pad slidein"
-            style={{ padding: 14, position: 'relative', zIndex: 1 }}
-          >
-            <div className="row" style={{ gap: 12 }}>
-              <div
-                className="panel-2 center"
-                style={{
-                  width: 54,
-                  height: 54,
-                  borderRadius: 8,
-                  border: 'var(--bw) solid var(--line)',
-                }}
-              >
-                <CreatureSprite id={selS.speciesId} scale={3} />
-              </div>
-              <div className="grow">
-                <div className="display" style={{ fontSize: 12 }}>
-                  {speciesName(selS.speciesId)}
-                </div>
-                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-                  Ubicación aproximada · La Latina · {formatAge(selS.createdAt)}
-                </div>
-              </div>
-              <span className={'chip ' + (selS.status === 'pending' ? 'chip-warn' : 'chip-good')}>
-                {selS.status === 'pending' ? 'Por verificar' : 'Validado'}
-              </span>
-            </div>
-            <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ flex: 1 }}
-                onClick={() => void loadEvidence(selS.id)}
-              >
-                Ver evidencia
-              </button>
-              {selS.status === 'pending' && (
-                <button
-                  type="button"
-                  className="btn btn-accent"
-                  style={{ flex: 1 }}
-                  onClick={() => setVerifying(true)}
-                >
-                  ✔ Verificar
-                </button>
-              )}
-            </div>
+          <div className="panel pad stack center" style={{ padding: 16, gap: 10 }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
+              No se pudieron cargar los avistamientos
+            </span>
+            <button type="button" className="btn btn-accent" onClick={() => void refetch()}>
+              Reintentar
+            </button>
           </div>
-        )}
+        </div>
+      )}
+      {heat && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 2,
+            display: 'grid',
+            placeItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <span className="chip mono map-note" style={{ fontSize: 10 }}>
+            Mapa de calor · próximamente
+          </span>
+        </div>
+      )}
+
+      <div className="map-float map-fabs">
+        <button
+          type="button"
+          className="map-fab only-fine"
+          aria-label="Acercar el mapa"
+          onClick={() => setZoomStep({ delta: 1 })}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="map-fab only-fine"
+          aria-label="Alejar el mapa"
+          onClick={() => setZoomStep({ delta: -1 })}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className={
+            'map-fab' + (follow ? ' is-active' : '') + (geo.kind === 'searching' ? ' is-busy' : '')
+          }
+          aria-label="Ir a mi posición"
+          aria-pressed={follow}
+          onClick={locate}
+        >
+          <LocateFixed size={22} aria-hidden />
+        </button>
       </div>
 
-      {/* pending nearby (the only scrolling zone) */}
-      <div
-        className="pad stack"
-        style={{
-          gap: 8,
-          flex: '0 0 auto',
-          maxHeight: '46%',
-          minHeight: 168,
-          overflowY: 'auto',
-          paddingTop: 4,
-        }}
-      >
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <span className="eyebrow">Cerca de ti</span>
-          {!isError && <span className="chip chip-warn">{pending.length} Por verificar</span>}
-        </div>
-        {pending.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className="panel pad"
-            onClick={() => {
-              pick(s.id)
-              setVerifying(true) // the list is the second door to the modal
-            }}
-            style={{
-              padding: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              textAlign: 'left',
-              cursor: 'pointer',
-              width: '100%',
-            }}
-          >
-            <CreatureSprite id={s.speciesId} scale={2.8} />
-            <div className="grow">
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{speciesName(s.speciesId)}</div>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-                La Latina · {formatAge(s.createdAt)}
+      <MapSheet
+        label="Avistamientos cerca de ti"
+        open={sheetOpen}
+        onToggle={foldSheet}
+        headerKey={String(pickCount)}
+        onHeight={setSheetHeight}
+        header={
+          <div className="stack" style={{ gap: 10 }}>
+            {noticeBox}
+            {selS ? (
+              <div>
+                <div className="row" style={{ gap: 12 }}>
+                  <div
+                    className="panel-2 center"
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: 8,
+                      border: 'var(--bw) solid var(--line)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <CreatureSprite id={selS.speciesId} scale={3} />
+                  </div>
+                  <div className="grow">
+                    <div className="map-card-title">
+                      <span className="display" style={{ fontSize: 12 }}>
+                        {speciesName(selS.speciesId)}
+                      </span>
+                      <span
+                        className={
+                          'chip ' + (selS.status === 'pending' ? 'chip-warn' : 'chip-good')
+                        }
+                      >
+                        {selS.status === 'pending' && <span className="chip-ring" aria-hidden />}
+                        {selS.status === 'pending' ? 'Por verificar' : 'Validado'}
+                      </span>
+                    </div>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
+                      Ubicación aproximada · La Latina · {formatAge(selS.createdAt)}
+                    </div>
+                  </div>
+                </div>
+                <p className="map-card-text">{speciesMeaning(selS.speciesId)}</p>
+                {selS.status === 'pending' && (
+                  <p className="map-card-text map-card-hint">
+                    Parpadea en el mapa hasta que otros vecinos lo confirmen.
+                  </p>
+                )}
+                <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => void loadEvidence(selS.id)}
+                  >
+                    Ver evidencia
+                  </button>
+                  {selS.status === 'pending' && (
+                    <button
+                      type="button"
+                      className="btn btn-accent"
+                      style={{ flex: 1 }}
+                      onClick={() => setVerifying(true)}
+                    >
+                      ✔ Verificar
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-            <span className="chip chip-accent">Verificar</span>
-          </button>
+            ) : (
+              nearbyHeader
+            )}
+          </div>
+        }
+      >
+        {selS && nearbyHeader}
+        {/* Two taps, two meanings: the row shows the creature on the map
+            first; its «Verificar» goes straight to the modal (the second
+            door, LCHP-15). Verifying means "I have seen it too", so the
+            neighbour can look before committing. */}
+        {pending.map((s) => (
+          <div key={s.id} className="panel map-nearby-row">
+            <button type="button" className="map-nearby-show" onClick={() => pick(s.id)}>
+              <CreatureSprite id={s.speciesId} scale={2.8} />
+              <span className="grow">
+                <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>
+                  {speciesName(s.speciesId)}
+                </span>
+                <span
+                  className="mono"
+                  style={{ display: 'block', fontSize: 11, color: 'var(--ink-dim)' }}
+                >
+                  La Latina · {formatAge(s.createdAt)}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="chip chip-accent map-nearby-verify"
+              aria-label={`Verificar ${speciesName(s.speciesId)}`}
+              onClick={() => {
+                pick(s.id)
+                setVerifying(true)
+              }}
+            >
+              Verificar
+            </button>
+          </div>
         ))}
-      </div>
+      </MapSheet>
 
       {/* verification modal (LCHP-15): only over a pending selection */}
       {verifying && selS && selS.status === 'pending' && (

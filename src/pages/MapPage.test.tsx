@@ -1,5 +1,6 @@
-import { screen } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { resetGeoWatchForTests } from '@/lib/geoWatch'
 import { renderRoute } from '@/test/render'
 import type { MapSightingGeo } from '@/types/sighting'
 
@@ -61,11 +62,28 @@ vi.mock('@/components/map/BarrioMap', () => ({
   BarrioMap: ({
     sightings,
     onPick,
+    onMapTap,
+    onUserMove,
+    me,
+    follow,
+    followRequest,
   }: {
     sightings: MapSightingGeo[]
     onPick: (id: string) => void
+    onMapTap: () => void
+    onUserMove: () => void
+    me: { lat: number; lng: number } | null
+    follow: boolean
+    followRequest: number
   }) => (
-    <div>
+    <div
+      data-testid="map"
+      data-follow={follow}
+      data-follow-request={followRequest}
+      data-me={me ? `${me.lat},${me.lng}` : ''}
+    >
+      <button aria-label="map background" onClick={onMapTap} />
+      <button aria-label="drag the map" onClick={onUserMove} />
       {sightings.map((s) => (
         <button key={s.id} aria-label={`pin ${s.id}`} onClick={() => onPick(s.id)}>
           {s.speciesId}
@@ -75,11 +93,51 @@ vi.mock('@/components/map/BarrioMap', () => ({
   ),
 }))
 
+type Success = (position: GeolocationPosition) => void
+type Failure = (error: GeolocationPositionError) => void
+const watchPositionMock = vi.fn<(success: Success, failure: Failure) => number>()
+const getCurrentPositionMock = vi.fn<(success: Success, failure: Failure) => void>()
+
+function geoFix(lat: number, lng: number): GeolocationPosition {
+  const coords = {
+    latitude: lat,
+    longitude: lng,
+    accuracy: 12,
+    altitude: null,
+    altitudeAccuracy: null,
+    heading: null,
+    speed: null,
+  }
+  return {
+    coords: { ...coords, toJSON: () => coords },
+    timestamp: Date.now(),
+    toJSON: () => ({}),
+  }
+}
+
+beforeEach(() => {
+  resetGeoWatchForTests()
+  localStorage.clear()
+  watchPositionMock.mockReset().mockReturnValue(1)
+  getCurrentPositionMock.mockReset()
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    userAgent: navigator.userAgent,
+    maxTouchPoints: 0,
+    geolocation: {
+      watchPosition: watchPositionMock,
+      getCurrentPosition: getCurrentPositionMock,
+      clearWatch: vi.fn(),
+    },
+  })
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
 describe('map screen', () => {
-  it('renders the toggle, the legend and the pending list from real data', async () => {
+  it('renders the toggle and the pending list from real data', async () => {
     renderRoute('/mapa')
-    expect(await screen.findByText('Avistamientos en La Latina')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Avistamientos' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Avistamientos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mapa de calor' })).toBeInTheDocument()
     expect(screen.getByText('Cerca de ti')).toBeInTheDocument()
     // one pending fixture → the «Cerca de ti» counter and its age line
@@ -134,11 +192,22 @@ describe('map screen', () => {
     ).toBeInTheDocument()
   })
 
-  it('a «Cerca de ti» row opens the verification modal directly (door 2)', async () => {
+  it('the «Verificar» of a «Cerca de ti» row opens the verification modal directly (door 2)', async () => {
+    const user = userEvent.setup()
+    renderRoute('/mapa')
+    await user.click(await screen.findByRole('button', { name: /^Verificar \S/ }))
+    expect(await screen.findByText('Verificar avistamiento')).toBeInTheDocument()
+  })
+
+  it('tapping a «Cerca de ti» row shows the creature first, without opening the modal', async () => {
     const user = userEvent.setup()
     renderRoute('/mapa')
     await user.click(await screen.findByText('La Latina · hace 35 min'))
-    expect(await screen.findByText('Verificar avistamiento')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Ubicación aproximada · La Latina · hace 35 min'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '✔ Verificar' })).toBeInTheDocument()
+    expect(screen.queryByText('Verificar avistamiento')).not.toBeInTheDocument()
   })
 
   it('confirming toasts the validated outcome and re-reads the map (pin stops blinking)', async () => {
@@ -255,5 +324,210 @@ describe('map screen', () => {
     await user.click(screen.getByRole('button', { name: 'Mapa de calor' }))
     expect(screen.queryByRole('button', { name: 'pin s-approved' })).not.toBeInTheDocument()
     expect(screen.getByText('Mapa de calor · próximamente')).toBeInTheDocument()
+  })
+
+  describe('full-bleed layout (LCHP-34)', () => {
+    it('tapping the map closes the detail and goes back to the list header', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'pin s-approved' }))
+      expect(await screen.findByText('Validado')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'map background' }))
+      expect(screen.queryByText('Validado')).not.toBeInTheDocument()
+      expect(screen.getByText('Cerca de ti')).toBeInTheDocument()
+    })
+
+    it('folding the sheet keeps its header and hides the list; a pin unfolds it again', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Plegar la lista' }))
+      expect(screen.queryByText('La Latina · hace 35 min')).not.toBeInTheDocument()
+      expect(screen.getByText('1 Por verificar')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'pin s-approved' }))
+      expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
+    })
+
+    it('has no title card: one switch between the two views of the map', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      const pins = await screen.findByRole('button', { name: 'Avistamientos' })
+      const heat = screen.getByRole('button', { name: 'Mapa de calor' })
+      expect(screen.getByRole('group', { name: 'Vista del mapa' })).toContainElement(pins)
+      expect(screen.queryByText('Avistamientos en La Latina')).not.toBeInTheDocument()
+      expect(pins).toHaveAttribute('aria-pressed', 'true')
+      await user.click(heat)
+      expect(heat).toHaveAttribute('aria-pressed', 'true')
+      expect(pins).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('has no legend box: the card of a pin says what the creature is and what the blinking means', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      const sheet = within(await screen.findByRole('region', { name: 'Avistamientos cerca de ti' }))
+      expect(screen.queryByRole('button', { name: 'Leyenda' })).not.toBeInTheDocument()
+      expect(sheet.queryByRole('button', { name: /Especies/ })).not.toBeInTheDocument()
+
+      const region = screen.getByRole('region', { name: 'Avistamientos cerca de ti' })
+      const rings = () => region.querySelectorAll('.chip-ring').length
+      await screen.findByText('1 Por verificar')
+      expect(rings()).toBe(1)
+
+      await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+      expect(rings()).toBe(2)
+      expect(
+        sheet.getByText('Edificio con actividad turística observable desde el espacio público.'),
+      ).toBeInTheDocument()
+      expect(
+        sheet.getByText('Parpadea en el mapa hasta que otros vecinos lo confirmen.'),
+      ).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'pin s-approved' }))
+      expect(
+        sheet.getByText('Candado o caja de llaves instalada en la vía pública.'),
+      ).toBeInTheDocument()
+      expect(sheet.queryByText(/Parpadea en el mapa/)).not.toBeInTheDocument()
+      expect(rings()).toBe(1)
+    })
+
+    it('picking the same creature again from the list still scrolls up to its card', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      const row = await screen.findByText('La Latina · hace 35 min')
+      await user.click(row)
+      const body = screen.getByRole('region', {
+        name: 'Avistamientos cerca de ti',
+      }).lastElementChild
+      if (!body) throw new Error('the sheet has no body')
+      body.scrollTop = 180
+      await user.click(screen.getByText('La Latina · hace 35 min'))
+      expect(body.scrollTop).toBe(0)
+    })
+
+    it('folding the sheet puts the open card away', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+      expect(screen.getByRole('button', { name: 'Ver evidencia' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Plegar la lista' }))
+      expect(screen.queryByRole('button', { name: 'Ver evidencia' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Cerca de ti/ })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
+    })
+
+    it('the whole «Cerca de ti» row folds and unfolds the sheet', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
+      const row = screen.getByRole('button', { name: /Cerca de ti/ })
+      await user.click(row)
+      expect(screen.queryByText('La Latina · hace 35 min')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Cerca de ti/ }))
+      expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
+    })
+  })
+
+  describe('«dónde estoy» (LCHP-34, D-052)', () => {
+    it('never asks for the position on load', async () => {
+      renderRoute('/mapa')
+      await screen.findByRole('button', { name: 'Avistamientos' })
+      await new Promise((r) => setTimeout(r, 30))
+      expect(watchPositionMock).not.toHaveBeenCalled()
+      expect(getCurrentPositionMock).not.toHaveBeenCalled()
+    })
+
+    it('a tap starts the watch; a fix in the barrio is shown and followed until the map is dragged', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      const locate = await screen.findByRole('button', { name: 'Ir a mi posición' })
+      await user.click(locate)
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
+      const [success] = watchPositionMock.mock.calls[0] ?? []
+      act(() => success?.(geoFix(40.4115, -3.712)))
+      const map = await screen.findByTestId('map')
+      expect(map).toHaveAttribute('data-me', '40.4115,-3.712')
+      expect(map).toHaveAttribute('data-follow', 'true')
+      expect(locate).toHaveAttribute('aria-pressed', 'true')
+      expect(map).toHaveAttribute('data-follow-request', '1')
+      await user.click(locate)
+      expect(map).toHaveAttribute('data-follow-request', '2')
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      expect(map).toHaveAttribute('data-follow', 'false')
+      expect(map).toHaveAttribute('data-me', '40.4115,-3.712')
+    })
+
+    it('a denial explains how to allow it, and the notice can be closed', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'Ir a mi posición' }))
+      const [, fail] = watchPositionMock.mock.calls[0] ?? []
+      act(() =>
+        fail?.({ code: 1, message: '', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }),
+      )
+      expect(await screen.findByText(/Sin permiso de ubicación/)).toBeInTheDocument()
+      expect(screen.queryByText(/coloca el pin a mano/)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Cerrar aviso' }))
+      expect(screen.queryByText(/Sin permiso de ubicación/)).not.toBeInTheDocument()
+    })
+
+    it('a folded sheet still shows why the position could not be used', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'Plegar la lista' }))
+      await user.click(screen.getByRole('button', { name: 'Ir a mi posición' }))
+      const [, fail] = watchPositionMock.mock.calls[0] ?? []
+      act(() =>
+        fail?.({ code: 1, message: '', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }),
+      )
+      expect(await screen.findByText(/Sin permiso de ubicación/)).toBeInTheDocument()
+    })
+
+    it('a watch resumed on arrival says nothing until the neighbour asks where they are', async () => {
+      const user = userEvent.setup()
+      localStorage.setItem('lis.geo.granted', '1')
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+      })
+      renderRoute('/mapa')
+      await vi.waitFor(() => expect(watchPositionMock).toHaveBeenCalledTimes(1))
+      const [success] = watchPositionMock.mock.calls[0] ?? []
+      act(() => success?.(geoFix(41.3874, 2.1686)))
+      expect(screen.queryByText(/Estás fuera de La Latina/)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Ir a mi posición' }))
+      const [again] = watchPositionMock.mock.calls.at(-1) ?? []
+      act(() => again?.(geoFix(41.3874, 2.1686)))
+      expect(await screen.findByText(/Estás fuera de La Latina/)).toBeInTheDocument()
+    })
+
+    it('a watch paused on return from the background says how to get the position back', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'Ir a mi posición' }))
+      const [success] = watchPositionMock.mock.calls[0] ?? []
+      act(() => success?.(geoFix(40.4115, -3.712)))
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(
+        await screen.findByText(/Toca «Ir a mi posición» para volver a ver/),
+      ).toBeInTheDocument()
+      expect(screen.getByTestId('map')).toHaveAttribute('data-me', '')
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('a position outside La Latina is neither shown nor followed, and says why', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'Ir a mi posición' }))
+      const [success] = watchPositionMock.mock.calls[0] ?? []
+      act(() => success?.(geoFix(41.3874, 2.1686)))
+      expect(await screen.findByText(/Estás fuera de La Latina/)).toBeInTheDocument()
+      const map = screen.getByTestId('map')
+      expect(map).toHaveAttribute('data-me', '')
+      expect(map).toHaveAttribute('data-follow', 'false')
+    })
   })
 })
