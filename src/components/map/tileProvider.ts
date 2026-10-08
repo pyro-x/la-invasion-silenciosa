@@ -8,6 +8,8 @@ import { chisperaStyle } from './styles/chispera'
 
 export type TileProviderId = 'openfreemap-vector' | 'osm-raster'
 
+// compactAttribution: whether the provider's terms let the credit fold to
+// an (i) button (attribution.ts). OSM's own tile servers do not.
 export type TileProviderConfig =
   | {
       id: TileProviderId
@@ -16,8 +18,14 @@ export type TileProviderConfig =
       tileSize: 256
       maxzoom: number
       attribution: string
+      compactAttribution: boolean
     }
-  | { id: TileProviderId; kind: 'vector'; style: StyleSpecification | string }
+  | {
+      id: TileProviderId
+      kind: 'vector'
+      style: StyleSpecification | string
+      compactAttribution: boolean
+    }
 
 // OpenFreeMap terms (https://openfreemap.org/tos/, read 2026-10-08): no
 // registration, no API key, no stated request limits, commercial use allowed,
@@ -32,12 +40,12 @@ export const tileProvider: TileProviderConfig = {
   id: 'openfreemap-vector',
   kind: 'vector',
   style: chisperaStyle,
+  compactAttribution: true,
 }
 
 // The MVP's original basemap (brief §21, LCHP-4/LCHP-13), kept as the
-// emergency fallback. Using it again means honouring the OSM Tile Usage
-// Policy: attribution must stay visible (no compact control) and tiles must
-// never be precached.
+// emergency fallback. The OSM Tile Usage Policy wants the credit always
+// visible (hence compactAttribution: false) and tiles never precached.
 export const OSM_RASTER_FALLBACK: TileProviderConfig = {
   id: 'osm-raster',
   kind: 'raster',
@@ -45,6 +53,7 @@ export const OSM_RASTER_FALLBACK: TileProviderConfig = {
   tileSize: 256,
   maxzoom: 19,
   attribution: '© OpenStreetMap contributors',
+  compactAttribution: false,
 }
 
 export function buildMapStyle(provider: TileProviderConfig): StyleSpecification | string {

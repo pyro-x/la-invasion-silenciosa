@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { STYLE_CREDIT } from './styles/chispera'
+import { addAttribution } from './attribution'
 import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 
 type Props = {
@@ -38,12 +38,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
       dragRotate: false,
       pitchWithRotate: false,
     })
-    // Same credits as BarrioMap: data (OSM + OpenMapTiles) and the style's
-    // CC-BY design credit; open on load, folds after the first interaction.
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true, customAttribution: STYLE_CREDIT }),
-      'bottom-right',
-    )
+    const stopAttributionFold = addAttribution(map, tileProvider)
     map.on('moveend', () => {
       const byUser = !movedByCode.current
       movedByCode.current = false
@@ -57,6 +52,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
     })
     mapRef.current = map
     return () => {
+      stopAttributionFold()
       map.remove()
       mapRef.current = null
     }

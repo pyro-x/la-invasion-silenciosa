@@ -1193,10 +1193,22 @@ policy). Marcado como `// TODO(post-mvp)`.
 
 **Licencia del estilo:** `positron` es BSD-3 (código) + CC-BY 4.0 (diseño,
 derivado de CartoDB Basemaps de Stamen/Paul Norman, CC-BY 3.0), vía
-openfreemap-styles (MIT). El aviso completo se conserva en la cabecera de
-`chispera.ts` y el crédito de diseño («Estilo basado en Positron © CARTO,
-CC-BY 4.0», `STYLE_CREDIT`) se muestra en el control de atribución del
-mapa, como exige la licencia (accesible desde el mapa).
+openfreemap-styles (MIT). Cumplimiento:
+
+* **Código (BSD-3):** el `LICENSE.md` de upstream se conserva íntegro en
+  `src/components/map/styles/POSITRON-LICENSE.md` (condiciones y descargo
+  incluidos); la cabecera de `chispera.ts` mantiene las líneas de copyright
+  y remite a él.
+* **Diseño (CC-BY 4.0):** la licencia dice que el crédito de diseño «needs
+  not to be provided on map images, but should be reasonably accessible
+  from maps based on this style». Por eso **no** va en el control de
+  atribución del mapa: vive en la página **`/creditos` «Créditos y
+  licencias»**, enlazada desde el pie de Perfil, que muestra el crédito
+  (MapTiler/OpenMapTiles, CartoDB, Stamen y Paul Norman, enlace a CC BY
+  4.0) y el texto completo de la licencia, importado del fichero
+  vendorizado para que página y código no puedan divergir.
+* **Datos (OpenStreetMap + OpenMapTiles):** esos créditos sí son
+  obligatorios en el mapa — ver «Atribución» más abajo.
 
 **Peso (medido 2026-10-08, app compilada, 412×892 @3x):** la primera carga
 pide 4 tiles vectoriales z14 ≈ 1,5 MB gzip (2,5 MB descomprimidos) + 3
@@ -1211,7 +1223,9 @@ no celdas z16–z19.
 El estilo `chispera.ts` es `positron` con estas modificaciones y nada
 más (la procedencia y la lista viven en la cabecera del módulo):
 
-* paleta chispera en todos los colores de relleno, línea y texto;
+* paleta chispera en las capas que este mapa puede mostrar (aeropuertos,
+  glaciares y plataformas de hielo conservan el color de positron: nada
+  dentro de `maxBounds` los dibuja);
 * etiquetas `coalesce(name:es, name:latin, name)` en todas las capas con
   nombre (positron las escribe en inglés cuando existe `name_en`);
 * eliminadas las tres capas de escudos de carretera y la capa `airport`
@@ -1223,30 +1237,51 @@ más (la procedencia y la lista viven en la cabecera del módulo):
   debajo de z10);
 * etiquetas de fuentes y estanques (`water_name_point_label`) reducidas de
   14 px a 10–12 px: gritaban más que los nombres de calle;
-* añadida una capa `park_label` (positron no etiqueta parques; los vecinos
-  se orientan por plazas y parques — espacios públicos, nunca locales);
 * corregido `["linear", 1]` → `["linear"]` en `boundary_3` (positron lo
   escribe así; MapLibre lo tolera, el tipo `StyleSpecification` no).
 
-Regeneración: `node scripts/build-map-style.mjs <paleta>` (descarga
-positron, aplica la paleta y las modificaciones de arriba, escribe el
-módulo); luego `pnpm format`. Las cuatro paletas candidatas (pergamino, papel, tierra, verde) viven en
-el script; la vigente es **papel** (elegida por David, 2026-10-08).
+Regeneración: `node scripts/build-map-style.mjs [paleta]` lee la
+**instantánea versionada** de positron (`scripts/positron.snapshot.json`,
+descargada 2026-10-08), aplica la paleta y las modificaciones de arriba y
+escribe el módulo; luego `pnpm format`. El resultado es reproducible byte a
+byte; `--refresh` vuelve a descargar la instantánea para revisar su diff
+antes de versionarla. Las cuatro paletas candidatas (pergamino, papel,
+tierra, verde) viven en el script; la vigente es **papel** (elegida por
+David, 2026-10-08).
 
 **Regla de oro (D-046):** el estilo **no dibuja números de portal ni
 puntos de interés** (`housenumber`, `poi`, tampoco `mountain_peak` ni
 `aerodrome_label`) — un basemap que etiqueta la puerta o el local anularía
 la ubicación aproximada. Fijado por test en `tileProvider.test.ts` con una
-**lista blanca** de `source-layer` de espacio público, junto con «una sola
-fuente, OpenFreeMap», «sin key/token en el estilo», «la expresión exacta
-`coalesce(name:es, name:latin, name)` en toda capa con nombre», «sin
-sprite» y «el fallback raster sigue construyéndose». Pérdida asumida
-frente al raster OSM: no hay etiquetas de locales, metro ni iglesias; sí
-plazas y parques.
+**lista blanca** de `source-layer` y, además, **el texto solo puede salir
+de `transportation_name`, `water_name`, `waterway` y `place`** (una
+etiqueta sobre `building`, `landuse` o `park` nombraría un local), junto
+con «una sola fuente, OpenFreeMap», «sin key/token en el estilo», «la
+expresión exacta `coalesce(name:es, name:latin, name)` en toda capa con
+nombre», «sin sprite» y «el fallback raster sigue construyéndose». Pérdida
+asumida frente al raster OSM: no hay etiquetas de locales, metro, iglesias
+ni parques — el mapa nombra calles, agua y barrios (las plazas aparecen
+cuando son vía en `transportation_name`). Se probó una capa `park_label`
+y se retiró: en OpenMapTiles la capa `park` contiene áreas protegidas y
+bienes de interés cultural (dentro de nuestro encuadre etiquetaba un resto
+de muralla y un edificio institucional, no Las Vistillas); los nombres que
+usan los vecinos están en `poi`, que la regla de oro excluye.
 
-Atribución: control compacto de MapLibre, visible al cargar y plegable
-al interactuar (lo que permiten las guías de atribución de la OSMF); nunca
-plegado a la fuerza al cargar.
+Atribución (`src/components/map/attribution.ts`): OpenMapTiles exige su
+crédito «in the corner of the map» y las guías de atribución de la OSMF
+piden el de OpenStreetMap en una esquina, permitiendo plegarlo al
+interactuar con el mapa o pasados cinco segundos siempre que siga siendo
+localizable. El mapa usa el control compacto de MapLibre con el texto que
+da el tilejson («OpenFreeMap © OpenMapTiles Data from OpenStreetMap»):
+**abierto al cargar — nunca plegado de inicio —** y plegado al botón (i)
+a los **5 s** o al primer movimiento del usuario (arrastre, pellizco o
+doble toque; MapLibre por sí solo solo pliega al arrastrar). Medido: abierto
+ocupa 351×24 px a 412 px de ancho (una línea) y 308×44 / 268×44 px a
+360 / 320 px (dos líneas); plegado, 24×24 px. La licencia de
+OpenMapTiles no menciona el plegado: entender que el control compacto
+estándar cumple «esquina del mapa» es interpretación nuestra. Si el
+crédito puede plegarse viaja con el proveedor (`compactAttribution`):
+`true` para OpenFreeMap, `false` para `OSM_RASTER_FALLBACK`.
 
 Caché (para LCHP-17): tiles, glifos y estilo pueden cachearse en runtime
 (stale-while-revalidate: es uso interactivo normal, que los términos
@@ -1395,7 +1430,7 @@ unión discriminada evita los campos huérfanos:
 import type { StyleSpecification } from 'maplibre-gl'
 import { chisperaStyle } from './styles/chispera'
 
-export type TileProviderId = 'openfreemap-vector' | 'osm-raster' | 'custom-vector'
+export type TileProviderId = 'openfreemap-vector' | 'osm-raster'
 
 export type TileProviderConfig =
   | {
@@ -1405,14 +1440,24 @@ export type TileProviderConfig =
       tileSize: 256
       maxzoom: number
       attribution: string
+      compactAttribution: boolean
     }
-  | { id: TileProviderId; kind: 'vector'; style: StyleSpecification | string }
+  | {
+      id: TileProviderId
+      kind: 'vector'
+      style: StyleSpecification | string
+      compactAttribution: boolean
+    }
 
 export const tileProvider: TileProviderConfig = {
   id: 'openfreemap-vector',
   kind: 'vector',
   style: chisperaStyle,
+  compactAttribution: true,
 }
+
+// Fallback de emergencia: el raster OSM original (crédito siempre visible).
+export const OSM_RASTER_FALLBACK: TileProviderConfig = { /* … */ compactAttribution: false }
 
 export function buildMapStyle(provider: TileProviderConfig): StyleSpecification | string {
   if (provider.kind === 'vector') return provider.style
@@ -2258,7 +2303,8 @@ Playwright
 ### Paso 3 — Mapa funcional
 
 * MapLibre;
-* raster tiles OSM temporales;
+* raster tiles OSM temporales (sustituidos por vector tiles de OpenFreeMap
+  en LCHP-33, §21);
 * leer avistamientos approved;
 * mostrar iconos;
 * abrir detalle.

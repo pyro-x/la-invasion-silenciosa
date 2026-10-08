@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { STYLE_CREDIT } from './styles/chispera'
+import { addAttribution } from './attribution'
 import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 import type { MapSightingGeo } from '@/types/sighting'
 
@@ -45,16 +45,11 @@ export function BarrioMap({ sightings, selectedId, onPick, renderMarker }: Props
       dragRotate: false,
       pitchWithRotate: false,
     })
-    // Data credit (OSM + OpenMapTiles, required by OpenFreeMap) plus the
-    // style's CC-BY design credit. Compact: open on load, folds after the
-    // first interaction — never force-collapsed.
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true, customAttribution: STYLE_CREDIT }),
-      'bottom-right',
-    )
+    const stopAttributionFold = addAttribution(map, tileProvider)
     mapRef.current = map
     map.on('load', () => setReady(true))
     return () => {
+      stopAttributionFold()
       map.remove()
       mapRef.current = null
       objs.clear()

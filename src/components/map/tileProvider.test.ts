@@ -28,6 +28,11 @@ const ALLOWED_SOURCE_LAYERS = [
   'place',
 ]
 
+// Text may only come from these: streets, water, and place names. A label
+// on `building`, `park` (heritage sites and protected buildings in
+// OpenMapTiles) or `landuse` would name a venue.
+const LABEL_SOURCE_LAYERS = ['water_name', 'waterway', 'transportation_name', 'place']
+
 const SPANISH_FIRST = ['coalesce', ['get', 'name:es'], ['get', 'name:latin'], ['get', 'name']]
 
 describe('tileProvider', () => {
@@ -66,6 +71,19 @@ describe('tileProvider', () => {
     for (const l of named) {
       expect(l.layout?.['text-field'], l.id).toEqual(SPANISH_FIRST)
     }
+  })
+
+  it('puts text only on street, water and place-name layers', () => {
+    const symbols = layersOf(style).filter((l) => l.type === 'symbol')
+    expect(symbols.length).toBeGreaterThan(5)
+    for (const l of symbols) {
+      expect(LABEL_SOURCE_LAYERS, l.id).toContain(l['source-layer'])
+    }
+  })
+
+  it('lets the credit fold for OpenFreeMap but never for OSM raster', () => {
+    expect(tileProvider.compactAttribution).toBe(true)
+    expect(OSM_RASTER_FALLBACK.compactAttribution).toBe(false)
   })
 
   it('needs no sprite sheet', () => {
