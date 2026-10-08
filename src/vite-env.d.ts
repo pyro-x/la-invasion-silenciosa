@@ -2,6 +2,11 @@
 declare const __APP_VERSION__: string
 declare const __APP_COMMIT__: string
 
+declare module '*.md?raw' {
+  const content: string
+  export default content
+}
+
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string
   readonly VITE_SUPABASE_ANON_KEY: string

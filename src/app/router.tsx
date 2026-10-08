@@ -8,6 +8,7 @@ import { SpeciesDetailPage } from '@/pages/SpeciesDetailPage'
 import { HuntPage } from '@/pages/HuntPage'
 import { RankingPage } from '@/pages/RankingPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { CreditsPage } from '@/pages/CreditsPage'
 
 // Route paths are user-visible → Spanish (D-016); code identifiers stay English.
 export const routes = [
@@ -22,6 +23,7 @@ export const routes = [
       { path: '/especies/:speciesId', Component: SpeciesDetailPage },
       { path: '/ranking', Component: RankingPage },
       { path: '/perfil', Component: ProfilePage },
+      { path: '/perfil/creditos', Component: CreditsPage },
     ],
   },
 ]

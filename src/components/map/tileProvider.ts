@@ -1,64 +1,27 @@
-// Tile source abstraction (brief §21, validated in the LCHP-4 spike). A
-// discriminated union so a raster source (inline JSON style) and a future
-// vector source (a style URL passed straight to MapLibre) don't leak each
-// other's orphan fields. MVP ships OSM raster — no key, no account.
+// The basemap provider (brief §21): the one place that names it. MVP ships
+// OpenFreeMap vector tiles with the vendored chispera style (LCHP-33, D-059)
+// — no key, no account. A style is either an inline spec or a URL; MapLibre
+// takes both.
 import type { StyleSpecification } from 'maplibre-gl'
+import { chisperaStyle } from './styles/chispera'
 
-export type TileProviderId = 'osm-raster' | 'maptiler-vector' | 'stadia-vector' | 'custom-vector'
-
-export type TileProviderConfig =
-  | {
-      id: TileProviderId
-      kind: 'raster'
-      tiles: string[]
-      tileSize: 256
-      maxzoom: number
-      attribution: string
-    }
-  | { id: TileProviderId; kind: 'vector'; styleUrl: string }
-
-// OSM Tile Usage Policy (brief §21): exact host, HTTPS only, no alt
-// subdomains, attribution always visible, no pre-seeding. A neighborhood
-// pilot's interactive viewport use fits comfortably.
-export const tileProvider: TileProviderConfig = {
-  id: 'osm-raster',
-  kind: 'raster',
-  tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-  tileSize: 256,
-  maxzoom: 19,
-  attribution: '© OpenStreetMap contributors',
+export type TileProvider = {
+  id: 'openfreemap-vector'
+  style: StyleSpecification | string
 }
 
-// The chispera tint does NOT live here: David picked the «pergamino suave»
-// variant in the visual loop (4 candidates screenshotted side by side), and
-// it is applied as a CSS filter on the MapLibre canvas plus a cream multiply
-// veil (see .barrio-map in globals.css and BarrioMap.tsx). Raster paint
-// stays untouched so the style JSON remains provider-plumbing only.
-export function buildMapStyle(provider: TileProviderConfig): StyleSpecification {
-  if (provider.kind === 'vector') {
-    // A vector style URL is consumed directly by `new Map({ style })`; this
-    // branch exists for the post-MVP swap and is not used in the MVP.
-    throw new Error('vector tile providers are post-MVP (§23)')
-  }
-  return {
-    version: 8,
-    sources: {
-      [provider.id]: {
-        type: 'raster',
-        tiles: provider.tiles,
-        tileSize: provider.tileSize,
-        maxzoom: provider.maxzoom,
-        attribution: provider.attribution,
-      },
-    },
-    layers: [
-      {
-        id: provider.id,
-        type: 'raster',
-        source: provider.id,
-      },
-    ],
-  }
+// OpenFreeMap terms (https://openfreemap.org/tos/, read 2026-10-08): no
+// registration, no API key, no stated request limits, commercial use allowed,
+// attribution required (OpenStreetMap + OpenMapTiles), automated bulk
+// collection forbidden, service provided as-is and may be discontinued without
+// notice. No SLA — the public instance is donation-funded.
+// TODO(post-mvp): if the public instance disappears, OpenFreeMap's server
+// setup is open source but publishes full-planet dumps only; the way out is
+// cutting a La Latina extract ourselves (planetiler/Geofabrik) and serving
+// z/x/y from R2/Pages (brief §22, option C).
+export const tileProvider: TileProvider = {
+  id: 'openfreemap-vector',
+  style: chisperaStyle,
 }
 
 // The real La Latina frame verified by the spike (brief §21). The map OPENS
