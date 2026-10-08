@@ -441,27 +441,66 @@ body {
   right: calc(env(safe-area-inset-right, 0px) + var(--map-edge));
   z-index: 3;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  justify-content: center;
   pointer-events: none;
 }
 .map-top > * {
   pointer-events: auto;
 }
-.map-title {
-  background: color-mix(in srgb, var(--card) 92%, transparent);
+/* One switch between two views of the same map, on an opaque card so it
+   reads over any street. */
+.map-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--card);
   border: var(--bw) solid var(--line);
-  border-radius: 14px;
-  padding: 8px 12px;
+  border-radius: 999px;
   box-shadow: var(--shadow);
 }
-.map-chip {
+.map-mode {
+  min-height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
+}
+.map-mode[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.map-note {
+  background: var(--card);
+  color: var(--ink-dim);
   box-shadow: var(--shadow);
 }
-.map-chip.chip-ghost {
-  background: color-mix(in srgb, var(--card) 90%, transparent);
+.map-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.map-species {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 4px 0 6px;
 }
 .map-float {
   position: absolute;

@@ -130,8 +130,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('map screen', () => {
   it('renders the toggle and the pending list from real data', async () => {
     renderRoute('/mapa')
-    expect(await screen.findByText('Avistamientos en La Latina')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Avistamientos' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Avistamientos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mapa de calor' })).toBeInTheDocument()
     expect(screen.getByText('Cerca de ti')).toBeInTheDocument()
     // one pending fixture → the «Cerca de ti» counter and its age line
@@ -331,17 +330,48 @@ describe('map screen', () => {
       expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
     })
 
-    it('has no species legend: the sprites are named in the sheet', async () => {
+    it('has no title card: one switch between the two views of the map', async () => {
+      const user = userEvent.setup()
       renderRoute('/mapa')
-      await screen.findByText('Avistamientos en La Latina')
+      const pins = await screen.findByRole('button', { name: 'Avistamientos' })
+      const heat = screen.getByRole('button', { name: 'Mapa de calor' })
+      expect(screen.getByRole('group', { name: 'Vista del mapa' })).toContainElement(pins)
+      expect(screen.queryByText('Avistamientos en La Latina')).not.toBeInTheDocument()
+      expect(pins).toHaveAttribute('aria-pressed', 'true')
+      await user.click(heat)
+      expect(heat).toHaveAttribute('aria-pressed', 'true')
+      expect(pins).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('the species legend lives in the sheet, folded until asked, never over the map', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      const toggle = await screen.findByRole('button', { name: /Especies/ })
+      expect(screen.getByRole('region', { name: 'Avistamientos cerca de ti' })).toContainElement(
+        toggle,
+      )
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
       expect(screen.queryByRole('button', { name: 'Leyenda' })).not.toBeInTheDocument()
+      await user.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('the whole «Cerca de ti» row folds and unfolds the sheet', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
+      const row = screen.getByRole('button', { name: /Cerca de ti/ })
+      await user.click(row)
+      expect(screen.queryByText('La Latina · hace 35 min')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Cerca de ti/ }))
+      expect(await screen.findByText('La Latina · hace 35 min')).toBeInTheDocument()
     })
   })
 
   describe('«dónde estoy» (LCHP-34, D-052)', () => {
     it('never asks for the position on load', async () => {
       renderRoute('/mapa')
-      await screen.findByText('Avistamientos en La Latina')
+      await screen.findByRole('button', { name: 'Avistamientos' })
       await new Promise((r) => setTimeout(r, 30))
       expect(watchPositionMock).not.toHaveBeenCalled()
       expect(getCurrentPositionMock).not.toHaveBeenCalled()

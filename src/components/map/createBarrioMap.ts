@@ -37,8 +37,8 @@ export type BarrioMapController = {
 }
 
 const VIEW_KEY = 'lis.map.view'
-// Height of the floating title and mode chips the opening frame stays below.
-const TOP_CHROME_PX = 104
+// Height of the floating mode switch the opening frame stays below.
+const TOP_CHROME_PX = 64
 const ME_SOURCE = 'me'
 // GeoJSON's types are not a direct dependency; take them from MapLibre.
 type GeoJsonData = Parameters<maplibregl.GeoJSONSource['setData']>[0]
@@ -104,6 +104,8 @@ export function createBarrioMap(
   const markers = new Map<string, maplibregl.Marker>()
   const meElement = document.createElement('div')
   meElement.className = 'map-me-dot'
+  // Pins are what you tap: they stay above the user's own dot.
+  meElement.style.zIndex = '1'
   const meMarker = new maplibregl.Marker({ element: meElement })
   let me: MePosition | null = null
   let loaded = false
@@ -178,6 +180,7 @@ export function createBarrioMap(
         } else {
           const el = document.createElement('div')
           el.style.cursor = 'pointer'
+          el.style.zIndex = '2'
           el.addEventListener('click', (event) => {
             event.stopPropagation()
             handlers.onPick(sighting.id)
@@ -212,8 +215,10 @@ export function createBarrioMap(
         framed = true
         userChoseView = false
         programmaticMove = true
+        // The sheet is already in the map's own padding (set just above);
+        // fitBounds adds its padding on top, so only the margins go here.
         map.fitBounds(LA_LATINA_BOUNDS, {
-          padding: { top: TOP_CHROME_PX, bottom: px + 16, left: 16, right: 16 },
+          padding: { top: TOP_CHROME_PX, bottom: 16, left: 16, right: 16 },
           duration: 0,
         })
       }

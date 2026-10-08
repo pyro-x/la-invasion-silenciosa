@@ -94,7 +94,9 @@ describe('createBarrioMap', () => {
     controller.setBottomPadding(120)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([300, 120])
     expect(recorded.fits).toHaveLength(1)
-    expect(recorded.fits[0]?.padding.bottom).toBeGreaterThan(300)
+    // the sheet is in the map's own padding; the fit only adds margins
+    expect(recorded.paddings[0]?.bottom).toBe(300)
+    expect(recorded.fits[0]?.padding.bottom).toBeLessThan(40)
   })
 
   it('waits for a measured sheet before fitting: zero is not a height', () => {
@@ -103,7 +105,7 @@ describe('createBarrioMap', () => {
     expect(recorded.fits).toHaveLength(0)
     controller.setBottomPadding(310)
     expect(recorded.fits).toHaveLength(1)
-    expect(recorded.fits[0]?.padding.bottom).toBeGreaterThan(310)
+    expect(recorded.paddings.at(-1)?.bottom).toBe(310)
   })
 
   it('never stores a view the user did not choose — the opening fit, a pin, following', () => {

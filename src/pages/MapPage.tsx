@@ -102,6 +102,7 @@ export function MapPage() {
   const evidenceReq = useRef(0)
 
   const [sheetOpen, setSheetOpen] = useState(true)
+  const [speciesOpen, setSpeciesOpen] = useState(false)
   const [sheetHeight, setSheetHeight] = useState(0)
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [zoomStep, setZoomStep] = useState<{ delta: number } | null>(null)
@@ -188,10 +189,50 @@ export function MapPage() {
   const notice = locateNotice(geo, outsideBarrio)
   const follow = following && me !== null && !outsideBarrio
 
+  // The whole row is the control: the orange counter looks like a button,
+  // so it is one.
   const nearbyHeader = (
-    <div className="row" style={{ justifyContent: 'space-between' }}>
+    <button
+      type="button"
+      className="map-sheet-row"
+      aria-expanded={sheetOpen}
+      onClick={() => setSheetOpen((open) => !open)}
+    >
       <span className="eyebrow">Cerca de ti</span>
       {!isError && <span className="chip chip-warn">{pending.length} Por verificar</span>}
+    </button>
+  )
+
+  // The legend lives in the sheet, not on the map, where it covered the
+  // pins it explains (design panel, D-061).
+  const speciesLegend = (
+    <div>
+      <button
+        type="button"
+        className="map-sheet-row"
+        aria-expanded={speciesOpen}
+        onClick={() => setSpeciesOpen((open) => !open)}
+      >
+        <span className="eyebrow">Especies</span>
+        <span className="mono" aria-hidden style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+          {speciesOpen ? '▾' : '▸'}
+        </span>
+      </button>
+      {speciesOpen && (
+        <div className="map-species">
+          {species.map((c) => (
+            <div key={c.id} className="stack center" style={{ gap: 4 }}>
+              <CreatureSprite id={c.id} scale={2} />
+              <span
+                className="mono"
+                style={{ fontSize: 8.5, color: 'var(--ink-dim)', lineHeight: 1 }}
+              >
+                {c.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 
@@ -218,16 +259,10 @@ export function MapPage() {
       </Suspense>
 
       <div className="map-top">
-        <div className="map-title">
-          <div className="eyebrow">Mapa del barrio</div>
-          <div className="scr-title" style={{ fontSize: 16 }}>
-            Avistamientos en La Latina
-          </div>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="map-modes" role="group" aria-label="Vista del mapa">
           <button
             type="button"
-            className={'chip map-chip ' + (!heat ? 'chip-accent' : 'chip-ghost')}
+            className="map-mode"
             aria-pressed={!heat}
             onClick={() => setHeat(false)}
           >
@@ -235,7 +270,7 @@ export function MapPage() {
           </button>
           <button
             type="button"
-            className={'chip map-chip ' + (heat ? 'chip-accent' : 'chip-ghost')}
+            className="map-mode"
             aria-pressed={heat}
             onClick={() => setHeat(true)}
           >
@@ -277,7 +312,7 @@ export function MapPage() {
             pointerEvents: 'none',
           }}
         >
-          <span className="chip chip-ghost mono map-chip" style={{ fontSize: 10 }}>
+          <span className="chip mono map-note" style={{ fontSize: 10 }}>
             Mapa de calor · próximamente
           </span>
         </div>
@@ -368,7 +403,10 @@ export function MapPage() {
               </div>
             </div>
           ) : (
-            nearbyHeader
+            <div className="stack" style={{ gap: 4 }}>
+              {nearbyHeader}
+              {speciesLegend}
+            </div>
           )
         }
       >

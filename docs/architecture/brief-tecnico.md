@@ -1118,9 +1118,8 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 
 ```text
 ┌──────────────────────────────┐
-│ [Mapa del barrio · título]   │  tarjeta flotante + chips
-│ [Avistamientos][Mapa calor]  │  «Avistamientos / Mapa de calor»
-│                              │
+│  [ Avistamientos | Calor ]   │  un único conmutador, centrado
+│                              │  (sin tarjeta de título)
 │          MAPA                │  pines; al tocar uno se centra en la
 │                              │  parte visible
 │                       [◎]    │  «Ir a mi posición»
@@ -1128,10 +1127,28 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 ├──────────────────────────────┤
 │ ▬  HOJA INFERIOR             │  ficha del avistamiento (si hay uno
 │ Cerca de ti · N por verificar│  elegido) + lista «Cerca de ti»
+│ Especies ▸                   │  leyenda plegada, dentro de la hoja
 └──────────────────────────────┘
 │ Mapa · Especies · ◉ · …      │  barra de pestañas
 ```
 
+* **Sobre el mapa solo queda lo imprescindible** (ronda de opinión de
+  diseño con dos modelos sobre la captura del móvil de David, 2026-10-08;
+  ambos coincidieron): se elimina la tarjeta de título — la pestaña «Mapa»
+  ya dice dónde estás — y los dos chips sueltos pasan a ser **un conmutador
+  centrado** «Avistamientos | Mapa de calor» sobre fondo opaco. En las
+  esquinas, únicamente el crédito (i) y «Ir a mi posición».
+* **La leyenda vive en la hoja**, no sobre el mapa (donde tapaba los
+  pines que explica y se apilaba con el (i)): una fila «Especies» plegada
+  que al tocarla muestra los cuatro sprites con su nombre. No aparece
+  mientras hay un avistamiento elegido. El (i) es el crédito de datos del
+  mapa, no la leyenda.
+* **La fila «Cerca de ti · N por verificar» es un botón entero** que
+  pliega y despliega la hoja: el contador naranja parecía un botón y no
+  hacía nada.
+* **Los pines parpadeantes se mantienen** para los pendientes (decisión de
+  David). El punto de la posición del vecino se dibuja **debajo** de los
+  pines: encima parecía una insignia del bicho.
 * **Una sola hoja inferior** sustituye a la ficha emergente y a la lista
   separada. Plegada muestra solo su cabecera (el contador «N por
   verificar», o la ficha si hay un avistamiento elegido); desplegada añade
