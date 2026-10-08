@@ -1198,11 +1198,13 @@ openfreemap-styles (MIT). Cumplimiento:
 * **Código (BSD-3):** el `LICENSE.md` de upstream se conserva íntegro en
   `src/components/map/styles/POSITRON-LICENSE.md` (condiciones y descargo
   incluidos); la cabecera de `chispera.ts` mantiene las líneas de copyright
-  y remite a él.
+  y remite a él. La instantánea de la que partimos es la adaptación de
+  OpenFreeMap, así que su fichero de licencias (MIT, © 2023 Zsolt Ero) se
+  conserva también, en `OPENFREEMAP-STYLES-LICENSE.md`.
 * **Diseño (CC-BY 4.0):** la licencia dice que el crédito de diseño «needs
   not to be provided on map images, but should be reasonably accessible
   from maps based on this style». Por eso **no** va en el control de
-  atribución del mapa: vive en la página **`/creditos` «Créditos y
+  atribución del mapa: vive en la página **`/perfil/creditos` «Créditos y
   licencias»**, enlazada desde el pie de Perfil, que muestra el crédito
   (MapTiler/OpenMapTiles, CartoDB, Stamen y Paul Norman, enlace a CC BY
   4.0) y el texto completo de la licencia, importado del fichero

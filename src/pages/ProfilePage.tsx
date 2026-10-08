@@ -229,15 +229,15 @@ export function ProfilePage() {
           {APP_VERSION}
         </div>
         <Link
-          to="/creditos"
+          to="/perfil/creditos"
           className="mono"
           style={{
             textAlign: 'center',
-            fontSize: 10,
+            fontSize: 11,
             letterSpacing: '0.08em',
             color: 'var(--ink-dim)',
             textDecoration: 'underline',
-            padding: '6px 0 2px',
+            padding: '14px 0',
           }}
         >
           Créditos y licencias

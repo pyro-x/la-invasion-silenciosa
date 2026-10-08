@@ -10,7 +10,7 @@ describe('credits page', () => {
   })
 
   it('credits the map data providers with their licence links', async () => {
-    renderRoute('/creditos')
+    renderRoute('/perfil/creditos')
     expect(
       await screen.findByRole('link', { name: 'colaboradores de OpenStreetMap' }),
     ).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright')
@@ -22,7 +22,7 @@ describe('credits page', () => {
   })
 
   it('carries the basemap design credit and the full upstream licence', async () => {
-    renderRoute('/creditos')
+    renderRoute('/perfil/creditos')
     expect(await screen.findByRole('link', { name: 'CC BY 4.0' })).toHaveAttribute(
       'href',
       'https://creativecommons.org/licenses/by/4.0/',
@@ -31,5 +31,13 @@ describe('credits page', () => {
     const licence = screen.getByText(/Redistributions of source code must retain/)
     expect(licence).toHaveTextContent('Copyright (c) 2015, CartoDB Inc.')
     expect(licence).toHaveTextContent('THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS')
+    const mit = screen.getByText(/Permission is hereby granted, free of charge/)
+    expect(mit).toHaveTextContent('Copyright (c) 2023 Zsolt Ero')
+  })
+
+  it('keeps the Perfil tab active', async () => {
+    renderRoute('/perfil/creditos')
+    await screen.findByRole('heading', { name: 'Créditos y licencias' })
+    expect(screen.getByRole('link', { name: /perfil/i })).toHaveClass('active')
   })
 })

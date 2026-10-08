@@ -189,8 +189,9 @@ function header(paletteName) {
 // script, not this file.
 //
 // Derived from OpenFreeMap's "positron" style
-// (${UPSTREAM}, openfreemap-styles, MIT),
-// a fork of openmaptiles/positron-gl-style:
+// (${UPSTREAM}; openfreemap-styles,
+// MIT License, Copyright (c) 2023 Zsolt Ero — full notice in
+// ./OPENFREEMAP-STYLES-LICENSE.md), a fork of openmaptiles/positron-gl-style:
 //   Copyright (c) 2024, MapTiler.com & OpenMapTiles contributors.
 //   Copyright (c) 2015, CartoDB Inc.
 //   All rights reserved.
@@ -198,7 +199,7 @@ function header(paletteName) {
 //   CartoDB Inc., licensed under CC-BY 3.0.
 // Code under the BSD 3-Clause License, design under CC-BY 4.0. The complete
 // licence — conditions and disclaimer included — is retained verbatim in
-// ./POSITRON-LICENSE.md and shown to users at /creditos.
+// ./POSITRON-LICENSE.md. Both notices are shown to users at /perfil/creditos.
 //
 // Changes vs positron: chispera "${paletteName}" palette on the layers this
 // map can show; labels coalesce(name:es, name:latin, name); road shields,

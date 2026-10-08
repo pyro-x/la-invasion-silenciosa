@@ -1,8 +1,9 @@
 // Credits and licences (LCHP-33, D-059). The map shows only the data credit
-// it must show; the basemap style's design credit and its full licence text
-// live here, reachable from Perfil. The licence is the vendored upstream
-// file, so this page and the source notice cannot drift apart.
+// it must show; the basemap style's design credit and its licence texts
+// live here, reachable from Perfil. The texts are the vendored upstream
+// files, so this page and the source notices cannot drift apart.
 import { useNavigate } from 'react-router'
+import openFreeMapStylesLicense from '@/components/map/styles/OPENFREEMAP-STYLES-LICENSE.md?raw'
 import positronLicense from '@/components/map/styles/POSITRON-LICENSE.md?raw'
 
 const linkStyle = { color: 'var(--accent)', textDecoration: 'underline' }
@@ -68,6 +69,11 @@ export function CreditsPage() {
               CC BY 4.0
             </ExternalLink>
             ; hemos cambiado la paleta y las etiquetas. Código bajo licencia BSD de 3 cláusulas.
+            Partimos de la adaptación de{' '}
+            <ExternalLink href="https://github.com/hyperknot/openfreemap-styles">
+              OpenFreeMap
+            </ExternalLink>{' '}
+            (© 2023 Zsolt Ero, licencia MIT).
           </p>
           <details>
             <summary className="mono" style={{ fontSize: 11, cursor: 'pointer' }}>
@@ -84,6 +90,23 @@ export function CreditsPage() {
               }}
             >
               {positronLicense}
+            </pre>
+          </details>
+          <details>
+            <summary className="mono" style={{ fontSize: 11, cursor: 'pointer' }}>
+              Licencias de los estilos de OpenFreeMap
+            </summary>
+            <pre
+              className="mono"
+              style={{
+                fontSize: 10,
+                lineHeight: 1.45,
+                whiteSpace: 'pre-wrap',
+                color: 'var(--ink-dim)',
+                marginTop: 8,
+              }}
+            >
+              {openFreeMapStylesLicense}
             </pre>
           </details>
         </section>

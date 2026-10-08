@@ -23,7 +23,7 @@ export const routes = [
       { path: '/especies/:speciesId', Component: SpeciesDetailPage },
       { path: '/ranking', Component: RankingPage },
       { path: '/perfil', Component: ProfilePage },
-      { path: '/creditos', Component: CreditsPage },
+      { path: '/perfil/creditos', Component: CreditsPage },
     ],
   },
 ]

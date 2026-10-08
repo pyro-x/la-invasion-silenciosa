@@ -2,7 +2,7 @@
 // credited in a corner of the map; the OSM Foundation guidelines allow the
 // credit to fold on map interaction or after five seconds as long as it
 // stays reachable — MapLibre's compact control leaves an (i) button. It is
-// never folded on load. The basemap style's own credit lives at /creditos.
+// never folded on load. The basemap style's own credit lives at /perfil/creditos.
 import maplibregl from 'maplibre-gl'
 import type { TileProviderConfig } from './tileProvider'
 
