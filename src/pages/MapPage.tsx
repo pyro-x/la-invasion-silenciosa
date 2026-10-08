@@ -11,7 +11,6 @@
 // card and the «Cerca de ti» rows.
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router'
 import { LocateFixed } from 'lucide-react'
 import { MapSheet } from '@/components/map/MapSheet'
 import type { MapFocus } from '@/components/map/BarrioMap'
@@ -173,6 +172,13 @@ export function MapPage() {
     toastTimer.current = setTimeout(() => setToast(null), 2200)
   }
 
+  // Folding the sheet puts the open card away with it: a neighbour who
+  // pulls it down is done with that creature.
+  const foldSheet = (open: boolean) => {
+    if (!open) setSel(null)
+    setSheetOpen(open)
+  }
+
   // The native permission prompt fires here and only here: on this tap.
   const locate = () => {
     setDismissedNotice(null)
@@ -197,7 +203,7 @@ export function MapPage() {
       type="button"
       className="map-sheet-row"
       aria-expanded={sheetOpen}
-      onClick={() => setSheetOpen((open) => !open)}
+      onClick={() => foldSheet(!sheetOpen)}
     >
       <span className="eyebrow">Cerca de ti</span>
       {!isError && (
@@ -324,7 +330,7 @@ export function MapPage() {
       <MapSheet
         label="Avistamientos cerca de ti"
         open={sheetOpen}
-        onToggle={setSheetOpen}
+        onToggle={foldSheet}
         onHeight={setSheetHeight}
         header={
           selS ? (
@@ -385,9 +391,6 @@ export function MapPage() {
                   </button>
                 )}
               </div>
-              <Link to="/especies" className="map-card-link">
-                Ver todas las especies →
-              </Link>
             </div>
           ) : (
             nearbyHeader

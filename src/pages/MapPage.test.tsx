@@ -368,16 +368,25 @@ describe('map screen', () => {
       expect(
         sheet.getByText('Parpadea en el mapa hasta que otros vecinos lo confirmen.'),
       ).toBeInTheDocument()
-      expect(sheet.getByRole('link', { name: 'Ver todas las especies →' })).toHaveAttribute(
-        'href',
-        '/especies',
-      )
 
       await user.click(screen.getByRole('button', { name: 'pin s-approved' }))
       expect(
         sheet.getByText('Candado o caja de llaves instalada en la vía pública.'),
       ).toBeInTheDocument()
       expect(sheet.queryByText(/Parpadea en el mapa/)).not.toBeInTheDocument()
+    })
+
+    it('folding the sheet puts the open card away', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+      expect(screen.getByRole('button', { name: 'Ver evidencia' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Plegar la lista' }))
+      expect(screen.queryByRole('button', { name: 'Ver evidencia' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Cerca de ti/ })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
     })
 
     it('the whole «Cerca de ti» row folds and unfolds the sheet', async () => {

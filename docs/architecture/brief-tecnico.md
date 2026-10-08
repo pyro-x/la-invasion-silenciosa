@@ -1147,8 +1147,11 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   * la **ficha del avistamiento** dice qué es el bicho (la `description`
     de la especie, la misma del catálogo), y si está pendiente añade
     «Parpadea en el mapa hasta que otros vecinos lo confirmen.»;
-  * la ficha enlaza a «Ver todas las especies →» (`/especies`), que es la
-    referencia completa.
+  * la referencia completa es la pestaña «Especies», que ya está en
+    pantalla bajo la ficha: no se repite con un enlace.
+* **Plegar la hoja cierra la ficha.** Con un bicho elegido, bajar la hoja
+  (o tocar su asa o la fila «Cerca de ti») quita también la ficha, igual
+  que tocar el mapa; si no, la hoja parecía imposible de cerrar.
   El (i) es el crédito de datos del mapa, no una leyenda.
 * **La fila «Cerca de ti · N por verificar» es un botón entero** que
   pliega y despliega la hoja: el contador naranja parecía un botón y no

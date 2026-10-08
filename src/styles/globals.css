@@ -550,18 +550,6 @@ body {
   margin-top: 2px;
   color: var(--ink-dim);
 }
-.map-card-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-dim);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 .map-float {
   position: absolute;
   bottom: calc(var(--sheet-h) + var(--map-edge));
