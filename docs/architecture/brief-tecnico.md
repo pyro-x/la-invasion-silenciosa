@@ -1139,8 +1139,19 @@ Avistamiento pasa a rejected/removed
 No se conceden puntos
 ```
 
-## 21. Mapas: MapLibre, OSM y tiles
+## 21. Mapas: MapLibre, OpenFreeMap y tiles
 
+> **Enmienda 2026-10-08 (LCHP-33, D-059):** el basemap pasa de **raster
+> OSM teñido por CSS** a **vector tiles de OpenFreeMap con estilo propio
+> «chispera»** (`src/components/map/styles/chispera.ts`, derivado del
+> estilo `positron` de OpenFreeMap). OpenFreeMap no exige cuenta ni API
+> key, no declara límites de peticiones, permite uso comercial y solo pide
+> atribución — las mismas condiciones que hicieron elegir el raster OSM,
+> sin sus contras (sin estilo propio, borroso en retina, policy estricta).
+> La subsección «Decisión vigente» describe lo implementado; la decisión
+> original raster y los límites de la OSM Tile Usage Policy se conservan
+> como histórico. §22 y §23 quedan resueltos.
+>
 > **Enmienda 2026-07-06 (spike LCHP-4):** la combinación MapLibre GL JS +
 > raster OSM quedó **verificada con evidencia** (página desechable +
 > Playwright, viewport móvil 412×892 @2.625x). Esta sección pasa de
@@ -1150,9 +1161,70 @@ No se conceden puntos
 > `tileProvider`. Quien implemente **LCHP-13** debe leer esta sección
 > entera antes de escribir código.
 
-### Decisión MVP (verificada en LCHP-4)
+### Decisión vigente: OpenFreeMap vector + estilo chispera (LCHP-33) `Decidido`
 
-Para el MVP inicial se usará:
+```text
+MapLibre GL JS
++
+vector tiles de OpenFreeMap (esquema OpenMapTiles, tilejson
+https://tiles.openfreemap.org/planet, glifos de OpenFreeMap)
++
+estilo propio «chispera» vendorizado en el repo
++
+iconos propios encima
+```
+
+Condiciones del proveedor (verificadas 2026-10-08 en
+<https://openfreemap.org/>): sin registro, sin API key, sin cookies, sin
+límite declarado de peticiones ni de vistas, uso comercial permitido,
+**atribución obligatoria** (OpenStreetMap + OpenMapTiles; OpenFreeMap
+opcional). **Sin SLA**: la instancia pública se financia con donaciones.
+Vía de escape post-MVP: todo el servidor es open source y publican
+extractos semanales del planeta, así que un extracto del tamaño de La
+Latina servido desde R2/Pages (§22 opción C) sustituye la instancia
+pública si desapareciera (`// TODO(post-mvp)` en `tileProvider.ts`).
+
+El estilo `chispera.ts` es `positron` con estas modificaciones y nada
+más (la procedencia y la lista viven en la cabecera del módulo):
+
+* paleta chispera en todos los colores de relleno, línea y texto;
+* etiquetas `coalesce(name:es, name:latin, name)` en todas las capas con
+  nombre (positron las escribe en inglés cuando existe `name_en`);
+* eliminadas las tres capas de escudos de carretera y la capa `airport`
+  (dependen del sprite de positron; La Latina no tiene ninguna) → el
+  estilo no necesita `sprite`;
+* eliminada la fuente raster de relieve `ne2_shaded` (solo visible por
+  debajo de z6, inalcanzable dentro de `maxBounds`);
+* eliminados los `icon-*` de las etiquetas de lugar (punto de sprite por
+  debajo de z10);
+* corregido `["linear", 1]` → `["linear"]` en `boundary_3` (positron lo
+  escribe así; MapLibre lo tolera, el tipo `StyleSpecification` no).
+
+**Regla de oro (D-046):** el estilo **no dibuja números de portal ni
+puntos de interés** (`housenumber`, `poi`) — un basemap que etiqueta la
+puerta o el local anularía la ubicación aproximada. Fijado por test en
+`tileProvider.test.ts`, junto con «una sola fuente, OpenFreeMap», «sin
+key/token en el estilo», «etiquetas en castellano primero» y «sin sprite».
+
+Atribución: control compacto de MapLibre, visible al cargar y plegable
+al interactuar (lo que permiten las guías de atribución de la OSMF); nunca
+plegado a la fuerza al cargar.
+
+Caché (para LCHP-17): tiles, glifos y estilo pueden cachearse en runtime
+(stale-while-revalidate) — OpenFreeMap no tiene policy anti-caché —; el
+basemap **nunca se precachea** (por tamaño, no por policy). Si algún día
+hay CSP: `tiles.openfreemap.org` en `connect-src` e `img-src`,
+`worker-src 'self' blob:`, y la CSP solo en páginas HTML (un worker
+cacheado conserva una CSP vieja durante días — lección de Alcorqueando,
+2026-10-05).
+
+Retirado con esta decisión: el tinte CSS sobre el canvas y el velo
+multiply de D-045 (el color vive ahora en el estilo, los sprites de los
+marcadores no necesitaban protección alguna).
+
+### Decisión MVP original: raster OSM (verificada en LCHP-4; sustituida por LCHP-33)
+
+Para el MVP inicial se usó:
 
 ```text
 MapLibre GL JS
@@ -1162,7 +1234,8 @@ raster tiles públicos de OpenStreetMap
 iconos propios encima
 ```
 
-Esto permite coste cero, sin cuenta y sin API key.
+Esto permitía coste cero, sin cuenta y sin API key — pero sin estilo
+propio y borroso en pantallas retina; OpenFreeMap no se evaluó entonces.
 
 Evidencia del spike (2026-07-06, capturas en el ticket LCHP-4):
 
@@ -1185,7 +1258,11 @@ Evidencia del spike (2026-07-06, capturas en el ticket LCHP-4):
   104 tiles ≈ 2 MB: el uso interactivo normal está lejísimos de cualquier
   umbral problemático.
 
-### Límites concretos de la OSM Tile Usage Policy (verificados 2026-07-06)
+### Límites concretos de la OSM Tile Usage Policy (verificados 2026-07-06; histórico desde LCHP-33)
+
+> Ya no aplican al basemap (OpenFreeMap tiene sus propias condiciones,
+> arriba). Se conservan por si el raster OSM vuelve a usarse como
+> alternativa de emergencia a través de `kind: 'raster'`.
 
 Fuente: <https://operations.osmfoundation.org/policies/tiles/>. Lo que nos
 aplica, en concreto:
@@ -1268,22 +1345,18 @@ Camino de migración decidido para LCHP-13:
    mano o derivado del límite administrativo de OSM —, no el marco del
    lienzo.
 
-### Abstracción `tileProvider` (validada en LCHP-4)
+### Abstracción `tileProvider` (validada en LCHP-4; rama vector implementada en LCHP-33)
 
-El boceto original mapeaba bien sobre MapLibre; la forma final corrige un
-detalle: un estilo vectorial es una **URL que se pasa tal cual** a
-`new Map({ style })`, mientras que raster exige construir un estilo JSON
-inline (source `type: 'raster'` + una capa `raster`). Una unión
-discriminada evita los campos huérfanos (`styleUrl: undefined`):
+Un estilo vectorial se pasa tal cual a `new Map({ style })` — como URL o
+como objeto `StyleSpecification` —, mientras que raster exige construir
+un estilo JSON inline (source `type: 'raster'` + una capa `raster`). Una
+unión discriminada evita los campos huérfanos:
 
 ```ts
 import type { StyleSpecification } from 'maplibre-gl'
+import { chisperaStyle } from './styles/chispera'
 
-export type TileProviderId =
-  | 'osm-raster'
-  | 'maptiler-vector'
-  | 'stadia-vector'
-  | 'custom-vector'
+export type TileProviderId = 'openfreemap-vector' | 'osm-raster' | 'custom-vector'
 
 export type TileProviderConfig =
   | {
@@ -1294,42 +1367,37 @@ export type TileProviderConfig =
       maxzoom: number
       attribution: string
     }
-  | { id: TileProviderId; kind: 'vector'; styleUrl: string }
+  | { id: TileProviderId; kind: 'vector'; style: StyleSpecification | string }
 
 export const tileProvider: TileProviderConfig = {
-  id: 'osm-raster',
-  kind: 'raster',
-  tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-  tileSize: 256,
-  maxzoom: 19,
-  attribution: '© OpenStreetMap contributors',
+  id: 'openfreemap-vector',
+  kind: 'vector',
+  style: chisperaStyle,
 }
 
-export function buildMapStyle(cfg: TileProviderConfig): string | StyleSpecification {
-  if (cfg.kind === 'vector') return cfg.styleUrl
-  return {
-    version: 8,
-    sources: {
-      basemap: {
-        type: 'raster',
-        tiles: cfg.tiles,
-        tileSize: cfg.tileSize,
-        maxzoom: cfg.maxzoom,
-        attribution: cfg.attribution,
-      },
-    },
-    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
-  }
+export function buildMapStyle(provider: TileProviderConfig): StyleSpecification | string {
+  if (provider.kind === 'vector') return provider.style
+  return { /* estilo raster inline, como en el spike LCHP-4 */ }
 }
 ```
 
-Este `buildMapStyle` exacto se usó en la página del spike y renderiza sin
-ajustes. Cambiar a vector post-MVP = cambiar el objeto de config; ningún
-componente toca el proveedor. No hardcodear el proveedor en varios
-componentes.
+El estilo se vendoriza como **módulo TypeScript tipado**
+(`export const chisperaStyle: StyleSpecification = {…}`), no como JSON:
+el compilador valida cada capa contra la especificación de MapLibre (así
+se detectó el `["linear", 1]` de positron) y no hace falta ningún cast.
+Cambiar de proveedor = cambiar el objeto de config; ningún componente
+toca el proveedor.
 
-## 22. Opciones futuras para mapas `[Explorando]`
+## 22. Opciones futuras para mapas (resuelto en LCHP-33)
 
+> **Resolución 2026-10-08 (LCHP-33, D-059):** se eligió una opción que no
+> estaba en la lista — **OpenFreeMap** (vector, sin cuenta ni key, sin
+> límites declarados) — porque cumple las condiciones de la opción A con
+> las ventajas de la B. La opción C (tiles propios de zona limitada en
+> Cloudflare) queda como vía de escape si la instancia pública de
+> OpenFreeMap desapareciera; B y D se descartan. Las opciones se conservan
+> como registro de la evaluación.
+>
 > **Nota (LCHP-4, 2026-07-06):** la elección MVP (opción A) ya está
 > verificada y decidida en §21; esta sección solo queda abierta para el
 > **post-MVP**. Hallazgo del spike a tener en cuenta aquí: los marcadores
@@ -1452,7 +1520,12 @@ Recomendación:
 No usar en MVP. Evaluar solo si hay tracción y capacidad técnica.
 ```
 
-## 23. Vector tiles como objetivo a medio plazo `[Explorando]`
+## 23. Vector tiles como objetivo a medio plazo (alcanzado en LCHP-33) `Decidido`
+
+> **Enmienda 2026-10-08 (LCHP-33):** objetivo alcanzado en el MVP con
+> OpenFreeMap y el estilo `chispera` (§21). Las ventajas listadas abajo
+> son ahora la descripción de lo que hay; el bloque «Decisión» queda como
+> histórico.
 
 Lo ideal a medio plazo sería usar vector tiles.
 

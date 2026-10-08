@@ -1,8 +1,8 @@
-// Real map (LCHP-13): MapLibre GL + OSM raster tinted toward the chispera
-// palette, bounded to La Latina (brief §21). Sighting markers are rendered
-// as React sprites via portals into MapLibre marker elements — the map owns
-// positioning, React owns the pixels. No photos are loaded here (evidence is
-// on demand, brief §18).
+// Real map (LCHP-13): MapLibre GL over OpenFreeMap vector tiles with the
+// chispera style (LCHP-33), bounded to La Latina (brief §21). Sighting
+// markers are rendered as React sprites via portals into MapLibre marker
+// elements — the map owns positioning, React owns the pixels. No photos are
+// loaded here (evidence is on demand, brief §18).
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import maplibregl from 'maplibre-gl'
@@ -44,8 +44,9 @@ export function BarrioMap({ sightings, selectedId, onPick, renderMarker }: Props
       dragRotate: false,
       pitchWithRotate: false,
     })
-    // OSM policy: attribution always visible, non-compact.
-    map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right')
+    // Attribution required by OpenFreeMap/OSM; shown on load, collapses on
+    // interaction (MapLibre default) — never force-collapsed.
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
     mapRef.current = map
     map.on('load', () => setReady(true))
     return () => {
@@ -91,22 +92,8 @@ export function BarrioMap({ sightings, selectedId, onPick, renderMarker }: Props
   const byId = new Map(sightings.map((s) => [s.id, s]))
 
   return (
-    <div className="barrio-map" style={{ position: 'absolute', inset: 0 }}>
+    <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      {/* Cream multiply veil — half of the «pergamino suave» tint David
-          picked in the visual loop; the other half is the canvas CSS filter
-          in globals.css (.barrio-map .maplibregl-canvas). */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'var(--bg)',
-          mixBlendMode: 'multiply',
-          opacity: 0.22,
-          pointerEvents: 'none',
-        }}
-      />
       {markerEls.map(({ id, el }) => {
         const s = byId.get(id)
         return s ? createPortal(renderMarker(s, id === selectedId), el) : null

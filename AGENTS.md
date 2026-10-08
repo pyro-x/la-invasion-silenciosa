@@ -115,7 +115,7 @@ explains how they are kept alive.
 | Frontend | React 19 + TypeScript (strict, no `any`) + Vite |
 | Styling | Tailwind CSS v4 (CSS-first) + shadcn/ui + lucide-react |
 | Remote data | TanStack Query; Zustand only if global state is needed |
-| Map | MapLibre GL JS + OSM raster tiles (`tileProvider.ts` abstraction) |
+| Map | MapLibre GL JS + OpenFreeMap vector tiles with the vendored chispera style (`tileProvider.ts` abstraction; no key, no account — D-059) |
 | Backend | Supabase Free: Postgres + RLS + private Storage + **a single** router Edge Function |
 | Hosting | Cloudflare Pages |
 | Distribution | PWA (QR, no stores); Capacitor post-MVP only |

@@ -37,8 +37,9 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
       dragRotate: false,
       pitchWithRotate: false,
     })
-    // OSM policy: attribution always visible, non-compact.
-    map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right')
+    // Attribution required by OpenFreeMap/OSM; shown on load, collapses on
+    // interaction (MapLibre default) — never force-collapsed.
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
     map.on('moveend', () => {
       const byUser = !movedByCode.current
       movedByCode.current = false
@@ -65,21 +66,8 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
   }, [flyTo])
 
   return (
-    <div className="barrio-map" style={{ position: 'absolute', inset: 0 }}>
+    <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      {/* Cream multiply veil — same «pergamino suave» tint as BarrioMap
-          (D-045); the other half is the canvas CSS filter in globals.css. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'var(--bg)',
-          mixBlendMode: 'multiply',
-          opacity: 0.22,
-          pointerEvents: 'none',
-        }}
-      />
       {/* The fixed center pin: tip anchored to the exact viewport center. */}
       <div
         aria-hidden
