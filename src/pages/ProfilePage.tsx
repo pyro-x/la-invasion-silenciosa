@@ -3,6 +3,7 @@
 // points reminder. The association-mode entry and the certificate are
 // post-MVP and intentionally omitted (LCHP-9 out of scope, D-028).
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router'
 import { APP_VERSION } from '@/lib/version'
 import { MiniPix } from '@/components/pixel/PixelSprite'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
@@ -231,6 +232,20 @@ export function ProfilePage() {
         >
           {APP_VERSION}
         </div>
+        <Link
+          to="/perfil/creditos"
+          className="mono"
+          style={{
+            textAlign: 'center',
+            fontSize: 11,
+            letterSpacing: '0.08em',
+            color: 'var(--ink-dim)',
+            textDecoration: 'underline',
+            padding: '14px 0',
+          }}
+        >
+          Créditos y licencias
+        </Link>
       </div>
     </div>
   )

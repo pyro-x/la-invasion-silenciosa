@@ -7,6 +7,9 @@ vi.mock('maplibre-gl', () => {
   class Map {
     on() {}
     addControl() {}
+    getContainer() {
+      return document.createElement('div')
+    }
     remove() {}
   }
   class Marker {

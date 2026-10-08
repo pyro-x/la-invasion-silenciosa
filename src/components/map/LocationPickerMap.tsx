@@ -6,7 +6,8 @@
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { buildMapStyle, LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+import { addAttribution } from './attribution'
+import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 
 type Props = {
   /** Programmatic recenter (a GPS fix). Same object identity = no move. */
@@ -29,7 +30,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
     if (!containerRef.current) return
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildMapStyle(tileProvider),
+      style: tileProvider.style,
       bounds: LA_LATINA_BOUNDS,
       maxBounds: LA_LATINA_MAX_BOUNDS,
       fitBoundsOptions: { padding: 16 },
@@ -37,8 +38,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
       dragRotate: false,
       pitchWithRotate: false,
     })
-    // OSM policy: attribution always visible, non-compact.
-    map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right')
+    const stopAttributionFold = addAttribution(map)
     map.on('moveend', () => {
       const byUser = !movedByCode.current
       movedByCode.current = false
@@ -52,6 +52,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
     })
     mapRef.current = map
     return () => {
+      stopAttributionFold()
       map.remove()
       mapRef.current = null
     }
@@ -65,21 +66,8 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
   }, [flyTo])
 
   return (
-    <div className="barrio-map" style={{ position: 'absolute', inset: 0 }}>
+    <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      {/* Cream multiply veil — same «pergamino suave» tint as BarrioMap
-          (D-045); the other half is the canvas CSS filter in globals.css. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'var(--bg)',
-          mixBlendMode: 'multiply',
-          opacity: 0.22,
-          pointerEvents: 'none',
-        }}
-      />
       {/* The fixed center pin: tip anchored to the exact viewport center. */}
       <div
         aria-hidden
