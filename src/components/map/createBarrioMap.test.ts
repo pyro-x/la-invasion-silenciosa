@@ -184,6 +184,26 @@ describe('createBarrioMap', () => {
     expect(calls.mounts.map((m) => m.id)).toEqual(['b'])
   })
 
+  it('draws the picked pin over its neighbours, also when it is added later', () => {
+    const { controller, calls } = mount()
+    controller.setSightings([
+      { id: 'a', lat: 40.411, lng: -3.71 },
+      { id: 'b', lat: 40.4111, lng: -3.71 },
+    ])
+    const order = () => calls.mounts.map((m) => m.el.style.zIndex)
+    expect(order()).toEqual(['2', '2'])
+    controller.setSelected('a')
+    expect(order()).toEqual(['3', '2'])
+    controller.setSelected('c')
+    controller.setSightings([
+      { id: 'a', lat: 40.411, lng: -3.71 },
+      { id: 'c', lat: 40.4112, lng: -3.71 },
+    ])
+    expect(order()).toEqual(['2', '3'])
+    controller.setSelected(null)
+    expect(order()).toEqual(['2', '2'])
+  })
+
   it('tells a tap on the map from a pin, and a user move from a programmatic one', () => {
     const { calls } = mount()
     emit('click')

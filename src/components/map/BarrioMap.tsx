@@ -81,6 +81,10 @@ export function BarrioMap({
   }, [sightings])
 
   useEffect(() => {
+    controller.current?.setSelected(selectedId)
+  }, [selectedId])
+
+  useEffect(() => {
     controller.current?.setMe(me)
   }, [me])
 

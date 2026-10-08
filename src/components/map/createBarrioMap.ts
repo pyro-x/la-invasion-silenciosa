@@ -27,6 +27,8 @@ export type BarrioMapHandlers = {
 export type BarrioMapController = {
   /** Reconciles the pins and reports their elements through onMarkers. */
   setSightings: (sightings: readonly (LngLat & { id: string })[]) => void
+  /** The picked pin is drawn over its neighbours. */
+  setSelected: (id: string | null) => void
   setMe: (position: MePosition | null) => void
   /** Space covered by the bottom sheet: the map centres above it. */
   setBottomPadding: (px: number) => void
@@ -102,6 +104,12 @@ export function createBarrioMap(
   const stopAttributionFold = addAttribution(map, 'bottom-left')
 
   const markers = new Map<string, maplibregl.Marker>()
+  let selectedId: string | null = null
+  // Pins overlap where sightings are close: the picked one must not end up
+  // under another.
+  const stack = (id: string, el: HTMLElement) => {
+    el.style.zIndex = id === selectedId ? '3' : '2'
+  }
   const meElement = document.createElement('div')
   meElement.className = 'map-me-dot'
   // Pins are what you tap: they stay above the user's own dot.
@@ -180,7 +188,7 @@ export function createBarrioMap(
         } else {
           const el = document.createElement('div')
           el.style.cursor = 'pointer'
-          el.style.zIndex = '2'
+          stack(sighting.id, el)
           el.addEventListener('click', (event) => {
             event.stopPropagation()
             handlers.onPick(sighting.id)
@@ -199,6 +207,11 @@ export function createBarrioMap(
         }
       }
       handlers.onMarkers(mounts)
+    },
+
+    setSelected(id) {
+      selectedId = id
+      for (const [markerId, marker] of markers) stack(markerId, marker.getElement())
     },
 
     setMe(position) {
