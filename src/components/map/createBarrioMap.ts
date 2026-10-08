@@ -32,8 +32,13 @@ export type BarrioMapController = {
   setMe: (position: MePosition | null) => void
   /** Space covered by the bottom sheet: the map centres above it. */
   setBottomPadding: (px: number) => void
-  /** Eases to a point; `minZoom` zooms in if the map is further out. */
-  goTo: (target: LngLat, minZoom?: number) => void
+  /** Eases to a point, at the zoom the map has. */
+  goTo: (target: LngLat) => void
+  /**
+   * Eases to the neighbour's position. `minZoom` zooms in if the map is
+   * further out; without it, a zoom still under way is carried on.
+   */
+  follow: (target: LngLat, minZoom?: number) => void
   zoomBy: (delta: number) => void
   destroy: () => void
 }
@@ -172,13 +177,17 @@ export function createBarrioMap(
   let flight: { center: [number, number]; zoom?: number } | null = null
   // True during a camera change that ends before it returns.
   let jumping = false
+  // The zoom a move under way is heading for, when following should carry
+  // it on: the zoom-in to the position, or a zoom-button step.
+  let carriedZoom: number | null = null
 
-  const ease = (to: { center: [number, number]; zoom?: number }) => {
+  const ease = (to: { center: [number, number]; zoom?: number }, carry = false) => {
     // easeTo stops the previous ease itself, but only after `flight` is
     // set below: its moveend would then be taken for this one's.
     map.stop()
     userChoseView = false
     flight = to
+    carriedZoom = carry && to.zoom !== undefined ? to.zoom : null
     map.easeTo({ ...to, padding: padding(), duration: 500 })
   }
   const jump = (change: () => void) => {
@@ -199,6 +208,7 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
+    carriedZoom = null
     if (jumping) return
     if (flight) {
       flight = null
@@ -266,7 +276,7 @@ export function createBarrioMap(
       // setPadding stops any ease where it is. Picking a pin both starts one
       // and resizes the sheet, so the ease is sent again with the new
       // padding instead of being cut short of the pin.
-      if (flight) ease(flight)
+      if (flight) ease(flight, carriedZoom !== null)
       else jump(() => map.setPadding(padding()))
       // The opening frame is fitted once the sheet's height is known, so the
       // barrio lands in the part of the map that is actually visible. Zero
@@ -284,13 +294,18 @@ export function createBarrioMap(
       }
     },
 
-    goTo(target, minZoom) {
-      // A move still in flight keeps the zoom it was heading for. A phone
-      // sends several fixes in its first second, and each recentre would
-      // otherwise stop the zoom-in of the one before.
-      const wanted = minZoom ?? flight?.zoom
-      const zoomIn = wanted !== undefined && map.getZoom() < wanted
-      ease({ center: [target.lng, target.lat], ...(zoomIn ? { zoom: wanted } : {}) })
+    goTo(target) {
+      ease({ center: [target.lng, target.lat] })
+    },
+
+    follow(target, minZoom) {
+      // A phone sends several fixes in its first second, and a recentre
+      // stops whatever is moving: without this, each one cut the zoom-in of
+      // the one before, or a zoom-button step, part-way. Only following
+      // carries a zoom on; a pin picked meanwhile keeps the zoom it finds.
+      const zoom =
+        minZoom !== undefined && map.getZoom() < minZoom ? minZoom : (carriedZoom ?? undefined)
+      ease({ center: [target.lng, target.lat], ...(zoom !== undefined ? { zoom } : {}) }, true)
     },
 
     zoomBy(delta) {
@@ -298,7 +313,9 @@ export function createBarrioMap(
       // the user's.
       map.stop()
       userChoseView = true
-      map.easeTo({ zoom: map.getZoom() + delta, duration: 250 })
+      const zoom = map.getZoom() + delta
+      carriedZoom = zoom
+      map.easeTo({ zoom, duration: 250 })
     },
 
     destroy() {

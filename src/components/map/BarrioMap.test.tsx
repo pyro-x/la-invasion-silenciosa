@@ -16,7 +16,8 @@ vi.mock('./createBarrioMap', () => ({
     setSelected: (id) => calls.log.push(`selected ${id}`),
     setMe: (me) => calls.log.push(`me ${me ? me.lat : null}`),
     setBottomPadding: (px) => calls.log.push(`padding ${px}`),
-    goTo: (target, minZoom) => calls.log.push(`goTo ${target.lat} ${minZoom}`),
+    goTo: (target) => calls.log.push(`goTo ${target.lat}`),
+    follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
     zoomBy: (delta) => calls.log.push(`zoomBy ${delta}`),
     destroy: () => calls.log.push('destroy'),
   }),
@@ -69,7 +70,7 @@ describe('BarrioMap', () => {
         zoomStep={{ delta: 1 }}
       />,
     )
-    expect(calls.log).toEqual(['selected a', 'padding 280', 'goTo 40.411 undefined', 'zoomBy 1'])
+    expect(calls.log).toEqual(['selected a', 'padding 280', 'goTo 40.411', 'zoomBy 1'])
     view.unmount()
     expect(calls.log.at(-1)).toBe('destroy')
   })
@@ -78,14 +79,14 @@ describe('BarrioMap', () => {
     const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
     const view = render(<BarrioMap {...base} me={me} />)
     calls.log.length = 0
-    const moves = () => calls.log.filter((line) => line.startsWith('goTo'))
+    const moves = () => calls.log.filter((line) => line.startsWith('follow'))
     view.rerender(<BarrioMap {...base} me={me} follow followRequest={1} />)
     const next = { ...me, lat: 40.4116 }
     view.rerender(<BarrioMap {...base} me={next} follow followRequest={1} />)
-    expect(moves()).toEqual(['goTo 40.4115 17', 'goTo 40.4116 undefined'])
+    expect(moves()).toEqual(['follow 40.4115 17', 'follow 40.4116 undefined'])
     // a tap while following brings the same position object again
     view.rerender(<BarrioMap {...base} me={next} follow followRequest={2} />)
-    expect(moves().at(-1)).toBe('goTo 40.4116 17')
+    expect(moves().at(-1)).toBe('follow 40.4116 17')
     view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4117 }} followRequest={2} />)
     expect(moves()).toHaveLength(3)
   })

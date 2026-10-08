@@ -152,7 +152,7 @@ describe('createBarrioMap', () => {
     const { controller } = mount()
     controller.setBottomPadding(310)
     emit('moveend')
-    controller.goTo({ lat: 40.4115, lng: -3.712 }, 17)
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
     emit('movestart')
     emit('moveend')
     expect(localStorage.getItem('lis.map.view')).toBeNull()
@@ -161,7 +161,7 @@ describe('createBarrioMap', () => {
   it('a gesture that moved nothing does not make the next programmatic move look chosen', () => {
     const { controller } = mount()
     emit('wheel')
-    controller.goTo({ lat: 40.4115, lng: -3.712 }, 17)
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
     emit('moveend')
     expect(stored()).toBeNull()
   })
@@ -176,7 +176,7 @@ describe('createBarrioMap', () => {
 
   it("a zoom button pressed during a move to a pin is still the user's choice", () => {
     const { controller } = mount()
-    controller.goTo({ lat: 40.4115, lng: -3.712 }, 17)
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
     controller.zoomBy(1)
     expect(stored()).toBeNull()
     emit('moveend')
@@ -187,7 +187,7 @@ describe('createBarrioMap', () => {
     const { controller } = mount()
     const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
     controller.setMe(me)
-    controller.goTo(me, 17)
+    controller.follow(me, 17)
     emit('moveend')
     controller.zoomBy(1)
     emit('moveend')
@@ -201,7 +201,7 @@ describe('createBarrioMap', () => {
     const { controller } = mount()
     const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
     controller.setMe(me)
-    controller.goTo(me, 17)
+    controller.follow(me, 17)
     emit('moveend')
     controller.setMe(null)
     controller.zoomBy(1)
@@ -244,11 +244,19 @@ describe('createBarrioMap', () => {
 
   it('showing the position forgets an older stored view; without one, views are still stored', () => {
     const { controller } = mount()
-    controller.setMe(null)
     userDrag()
+    controller.setMe(null)
     expect(stored()).not.toBeNull()
     controller.setMe({ lat: 40.4115, lng: -3.712, accuracyM: 12 })
     expect(stored()).toBeNull()
+  })
+
+  it('forgets the stored view once, not on every fix: another tab may store its own', () => {
+    const { controller } = mount()
+    controller.setMe({ lat: 40.4115, lng: -3.712, accuracyM: 12 })
+    localStorage.setItem('lis.map.view', JSON.stringify({ center: [-3.71, 40.411], zoom: 15 }))
+    controller.setMe({ lat: 40.4116, lng: -3.712, accuracyM: 12 })
+    expect(stored()).not.toBeNull()
   })
 
   it('a sheet resize during a move to a pin sends the move again, with the new padding', () => {
@@ -281,7 +289,7 @@ describe('createBarrioMap', () => {
 
   it('a gesture landing in the middle of a programmatic move does not store that move', () => {
     const { controller } = mount()
-    controller.goTo({ lat: 40.4115, lng: -3.712 }, 17)
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
     emit('wheel')
     emit('moveend')
     expect(localStorage.getItem('lis.map.view')).toBeNull()
@@ -367,29 +375,70 @@ describe('createBarrioMap', () => {
 
   it('a recentre during a zoom-in keeps the zoom; after it has landed, it does not zoom', () => {
     const { controller } = mount()
-    controller.goTo({ lat: 40.411, lng: -3.71 }, 17)
-    controller.goTo({ lat: 40.4111, lng: -3.71 })
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
     expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 17 })
     emit('moveend')
-    controller.goTo({ lat: 40.4112, lng: -3.71 })
+    controller.follow({ lat: 40.4112, lng: -3.71 })
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
   })
 
-  it('a recentre after the user interrupted a zoom-in does not resume it', () => {
+  it('a pin picked during a zoom-in, then a sheet resize, still keeps the zoom it found', () => {
     const { controller } = mount()
-    controller.goTo({ lat: 40.411, lng: -3.71 }, 17)
-    emit('moveend')
+    controller.setBottomPadding(80)
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
+    controller.goTo({ lat: 40.4125, lng: -3.7135 })
+    controller.setBottomPadding(300)
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a recentre after the user took over the map does not resume the zoom-in', () => {
+    const { controller } = mount()
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
     userDrag()
-    controller.goTo({ lat: 40.4111, lng: -3.71 })
+    controller.follow({ lat: 40.4111, lng: -3.71 })
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
   })
 
-  it('goTo zooms in only when the map is further out than asked', () => {
+  it('a pin picked during the zoom-in to the position keeps the zoom it finds', () => {
     const { controller } = mount()
-    controller.goTo({ lat: 40.411, lng: -3.71 }, 17)
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
+    controller.goTo({ lat: 40.4125, lng: -3.7135 })
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.7135, 40.4125] })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a recentre during a zoom-button step lets the step finish', () => {
+    const { controller } = mount()
+    controller.zoomBy(1)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 16 })
+    controller.follow({ lat: 40.4112, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBe(16)
+    emit('moveend')
+    controller.follow({ lat: 40.4113, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a zoom-out step is carried on too, and a sheet resize keeps it', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(-1)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    controller.setBottomPadding(300)
+    controller.follow({ lat: 40.4112, lng: -3.71 })
+    expect(recorded.eases.at(-1)).toMatchObject({ zoom: 14, padding: { bottom: 300 } })
+  })
+
+  it('following zooms in only when the map is further out than asked', () => {
+    const { controller } = mount()
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
     expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.411], zoom: 17 })
+    emit('moveend')
     recorded.zoom = 18
-    controller.goTo({ lat: 40.411, lng: -3.71 }, 17)
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
   })
 })
