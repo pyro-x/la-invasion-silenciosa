@@ -282,27 +282,32 @@ export function createBarrioMap(
 
     setBottomPadding(px) {
       bottomPx = px
-      // setPadding stops any ease where it is. Picking a pin both starts one
-      // and resizes the sheet, so the ease is sent again with the new
-      // padding instead of being cut short of the pin.
+      // Zero is "not measured yet", not a height.
+      const opening = !framed && px > 0
+      // setPadding stops whatever is moving. A zoom-button step is sent
+      // again afterwards; the stop ends it part-way, and that moveend must
+      // not store the half-made zoom as the user's view.
       const step = flight ? null : carriedZoom
+      if (step !== null) userChoseView = false
+      // Picking a pin both starts an ease and resizes the sheet, so the ease
+      // is sent again with the new padding instead of being cut short.
       if (flight) ease(flight, carriedZoom !== null)
       else jump(() => map.setPadding(padding()))
-      // setPadding also stops a zoom-button step: let it finish.
-      if (step !== null) zoomStep(step)
-      // The opening frame is fitted once the sheet's height is known, so the
-      // barrio lands in the part of the map that is actually visible. Zero
-      // is "not measured yet", not a height.
-      if (!framed && px > 0) {
+      if (opening) {
+        // The opening frame is fitted once the sheet's height is known, so
+        // the barrio lands in the part of the map that is actually visible.
+        // It wins over a zoom step pressed before it. The sheet is already
+        // in the map's own padding (set just above); fitBounds adds its
+        // padding on top, so only the margins go here.
         framed = true
-        // The sheet is already in the map's own padding (set just above);
-        // fitBounds adds its padding on top, so only the margins go here.
         jump(() =>
           map.fitBounds(LA_LATINA_BOUNDS, {
             padding: { top: TOP_CHROME_PX, bottom: 16, left: 16, right: 16 },
             duration: 0,
           }),
         )
+      } else if (step !== null) {
+        zoomStep(step)
       }
     },
 

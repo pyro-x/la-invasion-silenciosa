@@ -463,6 +463,8 @@ describe('createBarrioMap', () => {
     controller.setBottomPadding(300)
     expect(recorded.paddings.at(-1)?.bottom).toBe(300)
     expect(recorded.eases.at(-1)?.zoom).toBe(16)
+    // the step was stopped part-way: that zoom is not the user's view
+    expect(stored()).toBeNull()
     emit('moveend')
     expect(stored()).not.toBeNull()
     controller.zoomBy(-1)
@@ -471,6 +473,25 @@ describe('createBarrioMap', () => {
     emit('moveend')
     controller.setBottomPadding(200)
     expect(recorded.eases).toHaveLength(4)
+  })
+
+  it('a sheet resize during the zoom-in to the position re-sends that move, not a zoom step', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
+    controller.setBottomPadding(300)
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 17 })
+    emit('moveend')
+    expect(stored()).toBeNull()
+  })
+
+  it('the opening fit wins over a zoom step pressed before the sheet was measured', () => {
+    const { controller } = mount()
+    controller.zoomBy(1)
+    controller.setBottomPadding(300)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(1)
+    expect(stored()).toBeNull()
   })
 
   it('a zoom-out step is carried on too, and a sheet resize keeps it', () => {
