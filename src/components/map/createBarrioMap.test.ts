@@ -14,6 +14,8 @@ const recorded = vi.hoisted(() => ({
   // An ease that has not ended yet; like MapLibre, stop() ends it and
   // emits its moveend, and so does any other camera call.
   easing: false,
+  // prefers-reduced-motion: MapLibre ends an ease before easeTo returns.
+  reducedMotion: false,
   meData: [] as object[],
   meDot: null as HTMLElement | null,
 }))
@@ -65,6 +67,7 @@ vi.mock('maplibre-gl', () => {
       this.stop()
       recorded.eases.push(options)
       recorded.easing = true
+      if (recorded.reducedMotion) this.stop()
     }
     setPadding(padding: { bottom: number }) {
       this.stop()
@@ -117,6 +120,7 @@ beforeEach(() => {
   recorded.fits.length = 0
   recorded.zoom = 15
   recorded.easing = false
+  recorded.reducedMotion = false
   recorded.meData.length = 0
   recorded.meDot = null
   for (const type of Object.keys(recorded.handlers)) delete recorded.handlers[type]
@@ -191,9 +195,50 @@ describe('createBarrioMap', () => {
     emit('wheel')
     controller.setBottomPadding(200)
     expect(stored()).toBeNull()
+  })
+
+  it('still stores nothing after the position is gone: the map may be sitting on it', () => {
+    const { controller } = mount()
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    controller.setMe(me)
+    controller.goTo(me, 17)
+    emit('moveend')
     controller.setMe(null)
+    controller.zoomBy(1)
+    emit('moveend')
+    userDrag()
+    expect(stored()).toBeNull()
+  })
+
+  it('two sheet resizes during one move to a pin both send it again', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.goTo({ lat: 40.4115, lng: -3.712 })
+    controller.setBottomPadding(200)
+    controller.setBottomPadding(300)
+    expect(recorded.paddings.map((p) => p.bottom)).toEqual([80])
+    expect(recorded.eases.map((e) => e.padding?.bottom)).toEqual([80, 200, 300])
+    expect(recorded.eases.at(-1)?.center).toEqual([-3.712, 40.4115])
+  })
+
+  it("with reduced motion a move ends at once, and the next drag is still the user's", () => {
+    recorded.reducedMotion = true
+    const { controller } = mount()
+    controller.goTo({ lat: 40.4115, lng: -3.712 })
+    expect(stored()).toBeNull()
+    controller.setBottomPadding(300)
+    expect(recorded.paddings.map((p) => p.bottom)).toEqual([300])
     userDrag()
     expect(stored()).not.toBeNull()
+  })
+
+  it('a resize of the map after a gesture that moved nothing stores nothing', () => {
+    const { controller } = mount()
+    emit('wheel')
+    controller.setBottomPadding(300)
+    emit('movestart')
+    emit('moveend')
+    expect(stored()).toBeNull()
   })
 
   it('a sheet resize during a move to a pin sends the move again, with the new padding', () => {

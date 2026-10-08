@@ -151,7 +151,27 @@ describe('geoWatch', () => {
 
     permissionsQuery.mockResolvedValue({ state: 'prompt' })
     document.dispatchEvent(new Event('visibilitychange'))
-    await vi.waitFor(() => expect(result.current.kind).toBe('idle'))
+    await vi.waitFor(() => expect(result.current.kind).toBe('paused'))
+    expect(watchPosition).toHaveBeenCalledTimes(2)
+  })
+
+  it('back from the background it pauses when the browser cannot say it will not ask', async () => {
+    const { result } = renderHook(() => useGeoWatch())
+    act(() => startGeoWatch())
+    act(() => watcher().success(fix(40.4115, -3.712, 12)))
+    permissionsQuery.mockRejectedValue(new TypeError('no geolocation permission'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(result.current.kind).toBe('paused'))
+
+    act(() => startGeoWatch())
+    act(() => watcher().success(fix(40.4115, -3.712, 12)))
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      geolocation: { watchPosition, clearWatch, getCurrentPosition },
+      permissions: undefined,
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(result.current.kind).toBe('paused'))
     expect(watchPosition).toHaveBeenCalledTimes(2)
   })
 

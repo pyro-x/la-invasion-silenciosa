@@ -492,6 +492,22 @@ describe('map screen', () => {
       expect(await screen.findByText(/Estás fuera de La Latina/)).toBeInTheDocument()
     })
 
+    it('a watch paused on return from the background says how to get the position back', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'Ir a mi posición' }))
+      const [success] = watchPositionMock.mock.calls[0] ?? []
+      act(() => success?.(geoFix(40.4115, -3.712)))
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(
+        await screen.findByText(/Toca «Ir a mi posición» para volver a ver/),
+      ).toBeInTheDocument()
+      expect(screen.getByTestId('map')).toHaveAttribute('data-me', '')
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
+    })
+
     it('a position outside La Latina is neither shown nor followed, and says why', async () => {
       const user = userEvent.setup()
       renderRoute('/mapa')

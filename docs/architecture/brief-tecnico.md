@@ -1196,14 +1196,18 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   (D-052). Con posición: punto verde + círculo de precisión, y el mapa la
   sigue hasta que el vecino arrastra el mapa, hace zoom con los dedos o la
   rueda, o elige un pin (los botones +/− cambian el zoom sin dejar de
-  seguir). Al empezar a seguir el mapa se acerca hasta z17; las posiciones
+  seguir). Cada toque en el botón acerca el mapa hasta z17; las posiciones
   siguientes solo recentran, para no deshacer un zoom del vecino. En una
   visita posterior **el punto reaparece** sin preguntar solo si el
   navegador confirma que el permiso sigue concedido; el mapa **no** se
   recentra solo (seguir exige tocar el botón). Al volver de segundo plano
-  la observación se reanuda, salvo que el navegador vaya a preguntar de
-  nuevo (un permiso «solo esta vez» caducado): entonces se detiene en vez
-  de provocar el aviso nativo sin toque. Al salir de la pantalla se deja
+  la observación se reanuda **solo si el navegador afirma que el permiso
+  sigue concedido**. Si va a preguntar de nuevo (un permiso «solo esta
+  vez» caducado) o no sabe decirlo (sin API de permisos; Safari, que
+  responde «preguntar» a casi todo), se pausa en vez de arriesgar el aviso
+  nativo sin toque, y la hoja dice «Toca «Ir a mi posición» para volver a
+  ver dónde estás.» Pendiente de comprobar en un iPhone cuántas veces
+  ocurre en la práctica. Al salir de la pantalla se deja
   de observar y se olvida la posición (también en memoria). Los avisos
   (denegado → cómo permitirlo, texto por plataforma; sin señal; **fuera de
   La Latina no se muestra ni se sigue la posición**) se ven en la cabecera
@@ -1212,8 +1216,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 * **Privacidad de la posición del vecino:** no se envía a nuestros
   servidores ni se guarda. La vista recordada (abajo) solo registra
   movimientos hechos por el vecino, nunca los de la app, y **no registra
-  nada mientras su posición está en el mapa**: con el punto a la vista,
-  cualquier centro puede ser, o estar al lado de, donde está. Lo único que sale del dispositivo son las peticiones de
+  nada desde que su posición aparece en el mapa hasta que se sale de la
+  pantalla**: aunque el punto desaparezca (permiso retirado, pausa, salir
+  del barrio), el mapa puede seguir centrado en, o al lado de, donde está. Lo único que sale del dispositivo son las peticiones de
   teselas del basemap, como en cualquier mapa: OpenFreeMap sirve teselas
   hasta z14, así que ve, como mucho, qué celda de ~1,7×1,3 km se está
   mirando — con el mapa acotado a La Latina, una de unas nueve.
@@ -1222,8 +1227,8 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   se abre encuadrado al barrio. Los movimientos de la app (encuadre
   inicial, cambio de altura de la hoja, ir a un pin, seguir la posición)
   no se guardan; los botones +/− sí cuentan como elección del vecino.
-  Consecuencia aceptada: quien tiene su posición a la vista no ve
-  recordada la vista de esa sesión.
+  Consecuencia aceptada: quien ha visto su posición en el mapa no ve
+  recordada la vista de esa visita a la pantalla.
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setSelected`,

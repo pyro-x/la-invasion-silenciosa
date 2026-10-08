@@ -45,6 +45,7 @@ const base: Props = {
   renderMarker: (s, selected) => <span>{`${s.id}${selected ? ' picked' : ''}`}</span>,
   me: null,
   follow: false,
+  followRequest: 0,
   bottomPadding: 0,
   focus: null,
   zoomStep: null,
@@ -73,18 +74,17 @@ describe('BarrioMap', () => {
     expect(calls.log.at(-1)).toBe('destroy')
   })
 
-  it('zooms in when it starts following, then only recentres on later fixes', () => {
+  it('zooms in on each tap on locate, then only recentres on later fixes', () => {
     const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
     const view = render(<BarrioMap {...base} me={me} />)
     calls.log.length = 0
-    view.rerender(<BarrioMap {...base} me={me} follow />)
-    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4116 }} follow />)
-    expect(calls.log.filter((line) => line.startsWith('goTo'))).toEqual([
-      'goTo 40.4115 17',
-      'goTo 40.4116 undefined',
-    ])
-    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4117 }} />)
-    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4117 }} follow />)
-    expect(calls.log.at(-1)).toBe('goTo 40.4117 17')
+    const moves = () => calls.log.filter((line) => line.startsWith('goTo'))
+    view.rerender(<BarrioMap {...base} me={me} follow followRequest={1} />)
+    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4116 }} follow followRequest={1} />)
+    expect(moves()).toEqual(['goTo 40.4115 17', 'goTo 40.4116 undefined'])
+    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4116 }} follow followRequest={2} />)
+    expect(moves().at(-1)).toBe('goTo 40.4116 17')
+    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4117 }} followRequest={2} />)
+    expect(moves()).toHaveLength(3)
   })
 })

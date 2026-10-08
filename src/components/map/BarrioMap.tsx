@@ -31,6 +31,8 @@ type Props = {
   me: MePosition | null
   /** Keep the map centred on `me` as fixes arrive. */
   follow: boolean
+  /** Counts the taps on «Ir a mi posición»: each one zooms in again. */
+  followRequest: number
   bottomPadding: number
   focus: MapFocus | null
   /** Zoom steps requested by the on-screen buttons; identity = a new step. */
@@ -46,6 +48,7 @@ export function BarrioMap({
   renderMarker,
   me,
   follow,
+  followRequest,
   bottomPadding,
   focus,
   zoomStep,
@@ -96,16 +99,16 @@ export function BarrioMap({
     if (focus) controller.current?.goTo(focus)
   }, [focus])
 
-  // Zooming in is part of going to the position, not of staying on it:
+  // Zooming in is part of asking for the position, not of staying on it:
   // later fixes only recentre, so a neighbour who zooms out is not pulled
   // back in every few seconds.
-  const followed = useRef(false)
+  const zoomedFor = useRef<number | null>(null)
   useEffect(() => {
-    const following = follow && me !== null
-    if (following && me)
-      controller.current?.goTo(me, followed.current ? undefined : FOLLOW_MIN_ZOOM)
-    followed.current = following
-  }, [follow, me])
+    if (!follow || !me) return
+    const asked = zoomedFor.current !== followRequest
+    zoomedFor.current = followRequest
+    controller.current?.goTo(me, asked ? FOLLOW_MIN_ZOOM : undefined)
+  }, [follow, me, followRequest])
 
   useEffect(() => {
     if (zoomStep) controller.current?.zoomBy(zoomStep.delta)

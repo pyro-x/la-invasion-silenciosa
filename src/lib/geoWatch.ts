@@ -12,6 +12,8 @@ export type GeoPosition = { lat: number; lng: number; accuracyM: number; at: num
 
 export type GeoWatchState =
   | { kind: 'idle'; position: null }
+  /** Was watching; stopped itself rather than risk a prompt with no tap. */
+  | { kind: 'paused'; position: null }
   | { kind: 'searching'; position: null }
   | { kind: 'ok'; position: GeoPosition }
   | { kind: 'denied'; position: null }
@@ -159,23 +161,28 @@ export async function resumeGeoWatchIfGranted(): Promise<void> {
 }
 
 // Phones pause a watch while the page is in the background, so it is
-// started again on return. A one-time grant can lapse meanwhile: restarting
-// then would raise the native prompt with no tap, so the watch is dropped.
+// started again on return — but only if the browser says outright that it
+// will not ask. A one-time grant can lapse meanwhile, and restarting then
+// would raise the native prompt with no tap (D-052). A browser that cannot
+// say (no Permissions API, or Safari answering 'prompt' for everything)
+// gets the safe side: the watch pauses and the neighbour taps again.
 async function restartAfterBackground(): Promise<void> {
   const mine = generation
-  if (navigator.permissions?.query) {
-    try {
-      const status = await navigator.permissions.query({ name: 'geolocation' })
-      if (mine !== generation) return
-      if (status.state === 'prompt') {
-        stopGeoWatch()
-        return
-      }
-    } catch {
-      // No geolocation entry in the Permissions API: nothing to check.
-    }
+  let granted = false
+  try {
+    const status = await navigator.permissions?.query({ name: 'geolocation' })
+    granted = status?.state === 'granted'
+  } catch {
+    // No geolocation entry in the Permissions API.
   }
-  if (mine === generation) startGeoWatch()
+  if (mine !== generation) return
+  if (granted) {
+    startGeoWatch()
+    return
+  }
+  halt()
+  lastPosition = null
+  set({ kind: 'paused', position: null })
 }
 
 if (typeof document !== 'undefined') {

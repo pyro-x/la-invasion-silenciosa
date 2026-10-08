@@ -153,9 +153,11 @@ export function createBarrioMap(
 
   // Only a view the user chose is remembered. The app's own moves — the
   // opening fit, a padding change, easing to a pin, following — are never
-  // written to storage, and nothing is while the user's position is on the
-  // map: any centre could then be, or sit next to, where they are.
+  // written to storage. And once the user's position has been on this map,
+  // nothing is, until the map is created again: the camera may still sit on
+  // or next to where they are after the dot is gone.
   let userChoseView = false
+  let positionShown = false
   // Where the app is easing to, while it is. Its moveend is the app's even
   // if a gesture landed in the middle (a wheel that interrupts an ease ends
   // it with the app's centre, not the user's).
@@ -164,14 +166,17 @@ export function createBarrioMap(
   let jumping = false
 
   const ease = (to: { center: [number, number]; zoom?: number }) => {
-    // Whatever was moving ends here, as what it was, before this one starts.
+    // easeTo stops the previous ease itself, but only after `flight` is
+    // set below: its moveend would then be taken for this one's.
     map.stop()
     userChoseView = false
     flight = to
     map.easeTo({ ...to, padding: padding(), duration: 500 })
   }
   const jump = (change: () => void) => {
+    // This drops a gesture in progress without a moveend for it.
     map.stop()
+    userChoseView = false
     jumping = true
     change()
     jumping = false
@@ -193,7 +198,7 @@ export function createBarrioMap(
     }
     if (!userChoseView) return
     userChoseView = false
-    if (me) return
+    if (positionShown) return
     const center = map.getCenter()
     writeView({ center: [center.lng, center.lat], zoom: map.getZoom() })
   })
@@ -239,6 +244,7 @@ export function createBarrioMap(
 
     setMe(position) {
       me = position
+      if (position) positionShown = true
       drawMe()
     },
 
@@ -274,7 +280,8 @@ export function createBarrioMap(
     },
 
     zoomBy(delta) {
-      // An app ease in flight ends as the app's; the zoom is the user's.
+      // An app ease in flight ends as the app's (see ease()); the zoom is
+      // the user's.
       map.stop()
       userChoseView = true
       map.easeTo({ zoom: map.getZoom() + delta, duration: 250 })

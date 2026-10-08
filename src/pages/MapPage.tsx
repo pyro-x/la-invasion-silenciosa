@@ -84,6 +84,7 @@ function locateNotice(geo: GeoWatchState, outsideBarrio: boolean): string | null
     return 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.'
   }
   if (geo.kind === 'unsupported') return 'Este navegador no ofrece tu ubicación.'
+  if (geo.kind === 'paused') return 'Toca «Ir a mi posición» para volver a ver dónde estás.'
   if (outsideBarrio) return 'Estás fuera de La Latina: el mapa se queda en el barrio.'
   return null
 }
@@ -110,6 +111,7 @@ export function MapPage() {
   // and must not greet the neighbour with «Estás fuera de La Latina».
   const [askedWhere, setAskedWhere] = useState(false)
   const [pickCount, setPickCount] = useState(0)
+  const [locateCount, setLocateCount] = useState(0)
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null)
   const geo = useGeoWatch()
 
@@ -188,6 +190,7 @@ export function MapPage() {
   const locate = () => {
     setDismissedNotice(null)
     setAskedWhere(true)
+    setLocateCount((count) => count + 1)
     setFollowing(true)
     startGeoWatch()
   }
@@ -259,6 +262,7 @@ export function MapPage() {
           renderMarker={(s, selected) => <SightingMarker sighting={s} selected={selected} />}
           me={me && !outsideBarrio ? me : null}
           follow={follow}
+          followRequest={locateCount}
           bottomPadding={sheetHeight}
           focus={focus}
           zoomStep={zoomStep}
