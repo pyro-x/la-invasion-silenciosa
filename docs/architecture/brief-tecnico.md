@@ -853,8 +853,17 @@ pierde nada por empezar anónimo. El magic link se ofrece como mejora
 > enlace). El código OTP vuelve a ser posible cuando haya SMTP propio
 > (LCHP-31).
 
+> **Estado: fusionado pero OCULTO** (`REGISTRATION_ENABLED = false` en
+> `src/lib/flags.ts`; Perfil no muestra el panel). Se enciende cuando se
+> decidan dos cosas: el envío de correo (LCHP-31 — el remitente integrado
+> de Supabase está documentado como no apto para producción: ~2
+> correos/hora y solo a miembros del equipo del proyecto) y si la
+> asociación quiere exigir login antes de usar la app. Antes de encenderlo
+> hay que probar el flujo de extremo a extremo, en un iPhone con la app
+> instalada, y pasarlo por la review adversarial.
+
 El flujo implementado (`src/lib/registration.ts` + panel «Guarda tu
-cuenta» en Perfil):
+cuenta», hoy oculto, en Perfil):
 
 ```text
 updateUser({ email }, { emailRedirectTo: <origen>/perfil })

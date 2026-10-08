@@ -4,6 +4,7 @@
 // post-MVP and intentionally omitted (LCHP-9 out of scope, D-028).
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
+import { REGISTRATION_ENABLED } from '@/lib/flags'
 import { APP_VERSION } from '@/lib/version'
 import { MiniPix } from '@/components/pixel/PixelSprite'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
@@ -96,7 +97,7 @@ export function ProfilePage() {
         </div>
 
         {/* progressive registration (LCHP-29): the permanent passive floor */}
-        <RegistrationPanel />
+        {REGISTRATION_ENABLED && <RegistrationPanel />}
 
         {/* points stats */}
         <div className="row" style={{ gap: 8 }}>
