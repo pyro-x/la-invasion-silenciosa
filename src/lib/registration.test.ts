@@ -1,11 +1,26 @@
-import { confirmUpgrade, registrationState, requestUpgrade } from '@/lib/registration'
+import {
+  checkUpgrade,
+  registrationState,
+  requestUpgrade,
+  upgradeRequestedHere,
+} from '@/lib/registration'
+
+type SessionUser = { id: string; is_anonymous?: boolean; email?: string; new_email?: string }
 
 const getSessionMock = vi.fn()
 const updateUserMock =
   vi.fn<
-    (attrs: { email: string }) => Promise<{ error: { code?: string; status?: number } | null }>
+    (
+      attrs: { email: string },
+      options: { emailRedirectTo?: string },
+    ) => Promise<{ error: { code?: string; status?: number } | null }>
   >()
-const verifyOtpMock = vi.fn<(params: object) => Promise<{ error: { status?: number } | null }>>()
+const refreshSessionMock = vi.fn<
+  () => Promise<{
+    data: { session: { user: SessionUser } | null }
+    error: { status?: number } | null
+  }>
+>()
 const totalPointsMock = vi.fn<() => Promise<{ data: { total_points: number } | null }>>()
 
 vi.mock('@/lib/session', () => ({ ensureSession: () => Promise.resolve() }))
@@ -14,8 +29,9 @@ vi.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
       getSession: () => getSessionMock(),
-      updateUser: (attrs: { email: string }) => updateUserMock(attrs),
-      verifyOtp: (params: object) => verifyOtpMock(params),
+      updateUser: (attrs: { email: string }, options: { emailRedirectTo?: string }) =>
+        updateUserMock(attrs, options),
+      refreshSession: () => refreshSessionMock(),
     },
     from: () => ({
       select: () => ({ eq: () => ({ single: () => totalPointsMock() }) }),
@@ -23,15 +39,20 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
-function sessionUser(user: object | null) {
+function sessionUser(user: SessionUser | null) {
   getSessionMock.mockResolvedValue({ data: { session: user ? { user } : null } })
+}
+
+function refreshedAs(user: SessionUser) {
+  refreshSessionMock.mockResolvedValue({ data: { session: { user } }, error: null })
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   sessionUser({ id: 'u1', is_anonymous: true })
   updateUserMock.mockResolvedValue({ error: null })
-  verifyOtpMock.mockResolvedValue({ error: null })
+  refreshedAs({ id: 'u1', is_anonymous: true, new_email: 'rosa@test.local' })
   totalPointsMock.mockResolvedValue({ data: { total_points: 0 } })
 })
 
@@ -51,48 +72,82 @@ describe('registrationState', () => {
 })
 
 describe('requestUpgrade', () => {
-  it('maps success and the three named failures', async () => {
+  it('asks for the standard link and sends it back to the origin that asked', async () => {
     expect(await requestUpgrade('rosa@test.local')).toEqual({
       kind: 'sent',
       email: 'rosa@test.local',
     })
+    expect(updateUserMock).toHaveBeenCalledWith(
+      { email: 'rosa@test.local' },
+      { emailRedirectTo: `${window.location.origin}/perfil` },
+    )
+  })
+
+  it('maps the three named failures and leaves no request behind', async () => {
     updateUserMock.mockResolvedValue({ error: { code: 'email_exists', status: 422 } })
     expect(await requestUpgrade('x@x.com')).toEqual({ kind: 'email_taken' })
     updateUserMock.mockResolvedValue({ error: { code: 'validation_failed', status: 400 } })
     expect(await requestUpgrade('nope')).toEqual({ kind: 'invalid_email' })
     updateUserMock.mockResolvedValue({ error: { status: 429 } })
     expect(await requestUpgrade('x@x.com')).toEqual({ kind: 'rate_limited' })
+    expect(upgradeRequestedHere()).toBe(false)
+  })
+
+  it('remembers that this browser asked, until the upgrade is celebrated', async () => {
+    expect(upgradeRequestedHere()).toBe(false)
+    await requestUpgrade('rosa@test.local')
+    expect(upgradeRequestedHere()).toBe(true)
+    refreshedAs({ id: 'u1', is_anonymous: false, email: 'rosa@test.local' })
+    await checkUpgrade()
+    expect(upgradeRequestedHere()).toBe(false)
   })
 })
 
-describe('confirmUpgrade', () => {
-  it('verifies the code as an email_change OTP and reports recovered points', async () => {
-    totalPointsMock
-      .mockResolvedValueOnce({ data: { total_points: 0 } })
-      .mockResolvedValueOnce({ data: { total_points: 15 } })
-    expect(await confirmUpgrade('rosa@test.local', '123456')).toEqual({
+describe('checkUpgrade', () => {
+  it('stays pending while the link is unopened, keeping the request', async () => {
+    await requestUpgrade('rosa@test.local')
+    expect(await checkUpgrade()).toEqual({ kind: 'pending' })
+    expect(upgradeRequestedHere()).toBe(true)
+  })
+
+  it('asks the server, not the stored session, and reports recovered points', async () => {
+    totalPointsMock.mockResolvedValue({ data: { total_points: 0 } })
+    await requestUpgrade('rosa@test.local')
+
+    sessionUser({ id: 'u1', is_anonymous: true, new_email: 'rosa@test.local' })
+    refreshedAs({ id: 'u1', is_anonymous: false, email: 'rosa@test.local' })
+    totalPointsMock.mockResolvedValue({ data: { total_points: 15 } })
+    expect(await checkUpgrade()).toEqual({
       kind: 'registered',
+      email: 'rosa@test.local',
       pointsRecovered: 15,
     })
-    expect(verifyOtpMock).toHaveBeenCalledWith({
-      type: 'email_change',
-      email: 'rosa@test.local',
-      token: '123456',
-    })
+    expect(refreshSessionMock).toHaveBeenCalledTimes(1)
   })
 
   it('never reports negative recovery and survives an unreadable profile', async () => {
     totalPointsMock.mockResolvedValue({ data: null })
-    expect(await confirmUpgrade('rosa@test.local', '123456')).toEqual({
+    await requestUpgrade('rosa@test.local')
+    refreshedAs({ id: 'u1', is_anonymous: false, email: 'rosa@test.local' })
+    expect(await checkUpgrade()).toEqual({
       kind: 'registered',
+      email: 'rosa@test.local',
       pointsRecovered: 0,
     })
   })
 
-  it('maps a wrong/expired code (403) and rate limiting (429)', async () => {
-    verifyOtpMock.mockResolvedValue({ error: { status: 403 } })
-    expect(await confirmUpgrade('rosa@test.local', '000000')).toEqual({ kind: 'bad_code' })
-    verifyOtpMock.mockResolvedValue({ error: { status: 429 } })
-    expect(await confirmUpgrade('rosa@test.local', '000000')).toEqual({ kind: 'rate_limited' })
+  it('reports an upgrade confirmed from a request made elsewhere, with no points claim', async () => {
+    refreshedAs({ id: 'u1', is_anonymous: false, email: 'rosa@test.local' })
+    totalPointsMock.mockResolvedValue({ data: { total_points: 40 } })
+    expect(await checkUpgrade()).toEqual({
+      kind: 'registered',
+      email: 'rosa@test.local',
+      pointsRecovered: 0,
+    })
+  })
+
+  it('a failed refresh is an error, not a false "not yet"', async () => {
+    refreshSessionMock.mockResolvedValue({ data: { session: null }, error: { status: 500 } })
+    expect(await checkUpgrade()).toEqual({ kind: 'error' })
   })
 })

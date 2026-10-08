@@ -1,67 +1,112 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RegistrationPanel } from './RegistrationPanel'
 import type {
-  ConfirmUpgradeResult,
   RegistrationState,
+  UpgradeCheckResult,
   UpgradeRequestResult,
 } from '@/lib/registration'
 
 const stateMock = vi.fn<() => Promise<RegistrationState>>()
 const requestMock = vi.fn<(email: string) => Promise<UpgradeRequestResult>>()
-const confirmMock = vi.fn<(email: string, token: string) => Promise<ConfirmUpgradeResult>>()
+const checkMock = vi.fn<() => Promise<UpgradeCheckResult>>()
+const requestedHereMock = vi.fn<() => boolean>()
 
 vi.mock('@/lib/registration', () => ({
   registrationState: () => stateMock(),
   requestUpgrade: (email: string) => requestMock(email),
-  confirmUpgrade: (email: string, token: string) => confirmMock(email, token),
+  checkUpgrade: () => checkMock(),
+  upgradeRequestedHere: () => requestedHereMock(),
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
   stateMock.mockResolvedValue({ kind: 'anonymous' })
   requestMock.mockResolvedValue({ kind: 'sent', email: 'rosa@test.local' })
-  confirmMock.mockResolvedValue({ kind: 'registered', pointsRecovered: 0 })
+  checkMock.mockResolvedValue({ kind: 'pending' })
+  requestedHereMock.mockReturnValue(false)
 })
 
+async function requestLink(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
+  await user.click(screen.getByRole('button', { name: /Enviarme el enlace/ }))
+  await screen.findByText(/Te hemos enviado un enlace/)
+}
+
 describe('registration panel', () => {
-  it('anonymous: explains why and sends the code to the typed email', async () => {
+  it('anonymous: explains why and sends the link to the typed email', async () => {
     const user = userEvent.setup()
     render(<RegistrationPanel />)
     expect(await screen.findByText('Guarda tu cuenta')).toBeInTheDocument()
     expect(screen.getByText(/sin contraseña/)).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Tu correo'), 'rosa@test.local')
-    await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
+    await requestLink(user)
     expect(requestMock).toHaveBeenCalledWith('rosa@test.local')
-    expect(await screen.findByText(/Te hemos enviado un código/)).toBeInTheDocument()
+    expect(screen.getByText(/vuelve a esta pantalla/)).toBeInTheDocument()
     expect(screen.getByText(/spam/)).toBeInTheDocument()
   })
 
-  it('confirming a valid code upgrades and celebrates recovered points', async () => {
-    confirmMock.mockResolvedValue({ kind: 'registered', pointsRecovered: 15 })
+  it('tells the neighbor what the untranslated email looks like', async () => {
+    const user = userEvent.setup()
+    render(<RegistrationPanel />)
+    await requestLink(user)
+    expect(screen.getByText(/Supabase Auth/)).toBeInTheDocument()
+    expect(screen.getByText(/Confirm your new email address/)).toBeInTheDocument()
+  })
+
+  it('asks for no code', async () => {
+    const user = userEvent.setup()
+    render(<RegistrationPanel />)
+    await requestLink(user)
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('«Ya lo he abierto» upgrades and celebrates recovered points once the link was opened', async () => {
     const onRegistered = vi.fn()
     const user = userEvent.setup()
     render(<RegistrationPanel onRegistered={onRegistered} />)
-    await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
-    await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
-    await user.type(await screen.findByLabelText('Código del correo'), '123456')
-    await user.click(screen.getByRole('button', { name: /Confirmar código/ }))
-    expect(confirmMock).toHaveBeenCalledWith('rosa@test.local', '123456')
+    await requestLink(user)
+    checkMock.mockResolvedValue({
+      kind: 'registered',
+      email: 'rosa@test.local',
+      pointsRecovered: 15,
+    })
+    await user.click(screen.getByRole('button', { name: /Ya lo he abierto/ }))
     expect(await screen.findByText('✓ Cuenta guardada')).toBeInTheDocument()
     expect(screen.getByText(/\+15 puntos recuperados/)).toBeInTheDocument()
     expect(onRegistered).toHaveBeenCalledWith(15)
   })
 
-  it('a wrong code shows the friendly error and allows retrying', async () => {
-    confirmMock.mockResolvedValue({ kind: 'bad_code' })
+  it('«Ya lo he abierto» before opening the link says so and allows retrying', async () => {
     const user = userEvent.setup()
     render(<RegistrationPanel />)
-    await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
-    await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
-    await user.type(await screen.findByLabelText('Código del correo'), '999999')
-    await user.click(screen.getByRole('button', { name: /Confirmar código/ }))
-    expect(await screen.findByText(/no es válido o ha caducado/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Reenviar código/ })).toBeEnabled()
+    await requestLink(user)
+    await user.click(screen.getByRole('button', { name: /Ya lo he abierto/ }))
+    expect(await screen.findByText(/Aún no nos consta/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Reenviar enlace/ })).toBeEnabled()
+  })
+
+  it('notices the upgrade by itself when the neighbor comes back to the app', async () => {
+    const onRegistered = vi.fn()
+    const user = userEvent.setup()
+    render(<RegistrationPanel onRegistered={onRegistered} />)
+    await requestLink(user)
+    checkMock.mockResolvedValue({
+      kind: 'registered',
+      email: 'rosa@test.local',
+      pointsRecovered: 0,
+    })
+    window.dispatchEvent(new Event('focus'))
+    expect(await screen.findByText('✓ Cuenta guardada')).toBeInTheDocument()
+    expect(onRegistered).toHaveBeenCalledWith(0)
+  })
+
+  it('a silent check that finds nothing shows no error', async () => {
+    const user = userEvent.setup()
+    render(<RegistrationPanel />)
+    await requestLink(user)
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => expect(checkMock).toHaveBeenCalled())
+    expect(screen.queryByText(/Aún no nos consta/)).not.toBeInTheDocument()
   })
 
   it('an email already registered elsewhere is explained, not mystified', async () => {
@@ -69,38 +114,37 @@ describe('registration panel', () => {
     const user = userEvent.setup()
     render(<RegistrationPanel />)
     await user.type(await screen.findByLabelText('Tu correo'), 'taken@test.local')
-    await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
+    await user.click(screen.getByRole('button', { name: /Enviarme el enlace/ }))
     expect(await screen.findByText(/ya tiene una cuenta aquí/)).toBeInTheDocument()
   })
 
-  it('a pending upgrade resumes at the code step across sessions', async () => {
+  it('a pending upgrade resumes at the link step across sessions and checks at once', async () => {
     stateMock.mockResolvedValue({ kind: 'pending', email: 'rosa@test.local' })
     render(<RegistrationPanel />)
-    expect(await screen.findByText(/Te hemos enviado un código/)).toBeInTheDocument()
+    expect(await screen.findByText(/Te hemos enviado un enlace/)).toBeInTheDocument()
     expect(screen.getByText('rosa@test.local')).toBeInTheDocument()
+    await waitFor(() => expect(checkMock).toHaveBeenCalledTimes(1))
   })
 
-  it('a registered user sees their saved account, no form', async () => {
+  it('a link opened in this same browser is celebrated on arrival', async () => {
+    stateMock.mockResolvedValue({ kind: 'registered', email: 'rosa@test.local' })
+    requestedHereMock.mockReturnValue(true)
+    checkMock.mockResolvedValue({
+      kind: 'registered',
+      email: 'rosa@test.local',
+      pointsRecovered: 5,
+    })
+    const onRegistered = vi.fn()
+    render(<RegistrationPanel onRegistered={onRegistered} />)
+    expect(await screen.findByText(/\+5 puntos recuperados/)).toBeInTheDocument()
+    expect(onRegistered).toHaveBeenCalledWith(5)
+  })
+
+  it('a registered user sees their saved account, no form, no celebration replay', async () => {
     stateMock.mockResolvedValue({ kind: 'registered', email: 'rosa@test.local' })
     render(<RegistrationPanel />)
     expect(await screen.findByText('✓ Cuenta guardada')).toBeInTheDocument()
     expect(screen.queryByLabelText('Tu correo')).not.toBeInTheDocument()
-  })
-
-  it('the code input only accepts digits, gates at 6 and tolerates 8 (hosted rollout skew)', async () => {
-    const user = userEvent.setup()
-    render(<RegistrationPanel />)
-    await user.type(await screen.findByLabelText('Tu correo'), 'rosa@test.local')
-    await user.click(screen.getByRole('button', { name: /Enviarme un código/ }))
-    const codeInput = await screen.findByLabelText('Código del correo')
-    await user.type(codeInput, '12ab34')
-    expect(codeInput).toHaveValue('1234')
-    expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeDisabled()
-    await user.type(codeInput, '56')
-    expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeEnabled()
-    // an 8-digit code (hosted default until its config is patched) still fits
-    await user.type(codeInput, '78')
-    expect(codeInput).toHaveValue('12345678')
-    expect(screen.getByRole('button', { name: /Confirmar código/ })).toBeEnabled()
+    expect(checkMock).not.toHaveBeenCalled()
   })
 })

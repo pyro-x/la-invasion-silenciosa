@@ -228,9 +228,9 @@ enable_signup = true
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
 # ON to mirror the hosted project (LCHP-29): with autoconfirm, GoTrue applies
-# email changes instantly and the OTP step the real app depends on never
-# happens locally — the registration flow must be developed against the
-# same behavior production has.
+# email changes instantly and the confirmation step the real app depends on
+# never happens locally — the registration flow must be developed against
+# the same behavior production has.
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
@@ -251,14 +251,11 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# LCHP-29 (D-055): the account-upgrade email carries a 6-digit OTP code, not
-# a clickable link — links open in Safari, which does not share storage with
-# an installed PWA on iOS, stranding the session. This file is ALSO the
-# reference for the hosted project's Email Templates → "Change Email Address"
-# entry (dashboard), which must render {{ .Token }} the same way.
-[auth.email.template.email_change]
-subject = "Tu código para La Invasión Silenciosa"
-content_path = "./supabase/templates/email_change.html"
+# LCHP-29 (D-060): no custom email_change template. The hosted project is
+# on the free tier with Supabase's built-in sender, which refuses template
+# changes, so production sends the DEFAULT confirmation-link email — and the
+# local stack must send the same one. A custom template comes back with a
+# custom SMTP provider (LCHP-31).
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

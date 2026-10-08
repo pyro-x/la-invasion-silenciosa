@@ -839,44 +839,70 @@ verificada limita el abuso; (c) como el `id` sobrevive al upgrade, no se
 pierde nada por empezar anónimo. El magic link se ofrece como mejora
 («guarda tu historial y tus puntos»), no como barrera.
 
-### Registro progresivo implementado (LCHP-29 — 2026-07-07) `Decidido`
+### Registro progresivo implementado (LCHP-29 — 2026-07-07; enmienda 2026-10-08, D-060) `Decidido`
 
-El upgrade se hace con un **código OTP de 6 dígitos**, no con un enlace
-clicable (D-055/D-056): en una PWA instalada en iOS el enlace se abre en
-Safari, que no comparte almacenamiento con la PWA, y la sesión queda
-huérfana. El flujo implementado (`src/lib/registration.ts` + panel «Guarda
-tu cuenta» en Perfil):
+> **Enmienda 2026-10-08 (D-060):** el upgrade vuelve al **enlace de
+> confirmación estándar de Supabase**; se retira el código OTP tecleado
+> en la app. Motivo: el proyecto hosted está en el plan gratuito con el
+> remitente integrado, y Supabase **no permite modificar las plantillas
+> de correo** en esa combinación (la Management API responde 400: «Email
+> template modification is not available for free tier projects using the
+> default email provider»). Sin plantilla propia el correo no puede llevar
+> el código, así que el flujo OTP era inservible en producción (David lo
+> reprodujo en la preview: pantalla de código en la app, correo solo con
+> enlace). El código OTP vuelve a ser posible cuando haya SMTP propio
+> (LCHP-31).
+
+El flujo implementado (`src/lib/registration.ts` + panel «Guarda tu
+cuenta» en Perfil):
 
 ```text
-updateUser({ email }) sobre la sesión anónima
+updateUser({ email }, { emailRedirectTo: <origen>/perfil })
+sobre la sesión anónima
 ↓
-llega un código de 6 dígitos por correo
-(plantilla en supabase/templates/email_change.html, versionada;
- asunto «Tu código para La Invasión Silenciosa»)
+llega el correo ESTÁNDAR de Supabase (en inglés, remitente
+«Supabase Auth», asunto «Confirm your new email address») con un enlace
 ↓
-verifyOtp({ type: 'email_change', email, token }) EN la app
+el vecino abre el enlace → GoTrue confirma el correo EN EL SERVIDOR
 ↓
 misma fila de auth.users: is_anonymous=false, mismo id
 ↓
 el trigger de LCHP-15 activa sus apoyos provisionales:
 cuentan para el umbral y cobra sus +5 acumulados
-(«+N puntos recuperados» en el panel)
+↓
+al volver a la app, esta REFRESCA su sesión (refreshSession) y ve el
+cambio: «Cuenta guardada · +N puntos recuperados»
 ```
 
-Verificado de extremo a extremo contra GoTrue local con Mailpit
-(confirmaciones activadas para espejar el hosted). Notas operativas:
+**Por qué la app no depende de la redirección.** En una PWA instalada en
+iOS el enlace se abre en Safari, que no comparte almacenamiento con la
+PWA: la página a la que redirige no tiene la sesión. Pero la confirmación
+ocurre en el servidor, sobre la misma cuenta, se abra donde se abra. Por
+eso el panel nunca espera a la redirección: pregunta al servidor
+(refrescando su propia sesión) al montarse con un enlace pendiente, cada
+vez que la app vuelve a primer plano y cuando el vecino pulsa «Ya lo he
+abierto». El refresco importa además porque el nuevo token es el que
+lleva el claim «no anónimo» que lee RLS. **Pendiente de verificar en un
+iPhone real con la app instalada** (no se ha probado en dispositivo).
 
-* la sesión anónima sigue plenamente usable mientras el código está
-  pendiente — que caduque o no llegue es inofensivo;
+Notas operativas:
+
+* la sesión anónima sigue plenamente usable mientras el enlace está
+  pendiente — que caduque o no se abra es inofensivo;
+* `emailRedirectTo` devuelve al origen que pidió el enlace (producción o
+  una preview de Cloudflare); el Site URL del hosted y la lista de
+  redirecciones (`https://la-invasion-silenciosa.pages.dev` y
+  `https://*.la-invasion-silenciosa.pages.dev`) se configuraron el
+  2026-10-08 — antes el enlace iba a `http://localhost:3000`;
+* el correo no se puede traducir ni personalizar (plan gratuito): el panel
+  le dice al vecino qué remitente y qué asunto buscar;
+* los puntos recuperados se calculan contra los que había al pedir el
+  enlace, guardados en `localStorage` (`lis.registration.requested`),
+  porque el trigger paga en el servidor, quizá con la app cerrada;
 * un correo ya registrado en otra cuenta se rechaza con explicación (no
   hay fusión de cuentas: limitación conocida de linkIdentity/updateUser);
-* la plantilla del hosted (dashboard → Email Templates → Change Email
-  Address) debe espejar la del repo y el `otp_length` bajarse de 8 a 6 —
-  **paso PRE-merge de LCHP-29** (review adversarial: Cloudflare publica
-  main al instante del merge y un despliegue con la plantilla vieja
-  enviaría el email de enlace sin código; cambiarla antes es riesgo
-  cero porque ningún código en producción envía emails de email_change
-  hasta que esta rama despliega);
+* el stack local espeja al hosted: confirmaciones activadas y **sin**
+  plantilla propia (correo por defecto en Mailpit);
 * **SMTP propio pendiente ANTES del piloto** (LCHP-31): el remitente
   integrado de Supabase envía ~2 correos/hora, inservible en la calle.
 
