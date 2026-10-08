@@ -16,6 +16,8 @@ const recorded = vi.hoisted(() => ({
   easing: false,
   // prefers-reduced-motion: MapLibre ends an ease before easeTo returns.
   reducedMotion: false,
+  // The furthest out the pan limit lets the viewport zoom.
+  boundsMinZoom: 0,
   meData: [] as object[],
   meDot: null as HTMLElement | null,
 }))
@@ -51,6 +53,12 @@ vi.mock('maplibre-gl', () => {
     }
     getZoom() {
       return recorded.zoom
+    }
+    transform = {
+      applyConstrain: (center: { lng: number; lat: number }, zoom: number) => ({
+        center,
+        zoom: Math.max(zoom, recorded.boundsMinZoom),
+      }),
     }
     getMinZoom() {
       return 0
@@ -137,6 +145,7 @@ beforeEach(() => {
   recorded.zoom = 15
   recorded.easing = false
   recorded.reducedMotion = false
+  recorded.boundsMinZoom = 0
   recorded.meData.length = 0
   recorded.meDot = null
   for (const type of Object.keys(recorded.handlers)) delete recorded.handlers[type]
@@ -523,6 +532,35 @@ describe('createBarrioMap', () => {
     expect(recorded.eases.at(-1)?.zoom).toBe(20)
     emit('moveend')
     expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom-out step that the pan limit stops short still counts as arrived', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    recorded.boundsMinZoom = 14.4
+    controller.zoomBy(-1)
+    expect(recorded.eases.at(-1)?.zoom).toBe(14.4)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom-out step at the lowest zoom still counts as arrived', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    recorded.zoom = 0.4
+    controller.zoomBy(-1)
+    expect(recorded.eases.at(-1)?.zoom).toBe(0)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom-out step that is cut stores nothing either, however close it got', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(-1)
+    recorded.zoom = 14.3
+    interrupt()
+    expect(stored()).toBeNull()
   })
 
   it('a drag that takes over a zoom step stores the drag, not the half-made zoom', () => {

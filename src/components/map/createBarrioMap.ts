@@ -204,8 +204,11 @@ export function createBarrioMap(
   const zoomStep = (wanted: number) => {
     map.stop()
     userChoseView = true
-    // Within the map's limits, so that arriving can be told from being cut.
-    const zoom = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), wanted))
+    // Where the step will really end, so that arriving can be told from
+    // being cut: within the zoom limits, and no further out than the pan
+    // limit lets this viewport go.
+    const within = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), wanted))
+    const zoom = map.transform.applyConstrain(map.getCenter(), within).zoom
     carriedZoom = zoom
     map.easeTo({ zoom, duration: 250 })
   }
@@ -221,7 +224,7 @@ export function createBarrioMap(
   map.on('moveend', () => {
     // A zoom-button step that was stopped before it arrived — by the app or
     // by the user's own hand — ends at a zoom nobody chose.
-    const cutStep = !flight && carriedZoom !== null && Math.abs(map.getZoom() - carriedZoom) > 0.001
+    const cutStep = carriedZoom !== null && Math.abs(map.getZoom() - carriedZoom) > 0.001
     carriedZoom = null
     if (jumping) return
     if (flight) {
