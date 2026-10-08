@@ -181,10 +181,18 @@ export function createBarrioMap(
   // it on: the zoom-in to the position, or a zoom-button step.
   let carriedZoom: number | null = null
 
+  // Ends whatever is moving, before the app starts something else. A
+  // zoom-button step cut here ends at a zoom nobody chose: its moveend
+  // must not store it. A user's own gesture or its inertia keeps its claim.
+  const halt = () => {
+    if (!flight && carriedZoom !== null) userChoseView = false
+    map.stop()
+  }
+
   const ease = (to: { center: [number, number]; zoom?: number }, carry = false) => {
     // easeTo stops the previous ease itself, but only after `flight` is
     // set below: its moveend would then be taken for this one's.
-    map.stop()
+    halt()
     userChoseView = false
     flight = to
     carriedZoom = carry && to.zoom !== undefined ? to.zoom : null
@@ -192,7 +200,7 @@ export function createBarrioMap(
   }
   const jump = (change: () => void) => {
     // This drops a gesture in progress without a moveend for it.
-    map.stop()
+    halt()
     userChoseView = false
     jumping = true
     change()
@@ -202,7 +210,7 @@ export function createBarrioMap(
   // A zoom-button step: the camera move is the app's call, the choice is
   // the user's.
   const zoomStep = (zoom: number) => {
-    map.stop()
+    halt()
     userChoseView = true
     carriedZoom = zoom
     map.easeTo({ zoom, duration: 250 })
@@ -284,21 +292,18 @@ export function createBarrioMap(
       bottomPx = px
       // Zero is "not measured yet", not a height.
       const opening = !framed && px > 0
-      // setPadding stops whatever is moving. A zoom-button step is sent
-      // again afterwards; the stop ends it part-way, and that moveend must
-      // not store the half-made zoom as the user's view.
+      // setPadding stops whatever is moving, so a move under way is sent
+      // again: picking a pin both starts an ease and resizes the sheet, and
+      // a zoom-button step would otherwise end part-way. The opening fit
+      // replaces either.
       const step = flight ? null : carriedZoom
-      if (step !== null) userChoseView = false
-      // Picking a pin both starts an ease and resizes the sheet, so the ease
-      // is sent again with the new padding instead of being cut short.
-      if (flight) ease(flight, carriedZoom !== null)
+      if (flight && !opening) ease(flight, carriedZoom !== null)
       else jump(() => map.setPadding(padding()))
       if (opening) {
         // The opening frame is fitted once the sheet's height is known, so
         // the barrio lands in the part of the map that is actually visible.
-        // It wins over a zoom step pressed before it. The sheet is already
-        // in the map's own padding (set just above); fitBounds adds its
-        // padding on top, so only the margins go here.
+        // The sheet is already in the map's own padding (set just above);
+        // fitBounds adds its padding on top, so only the margins go here.
         framed = true
         jump(() =>
           map.fitBounds(LA_LATINA_BOUNDS, {

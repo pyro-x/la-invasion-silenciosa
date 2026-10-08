@@ -485,12 +485,47 @@ describe('createBarrioMap', () => {
     expect(stored()).toBeNull()
   })
 
+  it('a zoom step cut by a move to a pin, or by a second press, does not store its half-made zoom', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    controller.goTo({ lat: 40.4125, lng: -3.7135 })
+    emit('moveend')
+    expect(stored()).toBeNull()
+    controller.zoomBy(1)
+    controller.zoomBy(1)
+    expect(stored()).toBeNull()
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a sheet resize that cuts the glide of a user drag still stores where it stopped', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    emit('movestart', { originalEvent: new Event('touchstart') })
+    recorded.easing = true
+    controller.setBottomPadding(120)
+    expect(stored()).not.toBeNull()
+  })
+
+  it('the opening fit replaces a move started before the sheet was measured', () => {
+    const { controller } = mount()
+    controller.goTo({ lat: 40.4125, lng: -3.7135 })
+    controller.setBottomPadding(300)
+    expect(recorded.paddings.map((p) => p.bottom)).toEqual([300])
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(1)
+    emit('moveend')
+    expect(stored()).toBeNull()
+  })
+
   it('the opening fit wins over a zoom step pressed before the sheet was measured', () => {
     const { controller } = mount()
     controller.zoomBy(1)
+    controller.zoomBy(1)
     controller.setBottomPadding(300)
     expect(recorded.fits).toHaveLength(1)
-    expect(recorded.eases).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(2)
     expect(stored()).toBeNull()
   })
 
