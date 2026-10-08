@@ -242,7 +242,20 @@ Estas opciones pueden reevaluarse después del piloto.
 
 ## 9. Maqueta existente
 
-La app debe respetar la maqueta de Claude Design.
+> **Enmienda 2026-10-08 (D-058):** la maqueta pasa de «réplica al 100 %»
+> (D-019, barra de aceptación de M1, ya cumplida) a **guía**. Se sigue por
+> defecto, pero cualquier pantalla puede apartarse de ella cuando la
+> alternativa es una mejora clara de UX en móvil, verificada en el loop
+> visual contra la app real. Lo que sigue siendo fijo: tokens del tema
+> chispera y hoja de estilos portada, sprites pixel-art, inventario de
+> pantallas, navegación, copy en castellano y la regla de oro. Lo que queda
+> abierto: composición de cada pantalla y el cromo alrededor del mapa (mapa
+> a pantalla completa, controles flotantes, hoja inferior). Una pantalla
+> que se aparta de su captura genera una captura de referencia nueva en su
+> PR; las capturas de `docs/prototype/` se conservan como referencia
+> histórica.
+
+La app debe respetar la maqueta de Claude Design como guía (ver enmienda).
 
 Prioridades:
 
@@ -251,7 +264,7 @@ Prioridades:
 * conservar tono visual;
 * conservar conceptos de criaturas/avistamientos;
 * mantener carácter gamificado;
-* no rediseñar sin motivo;
+* no rediseñar sin motivo (una mejora clara de UX en móvil es motivo — D-058);
 * reemplazar mocks por datos reales gradualmente;
 * conservar experiencia mobile-first.
 
