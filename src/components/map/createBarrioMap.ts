@@ -181,18 +181,10 @@ export function createBarrioMap(
   // it on: the zoom-in to the position, or a zoom-button step.
   let carriedZoom: number | null = null
 
-  // Ends whatever is moving, before the app starts something else. A
-  // zoom-button step cut here ends at a zoom nobody chose: its moveend
-  // must not store it. A user's own gesture or its inertia keeps its claim.
-  const halt = () => {
-    if (!flight && carriedZoom !== null) userChoseView = false
-    map.stop()
-  }
-
   const ease = (to: { center: [number, number]; zoom?: number }, carry = false) => {
     // easeTo stops the previous ease itself, but only after `flight` is
     // set below: its moveend would then be taken for this one's.
-    halt()
+    map.stop()
     userChoseView = false
     flight = to
     carriedZoom = carry && to.zoom !== undefined ? to.zoom : null
@@ -200,7 +192,7 @@ export function createBarrioMap(
   }
   const jump = (change: () => void) => {
     // This drops a gesture in progress without a moveend for it.
-    halt()
+    map.stop()
     userChoseView = false
     jumping = true
     change()
@@ -209,9 +201,11 @@ export function createBarrioMap(
 
   // A zoom-button step: the camera move is the app's call, the choice is
   // the user's.
-  const zoomStep = (zoom: number) => {
-    halt()
+  const zoomStep = (wanted: number) => {
+    map.stop()
     userChoseView = true
+    // Within the map's limits, so that arriving can be told from being cut.
+    const zoom = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), wanted))
     carriedZoom = zoom
     map.easeTo({ zoom, duration: 250 })
   }
@@ -225,12 +219,16 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
+    // A zoom-button step that was stopped before it arrived — by the app or
+    // by the user's own hand — ends at a zoom nobody chose.
+    const cutStep = !flight && carriedZoom !== null && Math.abs(map.getZoom() - carriedZoom) > 0.001
     carriedZoom = null
     if (jumping) return
     if (flight) {
       flight = null
       return
     }
+    if (cutStep) return
     if (!userChoseView) return
     userChoseView = false
     if (positionShown) return

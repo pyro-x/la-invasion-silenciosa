@@ -1207,8 +1207,10 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   la hoja durante un paso de +/− tampoco lo corta: el paso se vuelve a
   lanzar. El encuadre inicial tiene prioridad: un paso o un movimiento
   empezado antes de conocer la altura de la hoja se descarta. Un paso
-  cortado a medias — por la hoja, por ir a un pin o por otra pulsación —
-  nunca guarda su zoom intermedio como vista. En una
+  de +/− solo se guarda como vista si llegó a su zoom de destino: cortado
+  a medias — por la hoja, por ir a un pin, por otra pulsación o por un
+  gesto del vecino — no guarda su zoom intermedio (el gesto guarda luego
+  lo suyo). En una
   visita posterior **el punto reaparece** sin preguntar solo si el
   navegador confirma que el permiso sigue concedido; el mapa **no** se
   recentra solo (seguir exige tocar el botón). Al volver de segundo plano

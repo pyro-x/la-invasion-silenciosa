@@ -52,6 +52,12 @@ vi.mock('maplibre-gl', () => {
     getZoom() {
       return recorded.zoom
     }
+    getMinZoom() {
+      return 0
+    }
+    getMaxZoom() {
+      return 20
+    }
     getCenter() {
       return { lng: -3.71, lat: 40.411 }
     }
@@ -92,7 +98,12 @@ vi.mock('maplibre-gl', () => {
 })
 
 const emit = (type: string, event: { originalEvent?: Event } = {}) => {
-  if (type === 'moveend') recorded.easing = false
+  if (type === 'moveend') {
+    // An ease left to run arrives at its zoom; one ended by stop() does not.
+    const landing = recorded.easing ? recorded.eases.at(-1)?.zoom : undefined
+    if (landing !== undefined) recorded.zoom = landing
+    recorded.easing = false
+  }
   ;(recorded.handlers[type] ?? []).forEach((handler) => handler(event))
 }
 const userDrag = () => {
@@ -100,6 +111,11 @@ const userDrag = () => {
   emit('moveend')
 }
 const stored = () => localStorage.getItem('lis.map.view')
+// What MapLibre does when a gesture takes over: the ease ends where it is.
+const interrupt = () => {
+  recorded.easing = false
+  emit('moveend')
+}
 
 function mount() {
   const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0, mounts: [] as MarkerMount[] }
@@ -469,7 +485,7 @@ describe('createBarrioMap', () => {
     expect(stored()).not.toBeNull()
     controller.zoomBy(-1)
     controller.setBottomPadding(120)
-    expect(recorded.eases.at(-1)?.zoom).toBe(14)
+    expect(recorded.eases.at(-1)?.zoom).toBe(15)
     emit('moveend')
     controller.setBottomPadding(200)
     expect(recorded.eases).toHaveLength(4)
@@ -494,6 +510,37 @@ describe('createBarrioMap', () => {
     expect(stored()).toBeNull()
     controller.zoomBy(1)
     controller.zoomBy(1)
+    expect(stored()).toBeNull()
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom step that ends at the zoom limit still counts as arrived', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    recorded.zoom = 19.6
+    controller.zoomBy(1)
+    expect(recorded.eases.at(-1)?.zoom).toBe(20)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a drag that takes over a zoom step stores the drag, not the half-made zoom', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    interrupt()
+    expect(stored()).toBeNull()
+    userDrag()
+    expect(stored()).not.toBeNull()
+  })
+
+  it('the wheel taking over a zoom step stores the wheel zoom, not the half-made one', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    emit('wheel')
+    interrupt()
     expect(stored()).toBeNull()
     emit('moveend')
     expect(stored()).not.toBeNull()
