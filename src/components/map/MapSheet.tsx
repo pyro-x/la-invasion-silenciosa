@@ -12,6 +12,7 @@ export function MapSheet({
   onToggle,
   onHeight,
   header,
+  headerKey,
   children,
 }: {
   /** Names the sheet for assistive technology. */
@@ -22,10 +23,13 @@ export function MapSheet({
   onHeight: (px: number) => void
   /** Always visible, also when folded. */
   header: ReactNode
+  /** Changes when the header shows something else: the sheet scrolls back up to it. */
+  headerKey: string
   /** Hidden while folded. */
   children: ReactNode
 }) {
   const ref = useRef<HTMLElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const onHeightRef = useRef(onHeight)
   const dragStartY = useRef<number | null>(null)
   const swiped = useRef(false)
@@ -44,6 +48,12 @@ export function MapSheet({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  // The header scrolls with the list, so a row picked far down would swap
+  // the card above the fold, out of sight.
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  }, [headerKey])
 
   // A swipe on the handle folds or unfolds; a plain tap toggles.
   const onPointerDown = (event: PointerEvent) => {
@@ -78,7 +88,7 @@ export function MapSheet({
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
       />
-      <div className="map-sheet-body">
+      <div ref={bodyRef} className="map-sheet-body">
         {/* polite: picking a pin swaps this for its detail card, far from
             the pin in DOM order — say so without stealing focus */}
         <div aria-live="polite">{header}</div>

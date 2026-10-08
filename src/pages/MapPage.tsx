@@ -331,6 +331,7 @@ export function MapPage() {
         label="Avistamientos cerca de ti"
         open={sheetOpen}
         onToggle={foldSheet}
+        headerKey={sel ?? ''}
         onHeight={setSheetHeight}
         header={
           selS ? (

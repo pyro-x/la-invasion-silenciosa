@@ -12,6 +12,7 @@ function renderSheet(open: boolean) {
       onToggle={onToggle}
       onHeight={onHeight}
       header={<span>cabecera</span>}
+      headerKey=""
     >
       <span>lista</span>
     </MapSheet>,
@@ -55,5 +56,28 @@ describe('MapSheet', () => {
     fireEvent.pointerUp(handle, { clientY: 90 })
     fireEvent.click(handle)
     expect(onToggle.mock.calls).toEqual([[false], [true]])
+  })
+
+  it('scrolls back up when the header shows something else', () => {
+    const sheet = (headerKey: string) => (
+      <MapSheet
+        label="Avistamientos cerca de ti"
+        open
+        onToggle={() => {}}
+        onHeight={() => {}}
+        header={<span>cabecera</span>}
+        headerKey={headerKey}
+      >
+        <span>lista</span>
+      </MapSheet>
+    )
+    const { rerender } = render(sheet('a'))
+    const body = screen.getByText('lista').parentElement
+    if (!body) throw new Error('the sheet has no body')
+    body.scrollTop = 240
+    rerender(sheet('a'))
+    expect(body.scrollTop).toBe(240)
+    rerender(sheet('b'))
+    expect(body.scrollTop).toBe(0)
   })
 })
