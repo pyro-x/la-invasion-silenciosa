@@ -1198,10 +1198,12 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   rueda, o elige un pin (los botones +/− cambian el zoom sin dejar de
   seguir). Cada toque en el botón acerca el mapa hasta z17; las posiciones
   siguientes solo recentran, para no deshacer un zoom del vecino. Un
-  recentrado que llega mientras el acercamiento sigue en curso conserva
-  su zoom: un móvil entrega varias posiciones en el primer segundo y, si
-  no, cada una cortaba el acercamiento de la anterior (visto en iPhone: el
-  punto aparecía y el mapa no se movía). En una
+  recentrado del seguimiento que llega mientras sigue en curso un
+  acercamiento, o un paso de los botones +/−, conserva ese zoom: un móvil
+  entrega varias posiciones en el primer segundo y, si no, cada una
+  cortaba el movimiento anterior (visto en iPhone: el punto aparecía y el
+  mapa no se movía). Solo el seguimiento hereda el zoom: un pin elegido en
+  ese instante se centra con el zoom que encuentra. En una
   visita posterior **el punto reaparece** sin preguntar solo si el
   navegador confirma que el permiso sigue concedido; el mapa **no** se
   recentra solo (seguir exige tocar el botón). Al volver de segundo plano
@@ -1210,8 +1212,10 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   vez» caducado) o no sabe decirlo (sin API de permisos; Safari, que
   responde «preguntar» a casi todo), se pausa en vez de arriesgar el aviso
   nativo sin toque, y la hoja dice «Toca «Ir a mi posición» para volver a
-  ver dónde estás.» Pendiente de comprobar en un iPhone cuántas veces
-  ocurre en la práctica. Al salir de la pantalla se deja
+  ver dónde estás.» En el iPhone de David (2026-10-09) el punto seguía
+  ahí al cambiar de app y volver; no se anotó la versión de iOS ni si la
+  observación se reanudó o nunca llegó a pausarse, así que no está medido
+  cuántas veces ocurre la pausa en otros iPhone. Al salir de la pantalla se deja
   de observar y se olvida la posición (también en memoria). Los avisos
   (denegado → cómo permitirlo, texto por plataforma; sin señal; **fuera de
   La Latina no se muestra ni se sigue la posición**) se ven en la cabecera
@@ -1234,12 +1238,15 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   Consecuencia aceptada: quien ha visto su posición en el mapa no ve
   recordada la vista de esa visita a la pantalla. Al aparecer la posición
   se borra además la vista guardada: como ya no se va a guardar otra, la
-  antigua volvería en cada visita; quien tiene la ubicación activada abre
-  siempre encuadrado al barrio.
+  antigua volvería en cada visita. Tras una visita en la que apareció el
+  punto, la siguiente abre encuadrada al barrio. (Si el punto no llega a
+  aparecer — posición fuera del barrio, navegador que no reanuda sin
+  toque, salir antes de la primera posición — la vista se sigue
+  recordando.)
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setSelected`,
-  `setMe`, `setBottomPadding`, `goTo`, `zoomBy`, `destroy`), al estilo del
+  `setMe`, `setBottomPadding`, `goTo`, `follow`, `zoomBy`, `destroy`), al estilo del
   `mapview.js` de Alcorqueando. `BarrioMap.tsx` es un envoltorio fino. Los
   pines siguen siendo marcadores DOM con sprites de React; LCHP-35 los
   cambia por una fuente GeoJSON detrás de la misma API.

@@ -107,7 +107,7 @@ export function BarrioMap({
     if (!follow || !me) return
     const asked = zoomedFor.current !== followRequest
     zoomedFor.current = followRequest
-    controller.current?.goTo(me, asked ? FOLLOW_MIN_ZOOM : undefined)
+    controller.current?.follow(me, asked ? FOLLOW_MIN_ZOOM : undefined)
   }, [follow, me, followRequest])
 
   useEffect(() => {
