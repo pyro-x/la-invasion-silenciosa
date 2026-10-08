@@ -138,14 +138,24 @@ export function createBarrioMap(
     drawMe()
   })
 
+  // Only a view the user chose is remembered. Programmatic moves — the
+  // opening fit, easing to a pin, and above all following the user's own
+  // position — must never be written to storage.
+  let userChoseView = false
+  const userMoved = () => {
+    userChoseView = true
+    handlers.onUserMove()
+  }
+  map.on('movestart', (event) => {
+    if (event.originalEvent) userMoved()
+  })
+  map.on('wheel', userMoved)
   map.on('moveend', () => {
+    if (!userChoseView) return
+    userChoseView = false
     const center = map.getCenter()
     writeView({ center: [center.lng, center.lat], zoom: map.getZoom() })
   })
-  map.on('movestart', (event) => {
-    if (event.originalEvent) handlers.onUserMove()
-  })
-  map.on('wheel', () => handlers.onUserMove())
   map.on('click', () => handlers.onMapTap())
 
   return {
@@ -188,8 +198,9 @@ export function createBarrioMap(
     setBottomPadding(px) {
       map.setPadding({ top: 0, left: 0, right: 0, bottom: px })
       // The opening frame is fitted once the sheet's height is known, so the
-      // barrio lands in the part of the map that is actually visible.
-      if (!framed) {
+      // barrio lands in the part of the map that is actually visible. Zero
+      // is "not measured yet", not a height.
+      if (!framed && px > 0) {
         framed = true
         map.fitBounds(LA_LATINA_BOUNDS, {
           padding: { top: TOP_CHROME_PX, bottom: px + 16, left: 16, right: 16 },
@@ -207,6 +218,7 @@ export function createBarrioMap(
     },
 
     zoomBy(delta) {
+      userChoseView = true
       map.easeTo({ zoom: map.getZoom() + delta, duration: 250 })
     },
 

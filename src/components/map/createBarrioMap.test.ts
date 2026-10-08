@@ -97,8 +97,41 @@ describe('createBarrioMap', () => {
     expect(recorded.fits[0]?.padding.bottom).toBeGreaterThan(300)
   })
 
+  it('waits for a measured sheet before fitting: zero is not a height', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(0)
+    expect(recorded.fits).toHaveLength(0)
+    controller.setBottomPadding(310)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.fits[0]?.padding.bottom).toBeGreaterThan(310)
+  })
+
+  it('never stores a view the user did not choose — the opening fit, a pin, following', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(310)
+    emit('moveend')
+    controller.goTo({ lat: 40.4115, lng: -3.712 }, 17)
+    emit('movestart')
+    emit('moveend')
+    expect(localStorage.getItem('lis.map.view')).toBeNull()
+  })
+
+  it('stores a view once per user move, including the zoom buttons', () => {
+    const { controller } = mount()
+    emit('movestart', { originalEvent: new Event('touchstart') })
+    emit('moveend')
+    expect(localStorage.getItem('lis.map.view')).not.toBeNull()
+    localStorage.clear()
+    emit('moveend')
+    expect(localStorage.getItem('lis.map.view')).toBeNull()
+    controller.zoomBy(1)
+    emit('moveend')
+    expect(localStorage.getItem('lis.map.view')).not.toBeNull()
+  })
+
   it('remembers the view and restores it without refitting', () => {
     mount()
+    emit('movestart', { originalEvent: new Event('touchstart') })
     emit('moveend')
     const { controller } = mount()
     expect(recorded.options[1]).toMatchObject({ center: [-3.71, 40.411], zoom: 15 })

@@ -1148,14 +1148,24 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   el permiso nativo se pide **solo al tocar el botón, nunca al cargar**
   (D-052). Con posición: punto verde + círculo de precisión, y el mapa la
   sigue hasta que el vecino arrastra, hace zoom o elige un pin. En una
-  visita posterior el seguimiento se reanuda sin preguntar solo si el
-  navegador confirma que el permiso ya está concedido. Denegado → se
+  visita posterior **el punto reaparece** sin preguntar solo si el
+  navegador confirma que el permiso sigue concedido; el mapa **no** se
+  recentra solo (seguir exige tocar el botón). Al salir de la pantalla se
+  deja de observar y se olvida la posición mostrada. Denegado → se
   explica en la hoja cómo permitirlo (texto por plataforma). **Fuera de La
   Latina no se muestra ni se sigue la posición**: el mapa es del barrio y
-  se dice así. La posición del vecino nunca sale del dispositivo.
-* **Se recuerda la última vista** (centro y zoom, `localStorage`
-  `lis.map.view`) si cae dentro del límite de paneo; si no, se abre
-  encuadrado al barrio.
+  se dice así.
+* **Privacidad de la posición del vecino:** no se envía a nuestros
+  servidores ni se guarda. La vista recordada (abajo) solo registra
+  movimientos hechos por el vecino, nunca el recentrado automático del
+  seguimiento. Lo único que sale del dispositivo son las peticiones de
+  teselas del basemap, como en cualquier mapa: OpenFreeMap sirve teselas
+  hasta z14, así que ve, como mucho, qué celda de ~1,7×1,3 km se está
+  mirando — con el mapa acotado a La Latina, una de unas nueve.
+* **Se recuerda la última vista que eligió el vecino** (centro y zoom,
+  `localStorage` `lis.map.view`) si cae dentro del límite de paneo; si no,
+  se abre encuadrado al barrio. Los movimientos programáticos (encuadre
+  inicial, ir a un pin, seguir la posición) no se guardan.
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setMe`,

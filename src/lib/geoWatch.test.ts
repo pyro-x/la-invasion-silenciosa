@@ -100,6 +100,39 @@ describe('geoWatch', () => {
     expect(result.current.kind).toBe('ok')
   })
 
+  it('ignores late callbacks from a watch that was replaced', () => {
+    const { result } = renderHook(() => useGeoWatch())
+    act(() => startGeoWatch())
+    const first = watcher()
+    act(() => startGeoWatch())
+    act(() => watcher().success(fix(40.4115, -3.712, 12)))
+    act(() => first.fail(failure(1)))
+    expect(result.current.kind).toBe('ok')
+    act(() => first.success(fix(41.3874, 2.1686, 5)))
+    expect(result.current).toMatchObject({ position: { lat: 40.4115, lng: -3.712 } })
+  })
+
+  it('stopping forgets the position on screen, and a late fix does not bring it back', () => {
+    const { result } = renderHook(() => useGeoWatch())
+    act(() => startGeoWatch())
+    const stopped = watcher()
+    act(() => stopped.success(fix(40.4115, -3.712, 12)))
+    act(() => stopGeoWatch())
+    expect(result.current).toEqual({ kind: 'idle', position: null })
+    act(() => stopped.success(fix(40.4116, -3.7121, 12)))
+    expect(result.current.kind).toBe('idle')
+  })
+
+  it('a later visit shows no position when the permission is no longer granted', async () => {
+    act(() => startGeoWatch())
+    act(() => watcher().success(fix(40.4115, -3.712, 12)))
+    act(() => stopGeoWatch())
+    permissionsQuery.mockResolvedValue({ state: 'prompt' })
+    await resumeGeoWatchIfGranted()
+    const { result } = renderHook(() => useGeoWatch())
+    expect(result.current).toEqual({ kind: 'idle', position: null })
+  })
+
   it('reports a browser without geolocation', () => {
     vi.stubGlobal('navigator', { permissions: { query: permissionsQuery } })
     const { result } = renderHook(() => useGeoWatch())

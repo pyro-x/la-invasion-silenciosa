@@ -33,6 +33,10 @@ import { listSpecies } from '@/services/species.service'
 import type { VerifyOutcome } from '@/services/verifications.service'
 import type { MapSightingGeo } from '@/types/sighting'
 
+// One shared empty list: a fresh [] on every render would make the map
+// reconcile its pins again for nothing.
+const NO_SIGHTINGS: MapSightingGeo[] = []
+
 // MapLibre is ~210 KB gzipped (spike LCHP-4): load it only on /mapa.
 const BarrioMap = lazy(() =>
   import('@/components/map/BarrioMap').then((m) => ({ default: m.BarrioMap })),
@@ -113,7 +117,7 @@ export function MapPage() {
   }, [])
 
   const {
-    data: sightings = [],
+    data: sightings = NO_SIGHTINGS,
     isError,
     refetch,
   } = useQuery({
@@ -200,7 +204,7 @@ export function MapPage() {
         fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg2)' }} />}
       >
         <BarrioMap
-          sightings={heat || isError ? [] : sightings}
+          sightings={heat || isError ? NO_SIGHTINGS : sightings}
           selectedId={sel}
           onPick={pick}
           onMapTap={() => setSel(null)}
@@ -337,6 +341,7 @@ export function MapPage() {
       </div>
 
       <MapSheet
+        label="Avistamientos cerca de ti"
         open={sheetOpen}
         onToggle={setSheetOpen}
         onHeight={setSheetHeight}

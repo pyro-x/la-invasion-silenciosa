@@ -7,12 +7,15 @@ import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react'
 const SWIPE_PX = 28
 
 export function MapSheet({
+  label,
   open,
   onToggle,
   onHeight,
   header,
   children,
 }: {
+  /** Names the sheet for assistive technology. */
+  label: string
   open: boolean
   onToggle: (open: boolean) => void
   /** Height in CSS px the sheet covers, on every change. */
@@ -22,7 +25,7 @@ export function MapSheet({
   /** Hidden while folded. */
   children: ReactNode
 }) {
-  const ref = useRef<HTMLDivElement>(null)
+  const ref = useRef<HTMLElement>(null)
   const onHeightRef = useRef(onHeight)
   const dragStartY = useRef<number | null>(null)
   const swiped = useRef(false)
@@ -65,7 +68,7 @@ export function MapSheet({
   }
 
   return (
-    <div ref={ref} className="map-sheet">
+    <section ref={ref} className="map-sheet" aria-label={label}>
       <button
         type="button"
         className="map-sheet-handle"
@@ -76,9 +79,11 @@ export function MapSheet({
         onPointerUp={onPointerUp}
       />
       <div className="map-sheet-body">
-        {header}
+        {/* polite: picking a pin swaps this for its detail card, far from
+            the pin in DOM order — say so without stealing focus */}
+        <div aria-live="polite">{header}</div>
         {open && children}
       </div>
-    </div>
+    </section>
   )
 }

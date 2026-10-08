@@ -29,6 +29,9 @@ let state: GeoWatchState = { kind: 'idle', position: null }
 let lastPosition: GeoPosition | null = null
 let watchId: number | null = null
 let refreshTimer: ReturnType<typeof setInterval> | undefined
+// Bumped on every start and stop: a callback from an earlier watch — the
+// browser can still deliver one after clearWatch — is ignored.
+let generation = 0
 const listeners = new Set<() => void>()
 
 // Absent in some embedded browsers, and null in non-browser environments.
@@ -74,7 +77,7 @@ function onError(error: GeolocationPositionError) {
   // non-browser test environments).
   if (error.code === 1) {
     rememberGranted(false)
-    stopGeoWatch()
+    halt()
     lastPosition = null
     set({ kind: 'denied', position: null })
     return
@@ -90,17 +93,30 @@ function hasRecentPosition(): boolean {
 
 function refreshQuietly() {
   if (watchId === null || !lastPosition || Date.now() - lastPosition.at < REFRESH_MS) return
-  geolocation()?.getCurrentPosition(onPosition, () => {}, {
+  const mine = generation
+  const current = (result: GeolocationPosition) => {
+    if (mine === generation) onPosition(result)
+  }
+  geolocation()?.getCurrentPosition(current, () => {}, {
     enableHighAccuracy: true,
     maximumAge: 10_000,
     timeout: REFRESH_MS,
   })
 }
 
-export function stopGeoWatch() {
+function halt() {
+  generation++
   if (watchId !== null) geolocation()?.clearWatch(watchId)
   watchId = null
   clearInterval(refreshTimer)
+}
+
+/** Stops watching and forgets what was on screen: whoever reads the state
+ * next (a later visit to the map) must not see a position nobody is
+ * updating, possibly after the permission was revoked. */
+export function stopGeoWatch() {
+  halt()
+  if (state.kind !== 'idle') set({ kind: 'idle', position: null })
 }
 
 /** Call from a tap. Starts (or restarts) the watch. */
@@ -110,10 +126,17 @@ export function startGeoWatch() {
     set({ kind: 'unsupported', position: null })
     return
   }
-  stopGeoWatch()
+  halt()
+  const mine = generation
   if (hasRecentPosition() && lastPosition) set({ kind: 'ok', position: lastPosition })
   else set({ kind: 'searching', position: null })
-  watchId = api.watchPosition(onPosition, onError, {
+  const onFix = (result: GeolocationPosition) => {
+    if (mine === generation) onPosition(result)
+  }
+  const onFail = (error: GeolocationPositionError) => {
+    if (mine === generation) onError(error)
+  }
+  watchId = api.watchPosition(onFix, onFail, {
     enableHighAccuracy: true,
     maximumAge: 5000,
     timeout: 30_000,
@@ -154,7 +177,7 @@ export function useGeoWatch(): GeoWatchState {
 
 /** Test seam: back to a cold module. */
 export function resetGeoWatchForTests() {
-  stopGeoWatch()
+  halt()
   lastPosition = null
   state = { kind: 'idle', position: null }
 }

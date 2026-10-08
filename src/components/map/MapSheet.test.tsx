@@ -6,7 +6,13 @@ function renderSheet(open: boolean) {
   const onToggle = vi.fn<(open: boolean) => void>()
   const onHeight = vi.fn<(px: number) => void>()
   render(
-    <MapSheet open={open} onToggle={onToggle} onHeight={onHeight} header={<span>cabecera</span>}>
+    <MapSheet
+      label="Avistamientos cerca de ti"
+      open={open}
+      onToggle={onToggle}
+      onHeight={onHeight}
+      header={<span>cabecera</span>}
+    >
       <span>lista</span>
     </MapSheet>,
   )
@@ -18,6 +24,13 @@ describe('MapSheet', () => {
     renderSheet(false)
     expect(screen.getByText('cabecera')).toBeInTheDocument()
     expect(screen.queryByText('lista')).not.toBeInTheDocument()
+  })
+
+  it('is a named region whose header changes are announced politely', () => {
+    renderSheet(true)
+    const region = screen.getByRole('region', { name: 'Avistamientos cerca de ti' })
+    expect(region).toContainElement(screen.getByText('cabecera'))
+    expect(screen.getByText('cabecera').parentElement).toHaveAttribute('aria-live', 'polite')
   })
 
   it('reports the height it covers', () => {
