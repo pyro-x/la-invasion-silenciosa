@@ -16,7 +16,7 @@ import {
 import type { MapSightingGeo } from '@/types/sighting'
 
 /** A one-off camera move; a new object identity = a new move. */
-export type MapFocus = LngLat & { minZoom?: number }
+export type MapFocus = LngLat
 
 // Close enough to read street names around the user's position.
 const FOLLOW_MIN_ZOOM = 17
@@ -93,11 +93,18 @@ export function BarrioMap({
   }, [bottomPadding])
 
   useEffect(() => {
-    if (focus) controller.current?.goTo(focus, focus.minZoom)
+    if (focus) controller.current?.goTo(focus)
   }, [focus])
 
+  // Zooming in is part of going to the position, not of staying on it:
+  // later fixes only recentre, so a neighbour who zooms out is not pulled
+  // back in every few seconds.
+  const followed = useRef(false)
   useEffect(() => {
-    if (follow && me) controller.current?.goTo(me, FOLLOW_MIN_ZOOM)
+    const following = follow && me !== null
+    if (following && me)
+      controller.current?.goTo(me, followed.current ? undefined : FOLLOW_MIN_ZOOM)
+    followed.current = following
   }, [follow, me])
 
   useEffect(() => {

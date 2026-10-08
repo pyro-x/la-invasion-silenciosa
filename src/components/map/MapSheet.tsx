@@ -23,7 +23,7 @@ export function MapSheet({
   onHeight: (px: number) => void
   /** Always visible, also when folded. */
   header: ReactNode
-  /** Changes when the header shows something else: the sheet scrolls back up to it. */
+  /** A new value scrolls the sheet back up to the header. */
   headerKey: string
   /** Hidden while folded. */
   children: ReactNode

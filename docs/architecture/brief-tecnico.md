@@ -1154,8 +1154,11 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   que tocar el mapa; si no, la hoja parecía imposible de cerrar.
 * **Elegir otro bicho sube la hoja al principio.** La ficha va arriba y
   se desplaza con la lista: al tocar una fila lejana, la ficha cambiaba
-  fuera de la vista.
-  El (i) es el crédito de datos del mapa, no una leyenda.
+  fuera de la vista. Vale también al volver a tocar el mismo bicho.
+* **El pin elegido se dibuja encima de los demás**: donde hay varios
+  avistamientos juntos los pines se pisan, y el elegido podía quedar
+  debajo de otro.
+* El (i) es el crédito de datos del mapa, no una leyenda.
 * **La fila «Cerca de ti · N por verificar» es un botón entero** que
   pliega y despliega la hoja: el contador naranja parecía un botón y no
   hacía nada.
@@ -1164,46 +1167,67 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   «Verificar» abre la ventana de verificación directamente. Así se puede
   mirar antes de confirmar.
 * **Los pines parpadeantes se mantienen** para los pendientes (decisión de
-  David). El punto de la posición del vecino se dibuja **debajo** de los
-  pines: encima parecía una insignia del bicho.
+  David); con `prefers-reduced-motion` no parpadean ni los pines ni el aro
+  de los chips. El punto de la posición del vecino se dibuja **debajo** de
+  los pines: encima parecía una insignia del bicho.
 * **Una sola hoja inferior** sustituye a la ficha emergente y a la lista
   separada. Plegada muestra solo su cabecera (el contador «N por
-  verificar», o la ficha si hay un avistamiento elegido); desplegada añade
-  la lista, con scroll propio, hasta un 44 % de la pantalla. Se pliega y
+  verificar» y, si lo hay, el aviso de ubicación); desplegada añade la
+  lista, con scroll propio, hasta un 44 % de la pantalla. Se pliega y
   despliega tocando o deslizando su tirador. Tocar un pin o una fila la
-  despliega; tocar el mapa cierra la ficha.
+  despliega y pone su ficha en la cabecera; plegarla o tocar el mapa
+  cierra la ficha (no existe el estado «ficha abierta con la hoja
+  plegada»).
 * **La altura de la hoja es el `padding` inferior del mapa**
-  (`ResizeObserver` → `map.setPadding`): el centro del mapa es siempre el
+  (`ResizeObserver` → controlador): el centro del mapa es siempre el
   centro de la parte visible, el encuadre inicial del barrio se ajusta a
   ella, y los controles flotantes y el crédito suben y bajan con la hoja
   (variable CSS `--sheet-h`). Esto elimina de raíz el solapamiento que
-  D-057 parcheaba con un `z-index`.
+  D-057 parcheaba con un `z-index`. Detalle que importa: `map.setPadding`
+  detiene cualquier animación en curso, y elegir un pin a la vez mueve el
+  mapa y cambia la altura de la hoja; por eso, si hay un movimiento hacia
+  un pin en curso, el controlador lo vuelve a lanzar con el `padding`
+  nuevo en vez de llamar a `setPadding` (si no, el pin se quedaba a medio
+  camino). El encuadre inicial usa la primera altura medida de la hoja y
+  no se repite si la lista crece después; en móvil vertical el encuadre lo
+  limita el ancho, así que no se nota.
 * **«Ir a mi posición»** (`src/lib/geoWatch.ts`, portado de Alcorqueando):
   el permiso nativo se pide **solo al tocar el botón, nunca al cargar**
   (D-052). Con posición: punto verde + círculo de precisión, y el mapa la
-  sigue hasta que el vecino arrastra, hace zoom o elige un pin. En una
+  sigue hasta que el vecino arrastra el mapa, hace zoom con los dedos o la
+  rueda, o elige un pin (los botones +/− cambian el zoom sin dejar de
+  seguir). Al empezar a seguir el mapa se acerca hasta z17; las posiciones
+  siguientes solo recentran, para no deshacer un zoom del vecino. En una
   visita posterior **el punto reaparece** sin preguntar solo si el
   navegador confirma que el permiso sigue concedido; el mapa **no** se
-  recentra solo (seguir exige tocar el botón). Al salir de la pantalla se
-  deja de observar y se olvida la posición mostrada. Denegado → se
-  explica en la hoja cómo permitirlo (texto por plataforma). **Fuera de La
-  Latina no se muestra ni se sigue la posición**: el mapa es del barrio y
-  se dice así.
+  recentra solo (seguir exige tocar el botón). Al volver de segundo plano
+  la observación se reanuda, salvo que el navegador vaya a preguntar de
+  nuevo (un permiso «solo esta vez» caducado): entonces se detiene en vez
+  de provocar el aviso nativo sin toque. Al salir de la pantalla se deja
+  de observar y se olvida la posición (también en memoria). Los avisos
+  (denegado → cómo permitirlo, texto por plataforma; sin señal; **fuera de
+  La Latina no se muestra ni se sigue la posición**) se ven en la cabecera
+  de la hoja, plegada o no, y **solo tras tocar el botón**: una
+  observación reanudada al llegar no saluda con un aviso.
 * **Privacidad de la posición del vecino:** no se envía a nuestros
   servidores ni se guarda. La vista recordada (abajo) solo registra
-  movimientos hechos por el vecino, nunca el recentrado automático del
-  seguimiento. Lo único que sale del dispositivo son las peticiones de
+  movimientos hechos por el vecino, nunca los de la app, y **no registra
+  nada mientras su posición está en el mapa**: con el punto a la vista,
+  cualquier centro puede ser, o estar al lado de, donde está. Lo único que sale del dispositivo son las peticiones de
   teselas del basemap, como en cualquier mapa: OpenFreeMap sirve teselas
   hasta z14, así que ve, como mucho, qué celda de ~1,7×1,3 km se está
   mirando — con el mapa acotado a La Latina, una de unas nueve.
 * **Se recuerda la última vista que eligió el vecino** (centro y zoom,
   `localStorage` `lis.map.view`) si cae dentro del límite de paneo; si no,
-  se abre encuadrado al barrio. Los movimientos programáticos (encuadre
-  inicial, ir a un pin, seguir la posición) no se guardan.
+  se abre encuadrado al barrio. Los movimientos de la app (encuadre
+  inicial, cambio de altura de la hoja, ir a un pin, seguir la posición)
+  no se guardan; los botones +/− sí cuentan como elección del vecino.
+  Consecuencia aceptada: quien tiene su posición a la vista no ve
+  recordada la vista de esa sesión.
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
-  sin React que devuelve una API pequeña (`setSightings`, `setMe`,
-  `setBottomPadding`, `goTo`, `zoomBy`, `destroy`), al estilo del
+  sin React que devuelve una API pequeña (`setSightings`, `setSelected`,
+  `setMe`, `setBottomPadding`, `goTo`, `zoomBy`, `destroy`), al estilo del
   `mapview.js` de Alcorqueando. `BarrioMap.tsx` es un envoltorio fino. Los
   pines siguen siendo marcadores DOM con sprites de React; LCHP-35 los
   cambia por una fuente GeoJSON detrás de la misma API.

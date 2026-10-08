@@ -140,6 +140,30 @@ describe('geoWatch', () => {
     expect(result.current.kind).toBe('unsupported')
   })
 
+  it('back from the background the watch restarts, but not if the browser would ask again', async () => {
+    const { result } = renderHook(() => useGeoWatch())
+    act(() => startGeoWatch())
+    act(() => watcher().success(fix(40.4115, -3.712, 12)))
+    permissionsQuery.mockResolvedValue({ state: 'granted' })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(watchPosition).toHaveBeenCalledTimes(2))
+    expect(result.current.kind).toBe('ok')
+
+    permissionsQuery.mockResolvedValue({ state: 'prompt' })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(result.current.kind).toBe('idle'))
+    expect(watchPosition).toHaveBeenCalledTimes(2)
+  })
+
+  it('a stopped watch does not bring its old position back when started again', () => {
+    const { result } = renderHook(() => useGeoWatch())
+    act(() => startGeoWatch())
+    act(() => watcher().success(fix(40.4115, -3.712, 12)))
+    act(() => stopGeoWatch())
+    act(() => startGeoWatch())
+    expect(result.current.kind).toBe('searching')
+  })
+
   describe('resuming without a tap', () => {
     it('never starts for someone who has not granted before', async () => {
       permissionsQuery.mockResolvedValue({ state: 'granted' })

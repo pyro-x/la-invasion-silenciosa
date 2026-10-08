@@ -148,14 +148,35 @@ export function createBarrioMap(
     drawMe()
   })
 
-  // Only a view the user chose is remembered. Programmatic moves — the
-  // opening fit, easing to a pin, and above all following the user's own
-  // position — must never be written to storage.
+  let bottomPx = 0
+  const padding = () => ({ top: 0, left: 0, right: 0, bottom: bottomPx })
+
+  // Only a view the user chose is remembered. The app's own moves — the
+  // opening fit, a padding change, easing to a pin, following — are never
+  // written to storage, and nothing is while the user's position is on the
+  // map: any centre could then be, or sit next to, where they are.
   let userChoseView = false
-  // Set while a programmatic move is in flight: its moveend is skipped even
-  // if a gesture landed in the middle of it (a wheel that interrupts an
-  // ease ends that ease with the app's centre, not the user's).
-  let programmaticMove = false
+  // Where the app is easing to, while it is. Its moveend is the app's even
+  // if a gesture landed in the middle (a wheel that interrupts an ease ends
+  // it with the app's centre, not the user's).
+  let flight: { center: [number, number]; zoom?: number } | null = null
+  // True during a camera change that ends before it returns.
+  let jumping = false
+
+  const ease = (to: { center: [number, number]; zoom?: number }) => {
+    // Whatever was moving ends here, as what it was, before this one starts.
+    map.stop()
+    userChoseView = false
+    flight = to
+    map.easeTo({ ...to, padding: padding(), duration: 500 })
+  }
+  const jump = (change: () => void) => {
+    map.stop()
+    jumping = true
+    change()
+    jumping = false
+  }
+
   const userMoved = () => {
     userChoseView = true
     handlers.onUserMove()
@@ -165,12 +186,14 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
-    if (programmaticMove) {
-      programmaticMove = false
+    if (jumping) return
+    if (flight) {
+      flight = null
       return
     }
     if (!userChoseView) return
     userChoseView = false
+    if (me) return
     const center = map.getCenter()
     writeView({ center: [center.lng, center.lat], zoom: map.getZoom() })
   })
@@ -220,36 +243,39 @@ export function createBarrioMap(
     },
 
     setBottomPadding(px) {
-      map.setPadding({ top: 0, left: 0, right: 0, bottom: px })
+      bottomPx = px
+      // setPadding stops any ease where it is. Picking a pin both starts one
+      // and resizes the sheet, so the ease is sent again with the new
+      // padding instead of being cut short of the pin.
+      if (flight) ease(flight)
+      else jump(() => map.setPadding(padding()))
       // The opening frame is fitted once the sheet's height is known, so the
       // barrio lands in the part of the map that is actually visible. Zero
       // is "not measured yet", not a height.
       if (!framed && px > 0) {
         framed = true
         userChoseView = false
-        programmaticMove = true
         // The sheet is already in the map's own padding (set just above);
         // fitBounds adds its padding on top, so only the margins go here.
-        map.fitBounds(LA_LATINA_BOUNDS, {
-          padding: { top: TOP_CHROME_PX, bottom: 16, left: 16, right: 16 },
-          duration: 0,
-        })
+        jump(() =>
+          map.fitBounds(LA_LATINA_BOUNDS, {
+            padding: { top: TOP_CHROME_PX, bottom: 16, left: 16, right: 16 },
+            duration: 0,
+          }),
+        )
       }
     },
 
     goTo(target, minZoom) {
-      // A user gesture that moved nothing (a wheel at the zoom limit) must
-      // not make this move look chosen.
-      userChoseView = false
-      programmaticMove = true
-      map.easeTo({
+      ease({
         center: [target.lng, target.lat],
         ...(minZoom !== undefined && map.getZoom() < minZoom ? { zoom: minZoom } : {}),
-        duration: 500,
       })
     },
 
     zoomBy(delta) {
+      // An app ease in flight ends as the app's; the zoom is the user's.
+      map.stop()
       userChoseView = true
       map.easeTo({ zoom: map.getZoom() + delta, duration: 250 })
     },

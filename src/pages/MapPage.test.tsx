@@ -361,7 +361,13 @@ describe('map screen', () => {
       expect(screen.queryByRole('button', { name: 'Leyenda' })).not.toBeInTheDocument()
       expect(sheet.queryByRole('button', { name: /Especies/ })).not.toBeInTheDocument()
 
+      const region = screen.getByRole('region', { name: 'Avistamientos cerca de ti' })
+      const rings = () => region.querySelectorAll('.chip-ring').length
+      await screen.findByText('1 Por verificar')
+      expect(rings()).toBe(1)
+
       await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+      expect(rings()).toBe(2)
       expect(
         sheet.getByText('Edificio con actividad turística observable desde el espacio público.'),
       ).toBeInTheDocument()
@@ -374,6 +380,21 @@ describe('map screen', () => {
         sheet.getByText('Candado o caja de llaves instalada en la vía pública.'),
       ).toBeInTheDocument()
       expect(sheet.queryByText(/Parpadea en el mapa/)).not.toBeInTheDocument()
+      expect(rings()).toBe(1)
+    })
+
+    it('picking the same creature again from the list still scrolls up to its card', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      const row = await screen.findByText('La Latina · hace 35 min')
+      await user.click(row)
+      const body = screen.getByRole('region', {
+        name: 'Avistamientos cerca de ti',
+      }).lastElementChild
+      if (!body) throw new Error('the sheet has no body')
+      body.scrollTop = 180
+      await user.click(screen.getByText('La Latina · hace 35 min'))
+      expect(body.scrollTop).toBe(0)
     })
 
     it('folding the sheet puts the open card away', async () => {
@@ -439,6 +460,36 @@ describe('map screen', () => {
       expect(screen.queryByText(/coloca el pin a mano/)).not.toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Cerrar aviso' }))
       expect(screen.queryByText(/Sin permiso de ubicación/)).not.toBeInTheDocument()
+    })
+
+    it('a folded sheet still shows why the position could not be used', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await user.click(await screen.findByRole('button', { name: 'Plegar la lista' }))
+      await user.click(screen.getByRole('button', { name: 'Ir a mi posición' }))
+      const [, fail] = watchPositionMock.mock.calls[0] ?? []
+      act(() =>
+        fail?.({ code: 1, message: '', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }),
+      )
+      expect(await screen.findByText(/Sin permiso de ubicación/)).toBeInTheDocument()
+    })
+
+    it('a watch resumed on arrival says nothing until the neighbour asks where they are', async () => {
+      const user = userEvent.setup()
+      localStorage.setItem('lis.geo.granted', '1')
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+      })
+      renderRoute('/mapa')
+      await vi.waitFor(() => expect(watchPositionMock).toHaveBeenCalledTimes(1))
+      const [success] = watchPositionMock.mock.calls[0] ?? []
+      act(() => success?.(geoFix(41.3874, 2.1686)))
+      expect(screen.queryByText(/Estás fuera de La Latina/)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Ir a mi posición' }))
+      const [again] = watchPositionMock.mock.calls.at(-1) ?? []
+      act(() => again?.(geoFix(41.3874, 2.1686)))
+      expect(await screen.findByText(/Estás fuera de La Latina/)).toBeInTheDocument()
     })
 
     it('a position outside La Latina is neither shown nor followed, and says why', async () => {

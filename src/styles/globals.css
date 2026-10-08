@@ -523,6 +523,9 @@ body {
   padding: 0 14px;
   cursor: pointer;
 }
+.map-pin.is-pending {
+  animation: blinkdot 1.4s ease-in-out infinite;
+}
 /* Blinks at the pace of the pending pins: it is what ties their orange
    ring to «Por verificar». Round, because a square read as a checkbox. */
 .chip-ring {
@@ -657,6 +660,7 @@ body {
     transition: none;
   }
   .map-fab.is-busy svg,
+  .map-pin.is-pending,
   .chip-ring {
     animation: none;
   }

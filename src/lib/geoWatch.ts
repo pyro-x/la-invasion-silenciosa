@@ -116,6 +116,7 @@ function halt() {
  * updating, possibly after the permission was revoked. */
 export function stopGeoWatch() {
   halt()
+  lastPosition = null
   if (state.kind !== 'idle') set({ kind: 'idle', position: null })
 }
 
@@ -157,10 +158,29 @@ export async function resumeGeoWatchIfGranted(): Promise<void> {
   }
 }
 
-// Phones pause a watch while the page is in the background.
+// Phones pause a watch while the page is in the background, so it is
+// started again on return. A one-time grant can lapse meanwhile: restarting
+// then would raise the native prompt with no tap, so the watch is dropped.
+async function restartAfterBackground(): Promise<void> {
+  const mine = generation
+  if (navigator.permissions?.query) {
+    try {
+      const status = await navigator.permissions.query({ name: 'geolocation' })
+      if (mine !== generation) return
+      if (status.state === 'prompt') {
+        stopGeoWatch()
+        return
+      }
+    } catch {
+      // No geolocation entry in the Permissions API: nothing to check.
+    }
+  }
+  if (mine === generation) startGeoWatch()
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && watchId !== null) startGeoWatch()
+    if (document.visibilityState === 'visible' && watchId !== null) void restartAfterBackground()
   })
 }
 
