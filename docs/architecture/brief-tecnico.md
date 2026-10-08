@@ -839,6 +839,82 @@ verificada limita el abuso; (c) como el `id` sobrevive al upgrade, no se
 pierde nada por empezar anónimo. El magic link se ofrece como mejora
 («guarda tu historial y tus puntos»), no como barrera.
 
+### Registro progresivo implementado (LCHP-29 — 2026-07-07; enmienda 2026-10-08, D-060) `Decidido`
+
+> **Enmienda 2026-10-08 (D-060):** el upgrade vuelve al **enlace de
+> confirmación estándar de Supabase**; se retira el código OTP tecleado
+> en la app. Motivo: el proyecto hosted está en el plan gratuito con el
+> remitente integrado, y Supabase **no permite modificar las plantillas
+> de correo** en esa combinación (la Management API responde 400: «Email
+> template modification is not available for free tier projects using the
+> default email provider»). Sin plantilla propia el correo no puede llevar
+> el código, así que el flujo OTP era inservible en producción (David lo
+> reprodujo en la preview: pantalla de código en la app, correo solo con
+> enlace). El código OTP vuelve a ser posible cuando haya SMTP propio
+> (LCHP-31).
+
+> **Estado: fusionado pero OCULTO** (`REGISTRATION_ENABLED = false` en
+> `src/lib/flags.ts`; Perfil no muestra el panel). Se enciende cuando se
+> decidan dos cosas: el envío de correo (LCHP-31 — el remitente integrado
+> de Supabase está documentado como no apto para producción: ~2
+> correos/hora y solo a miembros del equipo del proyecto) y si la
+> asociación quiere exigir login antes de usar la app. Antes de encenderlo
+> hay que probar el flujo de extremo a extremo, en un iPhone con la app
+> instalada, y pasarlo por la review adversarial.
+
+El flujo implementado (`src/lib/registration.ts` + panel «Guarda tu
+cuenta», hoy oculto, en Perfil):
+
+```text
+updateUser({ email }, { emailRedirectTo: <origen>/perfil })
+sobre la sesión anónima
+↓
+llega el correo ESTÁNDAR de Supabase (en inglés, remitente
+«Supabase Auth», asunto «Confirm your new email address») con un enlace
+↓
+el vecino abre el enlace → GoTrue confirma el correo EN EL SERVIDOR
+↓
+misma fila de auth.users: is_anonymous=false, mismo id
+↓
+el trigger de LCHP-15 activa sus apoyos provisionales:
+cuentan para el umbral y cobra sus +5 acumulados
+↓
+al volver a la app, esta REFRESCA su sesión (refreshSession) y ve el
+cambio: «Cuenta guardada · +N puntos recuperados»
+```
+
+**Por qué la app no depende de la redirección.** En una PWA instalada en
+iOS el enlace se abre en Safari, que no comparte almacenamiento con la
+PWA: la página a la que redirige no tiene la sesión. Pero la confirmación
+ocurre en el servidor, sobre la misma cuenta, se abra donde se abra. Por
+eso el panel nunca espera a la redirección: pregunta al servidor
+(refrescando su propia sesión) al montarse con un enlace pendiente, cada
+vez que la app vuelve a primer plano y cuando el vecino pulsa «Ya lo he
+abierto». El refresco importa además porque el nuevo token es el que
+lleva el claim «no anónimo» que lee RLS. **Pendiente de verificar en un
+iPhone real con la app instalada** (no se ha probado en dispositivo).
+
+Notas operativas:
+
+* la sesión anónima sigue plenamente usable mientras el enlace está
+  pendiente — que caduque o no se abra es inofensivo;
+* `emailRedirectTo` devuelve al origen que pidió el enlace (producción o
+  una preview de Cloudflare); el Site URL del hosted y la lista de
+  redirecciones (`https://la-invasion-silenciosa.pages.dev` y
+  `https://*.la-invasion-silenciosa.pages.dev`) se configuraron el
+  2026-10-08 — antes el enlace iba a `http://localhost:3000`;
+* el correo no se puede traducir ni personalizar (plan gratuito): el panel
+  le dice al vecino qué remitente y qué asunto buscar;
+* los puntos recuperados se calculan contra los que había al pedir el
+  enlace, guardados en `localStorage` (`lis.registration.requested`),
+  porque el trigger paga en el servidor, quizá con la app cerrada;
+* un correo ya registrado en otra cuenta se rechaza con explicación (no
+  hay fusión de cuentas: limitación conocida de linkIdentity/updateUser);
+* el stack local espeja al hosted: confirmaciones activadas y **sin**
+  plantilla propia (correo por defecto en Mailpit);
+* **SMTP propio pendiente ANTES del piloto** (LCHP-31): el remitente
+  integrado de Supabase envía ~2 correos/hora, inservible en la calle.
+
 Roles:
 
 ```text
