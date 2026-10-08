@@ -80,9 +80,11 @@ describe('BarrioMap', () => {
     calls.log.length = 0
     const moves = () => calls.log.filter((line) => line.startsWith('goTo'))
     view.rerender(<BarrioMap {...base} me={me} follow followRequest={1} />)
-    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4116 }} follow followRequest={1} />)
+    const next = { ...me, lat: 40.4116 }
+    view.rerender(<BarrioMap {...base} me={next} follow followRequest={1} />)
     expect(moves()).toEqual(['goTo 40.4115 17', 'goTo 40.4116 undefined'])
-    view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4116 }} follow followRequest={2} />)
+    // a tap while following brings the same position object again
+    view.rerender(<BarrioMap {...base} me={next} follow followRequest={2} />)
     expect(moves().at(-1)).toBe('goTo 40.4116 17')
     view.rerender(<BarrioMap {...base} me={{ ...me, lat: 40.4117 }} followRequest={2} />)
     expect(moves()).toHaveLength(3)

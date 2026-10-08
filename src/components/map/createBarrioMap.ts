@@ -65,6 +65,14 @@ function readView(): SavedView | null {
   }
 }
 
+function forgetView() {
+  try {
+    localStorage.removeItem(VIEW_KEY)
+  } catch {
+    // storage unavailable: there is nothing to forget
+  }
+}
+
 function writeView(view: SavedView) {
   try {
     localStorage.setItem(VIEW_KEY, JSON.stringify(view))
@@ -244,7 +252,12 @@ export function createBarrioMap(
 
     setMe(position) {
       me = position
-      if (position) positionShown = true
+      if (position && !positionShown) {
+        positionShown = true
+        // Nothing more will be stored, so an older view would come back on
+        // every visit, however the neighbour moves the map now.
+        forgetView()
+      }
       drawMe()
     },
 
@@ -260,7 +273,6 @@ export function createBarrioMap(
       // is "not measured yet", not a height.
       if (!framed && px > 0) {
         framed = true
-        userChoseView = false
         // The sheet is already in the map's own padding (set just above);
         // fitBounds adds its padding on top, so only the margins go here.
         jump(() =>

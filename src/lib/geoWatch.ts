@@ -4,8 +4,9 @@
 //
 // The native permission prompt fires only from startGeoWatch(), which must
 // be called from a tap (D-052) — iOS shows its question reliably only on a
-// user gesture. resumeGeoWatchIfGranted() may start without a tap, but only
-// when the browser says it will not ask.
+// user gesture. Two paths start it without a tap — resuming on arrival and
+// restarting on return from the background — and both only when the browser
+// says it will not ask.
 import { useSyncExternalStore } from 'react'
 
 export type GeoPosition = { lat: number; lng: number; accuracyM: number; at: number }

@@ -234,10 +234,20 @@ describe('createBarrioMap', () => {
 
   it('a resize of the map after a gesture that moved nothing stores nothing', () => {
     const { controller } = mount()
-    emit('wheel')
     controller.setBottomPadding(300)
+    emit('wheel')
+    controller.setBottomPadding(120)
     emit('movestart')
     emit('moveend')
+    expect(stored()).toBeNull()
+  })
+
+  it('showing the position forgets an older stored view; without one, views are still stored', () => {
+    const { controller } = mount()
+    controller.setMe(null)
+    userDrag()
+    expect(stored()).not.toBeNull()
+    controller.setMe({ lat: 40.4115, lng: -3.712, accuracyM: 12 })
     expect(stored()).toBeNull()
   })
 

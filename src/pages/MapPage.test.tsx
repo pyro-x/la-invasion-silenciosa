@@ -66,6 +66,7 @@ vi.mock('@/components/map/BarrioMap', () => ({
     onUserMove,
     me,
     follow,
+    followRequest,
   }: {
     sightings: MapSightingGeo[]
     onPick: (id: string) => void
@@ -73,8 +74,14 @@ vi.mock('@/components/map/BarrioMap', () => ({
     onUserMove: () => void
     me: { lat: number; lng: number } | null
     follow: boolean
+    followRequest: number
   }) => (
-    <div data-testid="map" data-follow={follow} data-me={me ? `${me.lat},${me.lng}` : ''}>
+    <div
+      data-testid="map"
+      data-follow={follow}
+      data-follow-request={followRequest}
+      data-me={me ? `${me.lat},${me.lng}` : ''}
+    >
       <button aria-label="map background" onClick={onMapTap} />
       <button aria-label="drag the map" onClick={onUserMove} />
       {sightings.map((s) => (
@@ -443,6 +450,9 @@ describe('map screen', () => {
       expect(map).toHaveAttribute('data-me', '40.4115,-3.712')
       expect(map).toHaveAttribute('data-follow', 'true')
       expect(locate).toHaveAttribute('aria-pressed', 'true')
+      expect(map).toHaveAttribute('data-follow-request', '1')
+      await user.click(locate)
+      expect(map).toHaveAttribute('data-follow-request', '2')
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(map).toHaveAttribute('data-follow', 'false')
       expect(map).toHaveAttribute('data-me', '40.4115,-3.712')

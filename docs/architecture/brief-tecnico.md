@@ -1228,7 +1228,10 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   inicial, cambio de altura de la hoja, ir a un pin, seguir la posición)
   no se guardan; los botones +/− sí cuentan como elección del vecino.
   Consecuencia aceptada: quien ha visto su posición en el mapa no ve
-  recordada la vista de esa visita a la pantalla.
+  recordada la vista de esa visita a la pantalla. Al aparecer la posición
+  se borra además la vista guardada: como ya no se va a guardar otra, la
+  antigua volvería en cada visita; quien tiene la ubicación activada abre
+  siempre encuadrado al barrio.
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setSelected`,

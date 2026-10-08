@@ -155,6 +155,18 @@ describe('geoWatch', () => {
     expect(watchPosition).toHaveBeenCalledTimes(2)
   })
 
+  it('does not restart if the map was left while the browser was answering', async () => {
+    act(() => startGeoWatch())
+    let answer: (status: { state: PermissionState }) => void = () => {}
+    permissionsQuery.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    document.dispatchEvent(new Event('visibilitychange'))
+    stopGeoWatch()
+    answer({ state: 'granted' })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(watchPosition).toHaveBeenCalledTimes(1)
+  })
+
   it('back from the background it pauses when the browser cannot say it will not ask', async () => {
     const { result } = renderHook(() => useGeoWatch())
     act(() => startGeoWatch())
@@ -164,6 +176,7 @@ describe('geoWatch', () => {
     await vi.waitFor(() => expect(result.current.kind).toBe('paused'))
 
     act(() => startGeoWatch())
+    expect(result.current.kind).toBe('searching')
     act(() => watcher().success(fix(40.4115, -3.712, 12)))
     vi.stubGlobal('navigator', {
       ...navigator,
