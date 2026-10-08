@@ -1,0 +1,220 @@
+// The one module that talks to MapLibre for the barrio map (LCHP-34),
+// modelled on Alcorqueando's mapview.js: a framework-free factory returning
+// a small API, so React (BarrioMap.tsx) only pushes state in and the screen
+// never touches the map library.
+//
+// Sightings are still DOM markers here; LCHP-35 swaps them for a GeoJSON
+// source behind this same API.
+import maplibregl from 'maplibre-gl'
+import { addAttribution } from './attribution'
+import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+
+export type LngLat = { lat: number; lng: number }
+export type MePosition = LngLat & { accuracyM: number }
+export type MarkerMount = { id: string; el: HTMLElement }
+
+export type BarrioMapHandlers = {
+  /** A sighting pin was tapped. */
+  onPick: (id: string) => void
+  /** The map itself was tapped (not a pin). */
+  onMapTap: () => void
+  /** The user — not the app — started moving the map. */
+  onUserMove: () => void
+  /** The pin elements changed; React portals render the sprites into them. */
+  onMarkers: (mounts: MarkerMount[]) => void
+}
+
+export type BarrioMapController = {
+  /** Reconciles the pins and reports their elements through onMarkers. */
+  setSightings: (sightings: readonly (LngLat & { id: string })[]) => void
+  setMe: (position: MePosition | null) => void
+  /** Space covered by the bottom sheet: the map centres above it. */
+  setBottomPadding: (px: number) => void
+  /** Eases to a point; `minZoom` zooms in if the map is further out. */
+  goTo: (target: LngLat, minZoom?: number) => void
+  zoomBy: (delta: number) => void
+  destroy: () => void
+}
+
+const VIEW_KEY = 'lis.map.view'
+// Height of the floating title and mode chips the opening frame stays below.
+const TOP_CHROME_PX = 104
+const ME_SOURCE = 'me'
+// GeoJSON's types are not a direct dependency; take them from MapLibre.
+type GeoJsonData = Parameters<maplibregl.GeoJSONSource['setData']>[0]
+const EMPTY: GeoJsonData = { type: 'FeatureCollection', features: [] }
+
+type SavedView = { center: [number, number]; zoom: number }
+
+function readView(): SavedView | null {
+  try {
+    const raw = localStorage.getItem(VIEW_KEY)
+    if (!raw) return null
+    const view: Partial<SavedView> = JSON.parse(raw)
+    const [lng, lat] = view.center ?? []
+    if (typeof lng !== 'number' || typeof lat !== 'number' || typeof view.zoom !== 'number') {
+      return null
+    }
+    const [[west, south], [east, north]] = LA_LATINA_MAX_BOUNDS
+    if (lng < west || lng > east || lat < south || lat > north) return null
+    return { center: [lng, lat], zoom: view.zoom }
+  } catch {
+    return null
+  }
+}
+
+function writeView(view: SavedView) {
+  try {
+    localStorage.setItem(VIEW_KEY, JSON.stringify(view))
+  } catch {
+    // storage unavailable: the map just opens on the barrio next time
+  }
+}
+
+/** A ring approximating a circle of `radiusM` metres around a point. */
+export function circlePolygon({ lat, lng }: LngLat, radiusM: number, steps = 48): number[][] {
+  const dLat = radiusM / 111_320
+  const dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180))
+  const ring: number[][] = []
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI
+    ring.push([lng + dLng * Math.cos(angle), lat + dLat * Math.sin(angle)])
+  }
+  return ring
+}
+
+export function createBarrioMap(
+  container: HTMLElement,
+  handlers: BarrioMapHandlers,
+): BarrioMapController {
+  const saved = readView()
+  const map = new maplibregl.Map({
+    container,
+    style: tileProvider.style,
+    ...(saved
+      ? { center: saved.center, zoom: saved.zoom }
+      : { bounds: LA_LATINA_BOUNDS, fitBoundsOptions: { padding: 16 } }),
+    maxBounds: LA_LATINA_MAX_BOUNDS,
+    attributionControl: false,
+    dragRotate: false,
+    pitchWithRotate: false,
+  })
+  const stopAttributionFold = addAttribution(map, 'bottom-left')
+
+  const markers = new Map<string, maplibregl.Marker>()
+  const meElement = document.createElement('div')
+  meElement.className = 'map-me-dot'
+  const meMarker = new maplibregl.Marker({ element: meElement })
+  let me: MePosition | null = null
+  let loaded = false
+  // A restored view is the user's own framing; only a fresh map is fitted.
+  let framed = saved !== null
+
+  function drawMe() {
+    if (!loaded) return
+    const source = map.getSource<maplibregl.GeoJSONSource>(ME_SOURCE)
+    if (!me) {
+      meMarker.remove()
+      source?.setData(EMPTY)
+      return
+    }
+    meMarker.setLngLat([me.lng, me.lat]).addTo(map)
+    source?.setData({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [circlePolygon(me, me.accuracyM)] },
+      properties: {},
+    })
+  }
+
+  map.on('load', () => {
+    map.addSource(ME_SOURCE, { type: 'geojson', data: EMPTY })
+    map.addLayer({
+      id: 'me-accuracy',
+      type: 'fill',
+      source: ME_SOURCE,
+      paint: { 'fill-color': '#105016', 'fill-opacity': 0.14, 'fill-outline-color': '#105016' },
+    })
+    loaded = true
+    drawMe()
+  })
+
+  map.on('moveend', () => {
+    const center = map.getCenter()
+    writeView({ center: [center.lng, center.lat], zoom: map.getZoom() })
+  })
+  map.on('movestart', (event) => {
+    if (event.originalEvent) handlers.onUserMove()
+  })
+  map.on('wheel', () => handlers.onUserMove())
+  map.on('click', () => handlers.onMapTap())
+
+  return {
+    setSightings(sightings) {
+      const seen = new Set<string>()
+      const mounts: MarkerMount[] = []
+      for (const sighting of sightings) {
+        seen.add(sighting.id)
+        let marker = markers.get(sighting.id)
+        if (marker) {
+          marker.setLngLat([sighting.lng, sighting.lat])
+        } else {
+          const el = document.createElement('div')
+          el.style.cursor = 'pointer'
+          el.addEventListener('click', (event) => {
+            event.stopPropagation()
+            handlers.onPick(sighting.id)
+          })
+          marker = new maplibregl.Marker({ element: el })
+            .setLngLat([sighting.lng, sighting.lat])
+            .addTo(map)
+          markers.set(sighting.id, marker)
+        }
+        mounts.push({ id: sighting.id, el: marker.getElement() })
+      }
+      for (const [id, marker] of markers) {
+        if (!seen.has(id)) {
+          marker.remove()
+          markers.delete(id)
+        }
+      }
+      handlers.onMarkers(mounts)
+    },
+
+    setMe(position) {
+      me = position
+      drawMe()
+    },
+
+    setBottomPadding(px) {
+      map.setPadding({ top: 0, left: 0, right: 0, bottom: px })
+      // The opening frame is fitted once the sheet's height is known, so the
+      // barrio lands in the part of the map that is actually visible.
+      if (!framed) {
+        framed = true
+        map.fitBounds(LA_LATINA_BOUNDS, {
+          padding: { top: TOP_CHROME_PX, bottom: px + 16, left: 16, right: 16 },
+          duration: 0,
+        })
+      }
+    },
+
+    goTo(target, minZoom) {
+      map.easeTo({
+        center: [target.lng, target.lat],
+        ...(minZoom !== undefined && map.getZoom() < minZoom ? { zoom: minZoom } : {}),
+        duration: 500,
+      })
+    },
+
+    zoomBy(delta) {
+      map.easeTo({ zoom: map.getZoom() + delta, duration: 250 })
+    },
+
+    destroy() {
+      stopAttributionFold()
+      meMarker.remove()
+      map.remove()
+      markers.clear()
+    },
+  }
+}

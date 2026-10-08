@@ -424,3 +424,172 @@ body {
     animation: none !important;
   }
 }
+
+/* ============ MAP SCREEN (LCHP-34, D-061) ============
+   The map is the screen: it fills everything above the tabbar and the
+   chrome floats over it. --sheet-h is the height the bottom sheet covers,
+   kept in sync from MapSheet so the floating controls ride above it. */
+.map-screen {
+  overflow: hidden;
+  --sheet-h: 0px;
+  --map-edge: 12px;
+}
+.map-top {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + var(--map-edge));
+  left: calc(env(safe-area-inset-left, 0px) + var(--map-edge));
+  right: calc(env(safe-area-inset-right, 0px) + var(--map-edge));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.map-top > * {
+  pointer-events: auto;
+}
+.map-title {
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border: var(--bw) solid var(--line);
+  border-radius: 14px;
+  padding: 8px 12px;
+  box-shadow: var(--shadow);
+}
+.map-chip {
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.map-chip.chip-ghost {
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+}
+.map-float {
+  position: absolute;
+  bottom: calc(var(--sheet-h) + var(--map-edge));
+  z-index: 3;
+  transition: bottom 0.16s ease;
+}
+.map-fabs {
+  right: calc(env(safe-area-inset-right, 0px) + var(--map-edge));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.map-fab {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--ink);
+  border: var(--bw) solid var(--line);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1;
+}
+.map-fab.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.map-fab.is-busy svg {
+  animation: blinkdot 1s ease-in-out infinite;
+}
+.only-fine {
+  display: none;
+}
+@media (pointer: fine) {
+  .only-fine {
+    display: grid;
+  }
+}
+.map-legend {
+  left: calc(env(safe-area-inset-left, 0px) + var(--map-edge));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.map-legend-row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border: var(--bw) solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.map-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  /* Leaves more than half of the map visible; the list scrolls inside. */
+  max-height: 44%;
+  background: var(--card);
+  border: var(--bw) solid var(--line);
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -6px 20px rgba(74, 22, 12, 0.16);
+}
+.map-sheet-handle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 26px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  touch-action: none;
+}
+.map-sheet-handle::before {
+  content: '';
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.map-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.map-sheet-body::-webkit-scrollbar {
+  width: 0;
+}
+.map-me-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(16, 80, 22, 0.3);
+}
+/* The data credit rides above the sheet, bottom-left; the legend toggle
+   sits just over its (i). */
+.map-screen .maplibregl-ctrl-bottom-left {
+  bottom: var(--sheet-h);
+  transition: bottom 0.16s ease;
+}
+.map-screen .map-legend {
+  bottom: calc(var(--sheet-h) + var(--map-edge) + 30px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-float,
+  .map-screen .maplibregl-ctrl-bottom-left {
+    transition: none;
+  }
+  .map-fab.is-busy svg {
+    animation: none;
+  }
+}

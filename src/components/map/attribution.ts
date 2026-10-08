@@ -63,8 +63,11 @@ export function foldWhenAllowed(mapContainer: HTMLElement, signals: MapSignals):
 }
 
 /** Adds the attribution control; returns the cleanup for the fold. */
-export function addAttribution(map: maplibregl.Map): () => void {
-  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
+export function addAttribution(
+  map: maplibregl.Map,
+  corner: 'bottom-right' | 'bottom-left' = 'bottom-right',
+): () => void {
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), corner)
   return foldWhenAllowed(map.getContainer(), {
     onCreditRendered: (listener) => {
       map.on('sourcedata', listener)

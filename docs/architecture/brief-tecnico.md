@@ -1108,6 +1108,66 @@ un avistamiento sin foto muestra un aviso amable)
 La foto es evidencia bajo demanda, no contenido principal del mapa. El
 «Mapa de calor» queda como toggle con aviso «próximamente» (post-MVP).
 
+### Pantalla a mapa completo (LCHP-34 — enmienda 2026-10-08, D-061) `Decidido`
+
+El flujo de arriba no cambia; cambia la **composición de la pantalla**
+(D-058: la maqueta es guía, la UX en móvil manda). El mapa ya no es una
+tarjeta dentro de una columna: **es la pantalla**, y ocupa todo lo que
+queda por encima de la barra de pestañas (que se mantiene — decisión de
+David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
+
+```text
+┌──────────────────────────────┐
+│ [Mapa del barrio · título]   │  tarjeta flotante + chips
+│ [Avistamientos][Mapa calor]  │  «Avistamientos / Mapa de calor»
+│                              │
+│          MAPA                │  pines; al tocar uno se centra en la
+│                              │  parte visible
+│ [Leyenda]             [◎]    │  leyenda plegable · «Ir a mi posición»
+│ (i)                   [+][−] │  crédito · zoom (solo con ratón)
+├──────────────────────────────┤
+│ ▬  HOJA INFERIOR             │  ficha del avistamiento (si hay uno
+│ Cerca de ti · N por verificar│  elegido) + lista «Cerca de ti»
+└──────────────────────────────┘
+│ Mapa · Especies · ◉ · …      │  barra de pestañas
+```
+
+* **Una sola hoja inferior** sustituye a la ficha emergente y a la lista
+  separada. Plegada muestra solo su cabecera (el contador «N por
+  verificar», o la ficha si hay un avistamiento elegido); desplegada añade
+  la lista, con scroll propio, hasta un 44 % de la pantalla. Se pliega y
+  despliega tocando o deslizando su tirador. Tocar un pin o una fila la
+  despliega; tocar el mapa cierra la ficha.
+* **La altura de la hoja es el `padding` inferior del mapa**
+  (`ResizeObserver` → `map.setPadding`): el centro del mapa es siempre el
+  centro de la parte visible, el encuadre inicial del barrio se ajusta a
+  ella, y los controles flotantes y el crédito suben y bajan con la hoja
+  (variable CSS `--sheet-h`). Esto elimina de raíz el solapamiento que
+  D-057 parcheaba con un `z-index`.
+* **«Ir a mi posición»** (`src/lib/geoWatch.ts`, portado de Alcorqueando):
+  el permiso nativo se pide **solo al tocar el botón, nunca al cargar**
+  (D-052). Con posición: punto verde + círculo de precisión, y el mapa la
+  sigue hasta que el vecino arrastra, hace zoom o elige un pin. En una
+  visita posterior el seguimiento se reanuda sin preguntar solo si el
+  navegador confirma que el permiso ya está concedido. Denegado → se
+  explica en la hoja cómo permitirlo (texto por plataforma). **Fuera de La
+  Latina no se muestra ni se sigue la posición**: el mapa es del barrio y
+  se dice así. La posición del vecino nunca sale del dispositivo.
+* **Se recuerda la última vista** (centro y zoom, `localStorage`
+  `lis.map.view`) si cae dentro del límite de paneo; si no, se abre
+  encuadrado al barrio.
+* **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
+  único módulo que habla con MapLibre para esta pantalla — una factoría
+  sin React que devuelve una API pequeña (`setSightings`, `setMe`,
+  `setBottomPadding`, `goTo`, `zoomBy`, `destroy`), al estilo del
+  `mapview.js` de Alcorqueando. `BarrioMap.tsx` es un envoltorio fino. Los
+  pines siguen siendo marcadores DOM con sprites de React; LCHP-35 los
+  cambia por una fuente GeoJSON detrás de la misma API.
+
+Capturas de referencia de esta pantalla (sustituyen a `captura_03`,
+`captura_29` y `captura_30` como base de comparación, D-058): se generan
+con el loop visual sobre la app compilada y se adjuntan al PR.
+
 ## 19. Flujo de captura
 
 ### Implementado (LCHP-14 + LCHP-28 — enmienda 2026-07-06) `Decidido`
