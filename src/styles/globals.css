@@ -477,11 +477,6 @@ body {
   background: var(--accent);
   color: var(--on-accent);
 }
-.map-note {
-  background: var(--card);
-  color: var(--ink-dim);
-  box-shadow: var(--shadow);
-}
 .map-sheet-row {
   display: flex;
   align-items: center;
@@ -618,6 +613,10 @@ body {
   border: none;
   cursor: pointer;
   touch-action: none;
+}
+.map-sheet-top {
+  flex: 0 0 auto;
+  height: 14px;
 }
 .map-sheet-handle::before {
   content: '';

@@ -1,4 +1,4 @@
-import { circlePolygon, createBarrioMap, type BarrioMapController } from './createBarrioMap'
+import { circlePolygon, createBarrioMap, fanOut, type BarrioMapController } from './createBarrioMap'
 import type { MapSightingGeo } from '@/types/sighting'
 
 type MapEvent = { originalEvent?: Event; point?: { x: number; y: number } }
@@ -10,7 +10,7 @@ type Hit = {
   properties: { id?: string; cluster_id?: number }
 }
 type Layer = { id: string; type: string; source: string; filter?: object }
-
+type SourceSpec = { cluster?: boolean; clusterMaxZoom?: number; clusterProperties?: object }
 const recorded = vi.hoisted(() => ({
   options: [] as MapOptions[],
   handlers: {} as Record<string, MapHandler[]>,
@@ -25,25 +25,34 @@ const recorded = vi.hoisted(() => ({
   reducedMotion: false,
   // The furthest out the pan limit lets the viewport zoom.
   boundsMinZoom: 0,
-  sources: {} as Record<string, { clustered: boolean; data: object[] }>,
+  sources: {} as Record<string, { spec: SourceSpec; data: object[] }>,
   layers: [] as Layer[],
   filters: {} as Record<string, object>,
   visibility: {} as Record<string, string>,
-  opacities: [] as number[],
+  paints: [] as { layer: string; name: string; value: number }[],
   images: [] as { name: string; pixelRatio: number }[],
   hits: [] as Hit[],
-  queries: [] as { layers: string[] }[],
+  queries: [] as { box: number[][]; layers: string[] }[],
   expansionZoom: 17,
+  // When set, a cluster's zoom is answered only when the test says so.
+  holdExpansion: false,
+  answerExpansion: [] as (() => void)[],
+  // Names of pin images the browser fails to make.
+  brokenArt: false,
   cursor: { cursor: '' },
   frames: [] as FrameRequestCallback[],
   prefersReducedMotion: false,
+  motionListeners: 0,
 }))
 
 vi.mock('./attribution', () => ({ addAttribution: () => () => {} }))
 
 vi.mock('./pinArt', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./pinArt')>()),
-  rasterisePin: () => Promise.resolve(document.createElement('img')),
+  rasterisePin: () =>
+    recorded.brokenArt
+      ? Promise.reject(new Error('this browser cannot decode the artwork'))
+      : Promise.resolve(document.createElement('img')),
 }))
 
 vi.mock('maplibre-gl', () => {
@@ -102,15 +111,20 @@ vi.mock('maplibre-gl', () => {
       this.fire('movestart')
       this.fire('moveend')
     }
-    addSource(id: string, spec: { cluster?: boolean }) {
-      recorded.sources[id] = { clustered: spec.cluster === true, data: [] }
+    addSource(id: string, spec: SourceSpec) {
+      recorded.sources[id] = { spec, data: [] }
     }
     getSource(id: string) {
       const found = recorded.sources[id]
       if (!found) return undefined
       return {
         setData: (data: object) => found.data.push(data),
-        getClusterExpansionZoom: () => Promise.resolve(recorded.expansionZoom),
+        getClusterExpansionZoom: () =>
+          new Promise<number>((resolve) => {
+            const answer = () => resolve(recorded.expansionZoom)
+            if (recorded.holdExpansion) recorded.answerExpansion.push(answer)
+            else answer()
+          }),
       }
     }
     addLayer(layer: Layer) {
@@ -120,11 +134,11 @@ vi.mock('maplibre-gl', () => {
     setFilter(id: string, filter: object) {
       recorded.filters[id] = filter
     }
-    setLayoutProperty(id: string, _name: string, value: string) {
-      recorded.visibility[id] = value
+    setLayoutProperty(id: string, name: string, value: string) {
+      if (name === 'visibility') recorded.visibility[id] = value
     }
-    setPaintProperty(_id: string, _name: string, value: number) {
-      recorded.opacities.push(value)
+    setPaintProperty(layer: string, name: string, value: number) {
+      recorded.paints.push({ layer, name, value })
     }
     hasImage(name: string) {
       return recorded.images.some((image) => image.name === name)
@@ -132,8 +146,8 @@ vi.mock('maplibre-gl', () => {
     addImage(name: string, _image: HTMLImageElement, options: { pixelRatio: number }) {
       recorded.images.push({ name, pixelRatio: options.pixelRatio })
     }
-    queryRenderedFeatures(_box: number[][], options: { layers: string[] }) {
-      recorded.queries.push(options)
+    queryRenderedFeatures(box: number[][], options: { layers: string[] }) {
+      recorded.queries.push({ box, layers: options.layers })
       return recorded.hits
     }
     // A flat world, a hundred thousand pixels to the degree.
@@ -177,6 +191,15 @@ const pinHit = (id: string, lng: number, lat: number): Hit => ({
   properties: { id },
 })
 const lastData = (source: string) => recorded.sources[source]?.data.at(-1)
+/** The last opacity given to a layer's icons, if any. */
+const opacityOf = (layer: string) =>
+  recorded.paints.findLast((p) => p.layer === layer && p.name === 'icon-opacity')?.value
+const coordinatesOf = (source: string, id: string) => {
+  const data = lastData(source)
+  if (!data || !('features' in data) || !Array.isArray(data.features)) return null
+  const found = data.features.find((f: { properties: { id: string } }) => f.properties.id === id)
+  return found ? (found.geometry.coordinates as [number, number]) : null
+}
 const ids = (source: string) => {
   const data = lastData(source)
   return data && 'features' in data && Array.isArray(data.features)
@@ -236,7 +259,11 @@ beforeEach(() => {
   recorded.layers.length = 0
   recorded.filters = {}
   recorded.visibility = {}
-  recorded.opacities.length = 0
+  recorded.paints.length = 0
+  recorded.holdExpansion = false
+  recorded.answerExpansion.length = 0
+  recorded.brokenArt = false
+  recorded.motionListeners = 0
   recorded.images.length = 0
   recorded.hits = []
   recorded.queries.length = 0
@@ -253,8 +280,8 @@ beforeEach(() => {
   })
   vi.stubGlobal('matchMedia', () => ({
     matches: recorded.prefersReducedMotion,
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => recorded.motionListeners++,
+    removeEventListener: () => recorded.motionListeners--,
   }))
 })
 
@@ -701,9 +728,14 @@ describe('createBarrioMap', () => {
       expect(recorded.sources['sightings']).toBeUndefined()
       emit('load')
       await vi.waitFor(() => expect(ids('sightings')).toEqual(['a', 'b', 'c']))
-      expect(ids('sightings-all')).toEqual(['a', 'b', 'c'])
-      expect(recorded.sources['sightings']?.clustered).toBe(true)
-      expect(recorded.sources['sightings-all']?.clustered).toBe(false)
+      expect(recorded.sources['sightings']?.spec).toMatchObject({
+        cluster: true,
+        clusterMaxZoom: 17,
+        clusterProperties: { pending: expect.anything() },
+      })
+      // the heat map is of confirmed sightings only (rules §3.2)
+      expect(ids('sightings-validated')).toEqual(['a', 'c'])
+      expect(recorded.sources['sightings-validated']?.spec.cluster).toBeUndefined()
       expect(lastData('sightings')).toMatchObject({
         features: [
           {
@@ -773,6 +805,9 @@ describe('createBarrioMap', () => {
       tap(-3.71, 40.411)
       expect(calls.picked).toEqual(['near'])
       expect(calls.mapTaps).toBe(0)
+      // a finger's reach around the tap: 14 px each way
+      const [[left, top], [right, bottom]] = recorded.queries.at(-1)?.box ?? [[], []]
+      expect([right - left, bottom - top]).toEqual([28, 28])
       expect(recorded.queries.at(-1)?.layers).toEqual([
         'sighting-selected',
         'sighting-pending',
@@ -837,6 +872,7 @@ describe('createBarrioMap', () => {
       expect(recorded.visibility['sighting-heat']).toBe('visible')
       for (const id of [
         'sighting-clusters',
+        'sighting-cluster-count',
         'sighting-points',
         'sighting-pending',
         'sighting-selected',
@@ -873,6 +909,117 @@ describe('createBarrioMap', () => {
     })
   })
 
+  describe('what can go wrong around the pins', () => {
+    const cluster = (id: number): Hit => ({
+      geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
+      properties: { cluster_id: id },
+    })
+
+    it('sightings on the same public coordinate are drawn apart, so each can be reached', async () => {
+      const { controller, calls } = await mountReady()
+      const twins = [sighting('m', 'approved'), sighting('n', 'approved'), sighting('o', 'pending')]
+      controller.setSightings(twins)
+      const spots = ['m', 'n', 'o'].map((id) => coordinatesOf('sightings', id)?.join(','))
+      expect(new Set(spots).size).toBe(3)
+      // the heat map still piles them on their true, shared coordinate
+      expect(coordinatesOf('sightings-validated', 'm')).toEqual([-3.71, 40.411])
+      expect(coordinatesOf('sightings-validated', 'n')).toEqual([-3.71, 40.411])
+
+      const [nLng, nLat] = coordinatesOf('sightings', 'n') ?? [0, 0]
+      const [mLng, mLat] = coordinatesOf('sightings', 'm') ?? [0, 0]
+      recorded.hits = [pinHit('m', mLng, mLat), pinHit('n', nLng, nLat)]
+      tap(nLng, nLat)
+      tap(mLng, mLat)
+      expect(calls.picked).toEqual(['n', 'm'])
+
+      controller.setSelected('n')
+      expect(coordinatesOf('sighting-selected', 'n')).toEqual([nLng, nLat])
+    })
+
+    it('a browser that cannot make the pin images still shows something to tap', async () => {
+      recorded.brokenArt = true
+      const { controller, calls } = await mountReady()
+      controller.setSightings([sighting('a', 'approved')])
+      expect(recorded.images).toHaveLength(0)
+      expect(recorded.layers.map((layer) => layer.id)).toContain('sighting-dots')
+      expect(ids('sightings')).toEqual(['a'])
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      tap(-3.71, 40.411)
+      expect(recorded.queries.at(-1)?.layers).toContain('sighting-dots')
+      expect(calls.picked).toEqual(['a'])
+      controller.setHeat(true)
+      expect(recorded.visibility['sighting-dots']).toBe('none')
+    })
+
+    it('draws no fallback dots when the images exist', async () => {
+      await mountReady()
+      expect(recorded.layers.map((layer) => layer.id)).not.toContain('sighting-dots')
+    })
+
+    it('a cluster that answers late does not override what the user did meanwhile', async () => {
+      const { controller, calls } = await mountReady()
+      recorded.holdExpansion = true
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      userDrag()
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(recorded.eases).toHaveLength(0)
+      expect(calls.userMoves).toBe(1)
+
+      tap(-3.711, 40.412)
+      controller.setHeat(true)
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(recorded.eases).toHaveLength(0)
+
+      controller.setHeat(false)
+      tap(-3.711, 40.412)
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
+    })
+
+    it('a zoom button pressed while a cluster opens keeps heading for the cluster', async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
+      controller.zoomBy(1)
+      expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 18 })
+    })
+
+    it('a map destroyed while its images are being made adds nothing afterwards', async () => {
+      const { controller } = mount()
+      emit('load')
+      controller.destroy()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(recorded.sources['sightings']).toBeUndefined()
+      expect(recorded.images).toHaveLength(0)
+    })
+
+    it('a tap before the pins exist is a tap on the map', () => {
+      const { calls } = mount()
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      tap(-3.71, 40.411)
+      expect(recorded.queries).toHaveLength(0)
+      expect(calls.mapTaps).toBe(1)
+    })
+
+    it('makes the images at a whole number of device pixels, three at most', async () => {
+      vi.stubGlobal('devicePixelRatio', 2.6)
+      await mountReady()
+      expect(new Set(recorded.images.map((image) => image.pixelRatio))).toEqual(new Set([3]))
+      recorded.images.length = 0
+      recorded.sources = {}
+      vi.stubGlobal('devicePixelRatio', 5)
+      await mountReady()
+      expect(new Set(recorded.images.map((image) => image.pixelRatio))).toEqual(new Set([3]))
+    })
+  })
+
   describe('the pending blink', () => {
     const pending = [sighting('p', 'pending'), sighting('a', 'approved')]
     const frame = (now: number) => recorded.frames.at(-1)?.(now)
@@ -881,12 +1028,29 @@ describe('createBarrioMap', () => {
       const { controller } = await mountReady()
       controller.setSightings(pending)
       expect(recorded.frames).toHaveLength(1)
+      recorded.paints.length = 0
       frame(1400)
-      expect(recorded.opacities.at(-1)).toBeCloseTo(1)
+      expect(opacityOf('sighting-pending')).toBeCloseTo(1)
       frame(1420)
-      expect(recorded.opacities).toHaveLength(1)
+      expect(recorded.paints).toHaveLength(1)
       frame(2100)
-      expect(recorded.opacities.at(-1)).toBeCloseTo(0.25)
+      expect(opacityOf('sighting-pending')).toBeCloseTo(0.25)
+      // validated pins never fade
+      expect(opacityOf('sighting-points')).toBeUndefined()
+    })
+
+    it('a picked pending pin keeps blinking, as its card says; a picked validated one stays solid', async () => {
+      const { controller } = await mountReady()
+      controller.setSightings(pending)
+      controller.setSelected('p')
+      frame(2100)
+      expect(opacityOf('sighting-selected')).toBeCloseTo(0.25)
+      controller.setSelected('a')
+      expect(opacityOf('sighting-selected')).toBe(1)
+      frame(2800)
+      frame(3500)
+      expect(opacityOf('sighting-selected')).toBe(1)
+      expect(opacityOf('sighting-pending')).toBeCloseTo(0.25)
     })
 
     it('does not run without pending sightings', async () => {
@@ -901,7 +1065,8 @@ describe('createBarrioMap', () => {
       frame(2100)
       controller.setHeat(true)
       expect(recorded.frames).toHaveLength(0)
-      expect(recorded.opacities.at(-1)).toBe(1)
+      expect(opacityOf('sighting-pending')).toBe(1)
+      expect(opacityOf('sighting-selected')).toBe(1)
       controller.setHeat(false)
       expect(recorded.frames).toHaveLength(1)
 
@@ -912,8 +1077,10 @@ describe('createBarrioMap', () => {
       document.dispatchEvent(new Event('visibilitychange'))
       expect(recorded.frames).toHaveLength(1)
 
+      expect(recorded.motionListeners).toBe(1)
       controller.destroy()
       expect(recorded.frames).toHaveLength(0)
+      expect(recorded.motionListeners).toBe(0)
       vi.restoreAllMocks()
     })
 
@@ -922,7 +1089,7 @@ describe('createBarrioMap', () => {
       const { controller } = await mountReady()
       controller.setSightings(pending)
       expect(recorded.frames).toHaveLength(0)
-      expect(recorded.opacities).toHaveLength(0)
+      expect(opacityOf('sighting-pending')).toBeUndefined()
     })
   })
 
@@ -961,6 +1128,42 @@ describe('createBarrioMap', () => {
       userDrag()
       expect(stored()).not.toBeNull()
     })
+  })
+})
+
+describe('fanOut', () => {
+  const at = (id: string, lng = -3.71, lat = 40.411) => ({ id, lng, lat })
+  const metresApart = (a: { lng: number; lat: number }, b: { lng: number; lat: number }) =>
+    Math.hypot(
+      (a.lat - b.lat) * 111_320,
+      (a.lng - b.lng) * 111_320 * Math.cos((40.411 * Math.PI) / 180),
+    )
+
+  it('leaves a sighting alone on its coordinate where it is', () => {
+    expect(fanOut([at('a'), at('b', -3.72)])).toEqual([at('a'), at('b', -3.72)])
+  })
+
+  it('sets sightings that share a coordinate on a ring around it, ten metres out', () => {
+    const [a, b, c] = fanOut([at('a'), at('b'), at('c')])
+    for (const spot of [a, b, c]) expect(metresApart(spot, at('x'))).toBeCloseTo(10, 1)
+    expect(metresApart(a, b)).toBeGreaterThan(9)
+    expect(metresApart(b, c)).toBeGreaterThan(9)
+    expect(metresApart(a, c)).toBeGreaterThan(9)
+  })
+
+  it('keeps each one on its spot whatever order they arrive in', () => {
+    const one = fanOut([at('a'), at('b'), at('c')])
+    const other = fanOut([at('c'), at('a'), at('b')])
+    for (const spot of one) expect(other.find((o) => o.id === spot.id)).toEqual(spot)
+  })
+
+  it('opens a second ring after six, and never puts two on one spot', () => {
+    const many = fanOut(Array.from({ length: 20 }, (_, i) => at(`s${String(i).padStart(2, '0')}`)))
+    const distances = many.map((spot) => Math.round(metresApart(spot, at('x'))))
+    expect(distances.filter((d) => d === 10)).toHaveLength(6)
+    expect(distances.filter((d) => d === 20)).toHaveLength(12)
+    expect(distances.filter((d) => d === 30)).toHaveLength(2)
+    expect(new Set(many.map((spot) => `${spot.lng},${spot.lat}`)).size).toBe(20)
   })
 })
 

@@ -113,6 +113,7 @@ export function MapPage() {
   const {
     data: sightings = NO_SIGHTINGS,
     isError,
+    isSuccess,
     refetch,
   } = useQuery({
     queryKey: ['sightings', 'map'],
@@ -180,8 +181,6 @@ export function MapPage() {
   const showHeat = () => {
     setHeat(true)
     setSel(null)
-    setVerifying(false)
-    closeEvidence()
   }
 
   // The native permission prompt fires here and only here: on this tap.
@@ -196,6 +195,7 @@ export function MapPage() {
   const speciesName = (id: string) => species.find((c) => c.id === id)?.name ?? ''
   const speciesMeaning = (id: string) => species.find((c) => c.id === id)?.description ?? ''
   const pending = sightings.filter((s) => s.status === 'pending')
+  const validated = sightings.filter((s) => s.status === 'approved')
   const selS = sightings.find((s) => s.id === sel)
 
   const me = geo.kind === 'ok' ? geo.position : null
@@ -226,10 +226,10 @@ export function MapPage() {
     <div className="stack" style={{ gap: 4 }}>
       <div className="map-sheet-row">
         <span className="eyebrow">Mapa de calor</span>
-        {!isError && <span className="chip">{sightings.length} avistamientos</span>}
+        {isSuccess && <span className="chip">{validated.length} validados</span>}
       </div>
       <p className="map-card-text map-card-hint" style={{ margin: 0 }}>
-        Dónde se concentran los avistamientos del barrio.
+        Dónde se concentran los avistamientos que el barrio ya ha confirmado.
       </p>
     </div>
   )
@@ -350,6 +350,7 @@ export function MapPage() {
       <MapSheet
         label="Avistamientos cerca de ti"
         open={sheetOpen}
+        foldable={!heat}
         onToggle={foldSheet}
         headerKey={String(pickCount)}
         onHeight={setSheetHeight}

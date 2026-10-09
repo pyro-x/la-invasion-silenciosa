@@ -1085,7 +1085,7 @@ estilo propio «chispera» (LCHP-33, D-059; antes raster OSM teñido por CSS,
 D-045 — paleta «papel», elegida por David en el loop visual entre 4
 candidatas)
 ↓
-Los pending llevan anillo ámbar y parpadean (blinkdot); los validados no
+Los pending llevan anillo ámbar y parpadean (desde código, D-063); los validados no
 ↓
 NO se carga ninguna foto (verificado: 0 peticiones a Storage al cargar)
 ↓
@@ -1273,7 +1273,18 @@ datos que el propio mapa dibuja.
 * **Agrupaciones:** donde los pines se pisan aparece un círculo con el
   número; lleva aro naranja si dentro hay algo por verificar. Tocarlo
   acerca el mapa hasta que se separan, y cuenta como un movimiento del
-  vecino (deja de seguir su posición; es una vista elegida).
+  vecino (deja de seguir su posición; es una vista elegida). Si mientras
+  llega la respuesta del mapa el vecino hace otra cosa (arrastrar, cambiar
+  de modo, otro toque), gana lo último.
+* **Avistamientos en la misma coordenada:** la ubicación pública va a una
+  rejilla de ~55 m (D-046), así que es normal que varios compartan
+  exactamente el mismo punto. Dibujados ahí serían un pin que ningún zoom
+  separa y solo se podría tocar el de arriba. Se **dibujan en abanico**
+  alrededor del punto compartido (anillos de 10 m: seis en el primero,
+  doce en el siguiente), en orden de identificador para que no cambien de
+  sitio al refrescar. Solo se mueve el dibujo, menos que la imprecisión de
+  la propia rejilla; no existe ni se revela ninguna coordenada más fina.
+  El mapa de calor usa el punto compartido real.
 * **El avistamiento elegido se dibuja desde su propia fuente, sin
   agrupar y encima de todo**: elegido desde la lista con el mapa alejado,
   nunca queda escondido dentro de una agrupación.
@@ -1283,18 +1294,24 @@ datos que el propio mapa dibuja.
   animaciones CSS, la opacidad se cambia desde código siguiendo el reloj
   de la página, unas veinte veces por segundo. El aro de los chips «Por
   verificar» arranca su animación CSS en la misma fase, así que **pin y
-  chip parpadean a la vez**. Se detiene con la pestaña oculta, en modo
+  chip parpadean a la vez**. El pin elegido, si está pendiente, sigue
+  parpadeando (su ficha lo dice). Se detiene con la pestaña oculta, en modo
   calor, sin pendientes y con `prefers-reduced-motion`. Coste conocido:
   mientras parpadea, el mapa se repinta entero esas veinte veces por
   segundo aunque nadie lo mueva (una animación CSS no costaba nada);
   no se ha medido en batería.
-* **Mapa de calor:** una capa `heatmap` sobre los mismos puntos, con la
-  rampa del prototipo (amarillo → rojo oscuro). En ese modo no hay pines
-  ni lista «Cerca de ti» ni avistamiento elegido: la hoja muestra «Mapa de
-  calor · N avistamientos» y una línea, y un toque en el mapa no elige
-  nada. Entra en el MVP por decisión de David (el brief lo tenía como
+* **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
+  (amarillo → rojo oscuro) sobre los avistamientos **validados**, como
+  dicen las reglas («Validado: … se integra en el mapa de calor»); los
+  pendientes no cuentan hasta que el barrio los confirma. En ese modo no
+  hay pines ni lista «Cerca de ti» ni avistamiento elegido: la hoja, sin
+  tirador, muestra «Mapa de calor · N validados» y una línea, y un toque
+  en el mapa no elige nada. Entra en el MVP por decisión de David (el brief lo tenía como
   post-MVP): con los avistamientos ya en una fuente, es una definición de
   capa.
+* **Si el navegador no sabe convertir el arte en imagen**, el mapa no se
+  queda vacío: se dibujan puntos de color tocables en lugar de los pines,
+  y las agrupaciones y el mapa de calor siguen funcionando.
 * **La posición del vecino también es una capa** (punto y halo), añadida
   antes que los pines para quedar debajo de ellos.
 * **Rendimiento medido** (app compilada, Chromium sin GPU, arrastre de

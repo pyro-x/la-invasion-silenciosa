@@ -9,6 +9,7 @@ const SWIPE_PX = 28
 export function MapSheet({
   label,
   open,
+  foldable = true,
   onToggle,
   onHeight,
   header,
@@ -18,6 +19,8 @@ export function MapSheet({
   /** Names the sheet for assistive technology. */
   label: string
   open: boolean
+  /** Without anything to fold away there is no handle. */
+  foldable?: boolean
   onToggle: (open: boolean) => void
   /** Height in CSS px the sheet covers, on every change. */
   onHeight: (px: number) => void
@@ -79,15 +82,19 @@ export function MapSheet({
 
   return (
     <section ref={ref} className="map-sheet" aria-label={label}>
-      <button
-        type="button"
-        className="map-sheet-handle"
-        aria-label={open ? 'Plegar la lista' : 'Desplegar la lista'}
-        aria-expanded={open}
-        onClick={onClick}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-      />
+      {foldable ? (
+        <button
+          type="button"
+          className="map-sheet-handle"
+          aria-label={open ? 'Plegar la lista' : 'Desplegar la lista'}
+          aria-expanded={open}
+          onClick={onClick}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+        />
+      ) : (
+        <div className="map-sheet-top" />
+      )}
       <div ref={bodyRef} className="map-sheet-body">
         {/* polite: picking a pin swaps this for its detail card, far from
             the pin in DOM order — say so without stealing focus */}

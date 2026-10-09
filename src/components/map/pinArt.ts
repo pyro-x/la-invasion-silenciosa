@@ -40,7 +40,7 @@ export function pinSvg(species: SpeciesId, state: PinState, colors: PinColors): 
       ? `<rect width="${PIN_SIZE}" height="${PIN_SIZE}" rx="${RADIUS + MARGIN}" fill="${colors.accent}"/>`
       : `<rect x="${MARGIN}" y="${MARGIN + 1}" width="${TILE}" height="${TILE}" rx="${RADIUS}" fill="#000" opacity="0.25" filter="url(#soft)"/>`
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_SIZE} ${PIN_SIZE}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${PIN_SIZE}" height="${PIN_SIZE}" viewBox="0 0 ${PIN_SIZE} ${PIN_SIZE}">` +
     `<defs><filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1"/></filter></defs>` +
     around +
     `<rect x="${MARGIN}" y="${MARGIN}" width="${TILE}" height="${TILE}" rx="${RADIUS}" fill="${border}"/>` +
