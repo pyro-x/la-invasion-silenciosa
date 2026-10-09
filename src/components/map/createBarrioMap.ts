@@ -302,13 +302,19 @@ export function createBarrioMap(
   const PLACED_MS = 400
   let pendingSeen = false
   let lookTimer: number | null = null
-  const lookSoon = () => {
+  // On a slow device the first look can still read the previous view's pins,
+  // and a wrong "yes" would keep the blink going unseen: it looks twice.
+  const lookSoon = (again = true) => {
     if (lookTimer !== null) window.clearTimeout(lookTimer)
     lookTimer = window.setTimeout(() => {
       lookTimer = null
-      if (destroyed) return
-      if (map.isMoving() || !pinsReady || !map.isSourceLoaded(SIGHTINGS)) lookSoon()
-      else lookForPending()
+      if (destroyed || !pinsReady) return
+      if (map.isMoving() || !map.isSourceLoaded(SIGHTINGS)) {
+        lookSoon(again)
+        return
+      }
+      lookForPending()
+      if (again && !heat) lookSoon(false)
     }, PLACED_MS)
   }
   // What the neighbour can see: the map continues under the sheet.
@@ -832,6 +838,7 @@ export function createBarrioMap(
 
     destroy() {
       destroyed = true
+      if (lookTimer !== null) window.clearTimeout(lookTimer)
       syncBlink()
       document.removeEventListener('visibilitychange', syncBlink)
       reducedMotion?.removeEventListener('change', syncBlink)

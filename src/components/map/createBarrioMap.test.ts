@@ -1404,17 +1404,55 @@ describe('createBarrioMap', () => {
         })
       })
 
-      it('does not look in heat mode, nor after the map is gone', async () => {
+      it('does not look in heat mode, looks again on leaving it, and never after the map is gone', async () => {
         const { controller } = await mountTimed()
         controller.setSightings(pending)
         controller.setHeat(true)
-        vi.advanceTimersByTime(WAIT)
-        expect(recorded.looks).toHaveLength(0)
-
-        controller.setHeat(false)
-        controller.destroy()
         vi.advanceTimersByTime(WAIT * 3)
         expect(recorded.looks).toHaveLength(0)
+        expect(vi.getTimerCount()).toBe(0)
+
+        recorded.onScreen = []
+        controller.setHeat(false)
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.looks.length).toBeGreaterThan(0)
+        expect(recorded.frames).toHaveLength(0)
+
+        controller.setSelected('p')
+        controller.destroy()
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('looks a second time, in case the first saw the pins of the view before', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        userDrag()
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames.length).toBeGreaterThan(0)
+
+        // only now has the map placed the new view: no pending pin in it
+        recorded.onScreen = []
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(0)
+
+        // and then it stops asking
+        recorded.looks.length = 0
+        vi.advanceTimersByTime(WAIT * 5)
+        expect(recorded.looks).toHaveLength(0)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('a resting map looks when it settles, whatever was asked for', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        recorded.onScreen = []
+        vi.advanceTimersByTime(WAIT * 2)
+        expect(recorded.frames).toHaveLength(0)
+        expect(vi.getTimerCount()).toBe(0)
+
+        recorded.onScreen = ['sighting-pending']
+        emit('idle')
+        expect(recorded.frames).toHaveLength(1)
       })
 
       it('rests on dots as on pins', async () => {
