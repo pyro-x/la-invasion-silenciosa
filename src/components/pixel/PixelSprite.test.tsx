@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { CreatureSprite } from './CreatureSprite'
-import { MiniPix } from './PixelSprite'
+import { MiniPix, PixelSprite } from './PixelSprite'
 import { NAV_ICONS, SPRITES } from './sprites'
 
 describe('pixel artwork', () => {
@@ -22,6 +22,26 @@ describe('pixel artwork', () => {
     const { container } = render(<MiniPix grid={NAV_ICONS.map} scale={4} />)
     const fills = [...container.querySelectorAll('rect')].map((r) => r.getAttribute('fill'))
     expect(new Set(fills)).toEqual(new Set(['currentColor']))
+  })
+
+  it('places every rectangle on its own row, one cell tall, in its own colour', () => {
+    const { container } = render(
+      <PixelSprite grid={['AB.', '.AA']} palette={{ A: '#111111', B: '#222222' }} scale={3} />,
+    )
+    const rects = [...container.querySelectorAll('rect')].map((r) =>
+      ['x', 'y', 'width', 'height', 'fill'].map((name) => r.getAttribute(name)).join(' '),
+    )
+    expect(rects).toEqual(['0 0 1 1 #111111', '1 0 1 1 #222222', '1 1 2 1 #111111'])
+  })
+
+  it('is as wide as its longest row', () => {
+    const { container } = render(<PixelSprite grid={['A', 'AAA']} palette={{ A: '#111111' }} />)
+    expect(container.querySelector('svg')).toHaveAttribute('viewBox', '0 0 3 2')
+  })
+
+  it('keeps the style its caller passes', () => {
+    const { container } = render(<CreatureSprite id="turistox" style={{ opacity: 0.4 }} />)
+    expect(container.querySelector('svg')).toHaveStyle({ opacity: '0.4', display: 'block' })
   })
 
   it('paints nothing with box-shadow any more', () => {

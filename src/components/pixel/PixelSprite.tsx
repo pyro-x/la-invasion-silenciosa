@@ -14,7 +14,7 @@ function Sprite({
   scale: number
   style: CSSProperties
 }) {
-  const columns = grid[0].length
+  const columns = Math.max(...grid.map((row) => row.length))
   const rows = grid.length
   return (
     <svg

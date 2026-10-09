@@ -41,6 +41,10 @@ describe('spriteRects', () => {
         .filter((l) => resolve(l) !== null).length
       const covered = spriteRects(grid, resolve).reduce((sum, r) => sum + r.width, 0)
       expect(covered).toBe(painted)
+      for (const rect of spriteRects(grid, resolve)) {
+        const cells = grid[rect.y].slice(rect.x, rect.x + rect.width).split('')
+        expect(cells.map(resolve)).toEqual(cells.map(() => rect.fill))
+      }
       expect(painted).toBeGreaterThan(0)
     }
   })
