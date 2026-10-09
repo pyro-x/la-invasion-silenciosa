@@ -44,4 +44,5 @@ while working on something else.
 
 **Context:** found by the cross-model review of LCHP-35 (three rounds, the budget set for it under D-064). The triage table is in that PR's description.
 **Proposal:** measure item 5 on a real phone first — it is the only one that could matter to every user; fix 1, 2 and 7 together in the controller; 3, 4, 6 and 8 as they come up. Decide by 2026-10-23: schedule it or demote it to `post-mvp`.
+**RESOLVED 2026-10-09 (LCHP-42, D-063 Addendum 5):** 1, 2, 3, 6 and 7 fixed. 5: measured without a GPU, and the blink now rests while no pending pin is drawn on screen; its cost with one in view on a real phone is David's to measure and decide. 4: left as it is, with the reason recorded. 8: Firefox converts the artwork; WebKit could not be run here, so Safari on a real iPhone stays unverified.
 

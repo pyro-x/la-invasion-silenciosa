@@ -1299,10 +1299,15 @@ datos que el propio mapa dibuja.
   verificar» arranca su animación CSS en la misma fase, así que **pin y
   chip parpadean a la vez**. El pin elegido, si está pendiente, sigue
   parpadeando (su ficha lo dice). Se detiene con la pestaña oculta, en modo
-  calor, sin pendientes y con `prefers-reduced-motion`. Coste conocido:
-  mientras parpadea, el mapa se repinta entero esas veinte veces por
-  segundo aunque nadie lo mueva (una animación CSS no costaba nada);
-  no se ha medido en batería.
+  calor, con `prefers-reduced-motion` y **cuando no hay ningún pin
+  pendiente dibujado en pantalla** (ninguno a la vista, o todos dentro de
+  una agrupación): se lo pregunta al propio mapa poco después de cada
+  movimiento o cambio de datos, y vuelve cuando reaparece uno. Coste
+  conocido: mientras parpadea, el mapa se repinta entero esas veinte veces
+  por segundo aunque nadie lo mueva (una animación CSS no costaba nada).
+  Medido sin GPU, diez segundos sin tocar el mapa: sin pendientes en
+  pantalla, ningún repintado; con uno, el hilo principal ocupado todo el
+  tiempo. Falta la medida en un teléfono real.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
   (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
   coordenada pública real. Los validados pesan más que los pendientes
@@ -1315,8 +1320,9 @@ datos que el propio mapa dibuja.
   post-MVP): con los avistamientos ya en una fuente, es una definición de
   capa.
 * **Si el navegador no sabe convertir el arte en imagen**, el mapa no se
-  queda vacío: se dibujan puntos de color tocables en lugar de los pines,
-  y las agrupaciones y el mapa de calor siguen funcionando.
+  queda vacío: las mismas capas de pines se dibujan como puntos de color
+  (el elegido se distingue, los pendientes parpadean, se tocan igual), y
+  las agrupaciones y el mapa de calor siguen funcionando.
 * **La posición del vecino también es una capa** (punto y halo), añadida
   antes que los pines para quedar debajo de ellos.
 * **Rendimiento medido** (app compilada, Chromium sin GPU, arrastre de

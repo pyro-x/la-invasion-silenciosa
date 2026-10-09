@@ -11,7 +11,15 @@
 // rule / D-046). «Ver evidencia» loads the photo on demand. «Verificar»
 // (LCHP-15) opens the verification modal from its two doors — the detail
 // card and the «Cerca de ti» rows.
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
 import { blinkDelayMs } from '@/components/map/blink'
@@ -47,9 +55,27 @@ const BarrioMap = lazy(() =>
 
 // The ring of the «Por verificar» chips blinks in step with the pending
 // pins: it starts its CSS animation where the page's clock already is.
-function BlinkRing() {
+function Ring() {
   const [delay] = useState(() => blinkDelayMs(performance.now()))
   return <span className="chip-ring" aria-hidden style={{ animationDelay: `${delay}ms` }} />
+}
+
+const lessMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)')
+const watchMotion = (changed: () => void) => {
+  const query = lessMotion()
+  query?.addEventListener('change', changed)
+  return () => query?.removeEventListener('change', changed)
+}
+
+// Turning reduced motion off restarts the CSS animation from zero, so the
+// ring is mounted afresh to pick the clock up again.
+function BlinkRing() {
+  const still = useSyncExternalStore(
+    watchMotion,
+    () => lessMotion()?.matches ?? false,
+    () => false,
+  )
+  return <Ring key={still ? 'still' : 'moving'} />
 }
 
 // Evidence is keyed to the sighting that requested it (Codex review, HIGH):
