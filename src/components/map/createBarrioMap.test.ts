@@ -1,4 +1,10 @@
-import { circlePolygon, createBarrioMap, fanOut, type BarrioMapController } from './createBarrioMap'
+import {
+  circlePolygon,
+  createBarrioMap,
+  fanOut,
+  HEAT_WEIGHT,
+  type BarrioMapController,
+} from './createBarrioMap'
 import type { MapSightingGeo } from '@/types/sighting'
 
 type MapEvent = { originalEvent?: Event; point?: { x: number; y: number } }
@@ -9,7 +15,13 @@ type Hit = {
   geometry: { type: 'Point'; coordinates: [number, number] }
   properties: { id?: string; cluster_id?: number }
 }
-type Layer = { id: string; type: string; source: string; filter?: object }
+type Layer = {
+  id: string
+  type: string
+  source: string
+  filter?: object
+  paint?: Record<string, object | number | string>
+}
 type SourceSpec = { cluster?: boolean; clusterMaxZoom?: number; clusterProperties?: object }
 const recorded = vi.hoisted(() => ({
   options: [] as MapOptions[],
@@ -740,9 +752,14 @@ describe('createBarrioMap', () => {
         clusterMaxZoom: 17,
         clusterProperties: { pending: expect.anything() },
       })
-      // the heat map is of confirmed sightings only (rules §3.2)
-      expect(ids('sightings-validated')).toEqual(['a', 'c'])
-      expect(recorded.sources['sightings-validated']?.spec.cluster).toBeUndefined()
+      // the heat map counts every sighting; a validated one weighs more
+      expect(ids('sightings-heat')).toEqual(['a', 'b', 'c'])
+      expect(recorded.sources['sightings-heat']?.spec.cluster).toBeUndefined()
+      const heat = recorded.layers.find((layer) => layer.id === 'sighting-heat')
+      expect(JSON.stringify(heat?.paint?.['heatmap-weight'])).toBe(
+        '["case",["==",["get","status"],"approved"],1,0.4]',
+      )
+      expect(HEAT_WEIGHT.approved).toBeGreaterThan(HEAT_WEIGHT.pending)
       expect(lastData('sightings')).toMatchObject({
         features: [
           {
@@ -929,8 +946,8 @@ describe('createBarrioMap', () => {
       const spots = ['m', 'n', 'o'].map((id) => coordinatesOf('sightings', id)?.join(','))
       expect(new Set(spots).size).toBe(3)
       // the heat map still piles them on their true, shared coordinate
-      expect(coordinatesOf('sightings-validated', 'm')).toEqual([-3.71, 40.411])
-      expect(coordinatesOf('sightings-validated', 'n')).toEqual([-3.71, 40.411])
+      expect(coordinatesOf('sightings-heat', 'm')).toEqual([-3.71, 40.411])
+      expect(coordinatesOf('sightings-heat', 'n')).toEqual([-3.71, 40.411])
 
       const [nLng, nLat] = coordinatesOf('sightings', 'n') ?? [0, 0]
       const [mLng, mLat] = coordinatesOf('sightings', 'm') ?? [0, 0]

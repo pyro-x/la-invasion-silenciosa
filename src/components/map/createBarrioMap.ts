@@ -4,8 +4,8 @@
 // never touches the map library.
 //
 // Sightings are map data (LCHP-35): one clustered GeoJSON source drawn by
-// symbol layers, the validated ones again as a heat map, and the picked one
-// on its own so a cluster can never hide it.
+// symbol layers, all of them again as a heat map, and the picked one on
+// its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
 import { blinkOpacity } from './blink'
@@ -64,13 +64,15 @@ const BLINK_STEP_MS = 50
 const VIEW_KEY = 'lis.map.view'
 // Height of the floating mode switch the opening frame stays below.
 const TOP_CHROME_PX = 64
+// How much a sighting counts in the heat map, by status.
+export const HEAT_WEIGHT = { approved: 1, pending: 0.4 }
 // A finger is not a cursor: a tap this close to a pin is a tap on it.
 const TAP_SLOP_PX = 14
 
 const ME_AREA = 'me'
 const ME_POINT = 'me-point'
 const SIGHTINGS = 'sightings'
-const VALIDATED = 'sightings-validated'
+const HEAT = 'sightings-heat'
 const SELECTED = 'sighting-selected'
 // Plain dots, drawn only if a pin image could not be made.
 const DOTS = 'sighting-dots'
@@ -313,10 +315,9 @@ export function createBarrioMap(
   function drawSightings() {
     if (!pinsReady) return
     source(SIGHTINGS)?.setData(points(drawn))
-    // The heat map is of what the community has confirmed (rules §3.2:
-    // a validated sighting "se integra en el mapa de calor"), at the true
-    // public coordinates: sightings on one spot should pile up there.
-    source(VALIDATED)?.setData(points(sightings.filter((s) => s.status === 'approved')))
+    // The heat map counts every sighting, at its true public coordinate:
+    // those on one spot should pile up there.
+    source(HEAT)?.setData(points(sightings))
     drawSelected()
     syncBlink()
   }
@@ -390,16 +391,23 @@ export function createBarrioMap(
       clusterMaxZoom: 17,
       clusterProperties: { pending: ['+', ['case', ['==', ['get', 'status'], 'pending'], 1, 0]] },
     })
-    map.addSource(VALIDATED, { type: 'geojson', data: EMPTY })
+    map.addSource(HEAT, { type: 'geojson', data: EMPTY })
     map.addSource(SELECTED, { type: 'geojson', data: EMPTY })
 
     map.addLayer({
       id: 'sighting-heat',
       type: 'heatmap',
-      source: VALIDATED,
+      source: HEAT,
       layout: { visibility: 'none' },
       paint: {
-        'heatmap-weight': 1,
+        // What the barrio has confirmed weighs more than what one
+        // neighbour has reported (David, 2026-10-09).
+        'heatmap-weight': [
+          'case',
+          ['==', ['get', 'status'], 'approved'],
+          HEAT_WEIGHT.approved,
+          HEAT_WEIGHT.pending,
+        ],
         'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 13, 0.7, 17, 1.5],
         'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 13, 20, 16, 44, 18, 80],
         'heatmap-opacity': 0.9,

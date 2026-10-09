@@ -1304,14 +1304,13 @@ datos que el propio mapa dibuja.
   segundo aunque nadie lo mueva (una animación CSS no costaba nada);
   no se ha medido en batería.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
-  (amarillo → rojo oscuro) sobre los avistamientos **validados**, como
-  dicen las reglas («Validado: … se integra en el mapa de calor»); los
-  pendientes no cuentan hasta que el barrio los confirma. **Pendiente de
-  que David lo confirme:** las mismas reglas dicen también «cada
-  avistamiento es un foco», y con un piloto joven, casi todo pendiente, el
-  mapa de calor saldría casi vacío. En ese modo no
+  (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
+  coordenada pública real. Los validados pesan más que los pendientes
+  (1 frente a 0,4): decisión de David, para que el mapa no salga vacío al
+  principio del piloto, cuando casi todo está por verificar, y lo
+  confirmado por el barrio siga destacando. En ese modo no
   hay pines ni lista «Cerca de ti» ni avistamiento elegido: la hoja, sin
-  tirador, muestra «Mapa de calor · N validados» y una línea, y un toque
+  tirador, muestra «Mapa de calor · N avistamientos» y una línea, y un toque
   en el mapa no elige nada. Entra en el MVP por decisión de David (el brief lo tenía como
   post-MVP): con los avistamientos ya en una fuente, es una definición de
   capa.

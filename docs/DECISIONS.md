@@ -569,3 +569,12 @@ Left open, on purpose:
 
 Round 3, the last of the budget, on `a5c68aa`: Codex and Opus both approve; nothing to fix before merge. Folded in because it was only a test: the page-to-map half of the fanned-pin fix was unpinned (dropping the id from the focus passed every test), so the page test now asserts the focus it sends. The rest went to LCHP-42 and `FINDINGS.md`: a locate tap not superseding a cluster that is still opening; the camera not following a picked pin whose slot changes on refresh; the fallback dots on a partial artwork failure; more than eighteen sightings on one point; the blink's unmeasured cost; the chip ring's phase; one surviving mutation; Safari and Firefox unverified. Still David's: whether the heat map counts validated sightings only.
 
+### D-063 · Addendum 4 · 2026-10-09 · The heat map counts every sighting; validated ones weigh more
+
+David's answer to the question left open in Addenda 1–3: the heat map is of **all** sightings, pending included, with validated ones weighing more. Supersedes "validated only" in Addendum 1 and items 2–3 above where they say so.
+- Weights: validated 1, pending 0.4 (`HEAT_WEIGHT`). The ratio is a first guess to be tuned by eye on real data; David asked for "a bigger weight", not a number.
+- The sheet says «Mapa de calor · N avistamientos» and «Los validados pesan más.»
+- The rules document is updated in the same PR (sync rule): a validated sighting "pesa más en el mapa de calor", and the heat map "cuentan todos, también los pendientes".
+**Alternatives:** validated only (what the rules said; nearly empty early in the pilot, when most sightings are pending) · all with equal weight (the first version; an unconfirmed report would count like one the barrio has checked).
+Not reviewed by the panel: the ticket's budget of three rounds was spent before this decision.
+

@@ -5,7 +5,7 @@
 //
 // The map draws the sightings itself: validated ones as the species sprite,
 // pending ones blinking with an amber ring, clusters where they overlap, or
-// a heat map of the validated ones. The detail shows species · status · age ·
+// a heat map of all of them. The detail shows species · status · age ·
 // approximate location
 // — NO author and NO exact street (the public view exposes neither; golden
 // rule / D-046). «Ver evidencia» loads the photo on demand. «Verificar»
@@ -195,7 +195,6 @@ export function MapPage() {
   const speciesName = (id: string) => species.find((c) => c.id === id)?.name ?? ''
   const speciesMeaning = (id: string) => species.find((c) => c.id === id)?.description ?? ''
   const pending = sightings.filter((s) => s.status === 'pending')
-  const validated = sightings.filter((s) => s.status === 'approved')
   const selS = sightings.find((s) => s.id === sel)
 
   const me = geo.kind === 'ok' ? geo.position : null
@@ -228,12 +227,12 @@ export function MapPage() {
         <span className="eyebrow">Mapa de calor</span>
         {isSuccess && (
           <span className="chip">
-            {validated.length} {validated.length === 1 ? 'validado' : 'validados'}
+            {sightings.length} {sightings.length === 1 ? 'avistamiento' : 'avistamientos'}
           </span>
         )}
       </div>
       <p className="map-card-text map-card-hint" style={{ margin: 0 }}>
-        Dónde se concentran los avistamientos que el barrio ya ha confirmado.
+        Dónde se concentran los avistamientos. Los validados pesan más.
       </p>
     </div>
   )
