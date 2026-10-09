@@ -35,8 +35,8 @@ export type BarrioMapController = {
   /** Eases to a point, at the zoom the map has. */
   goTo: (target: LngLat) => void
   /**
-   * Eases to the neighbour's position. `minZoom` zooms in if the map is
-   * further out; without it, a zoom still under way is carried on.
+   * Eases to the neighbour's position, carrying on a zoom still under way.
+   * `minZoom` zooms in if the map would otherwise end further out.
    */
   follow: (target: LngLat, minZoom?: number) => void
   zoomBy: (delta: number) => void
@@ -199,6 +199,20 @@ export function createBarrioMap(
     jumping = false
   }
 
+  // A zoom-button step: the camera move is the app's call, the choice is
+  // the user's.
+  const zoomStep = (wanted: number) => {
+    map.stop()
+    userChoseView = true
+    // Where the step will really end, so that arriving can be told from
+    // being cut: within the zoom limits, and no further out than the pan
+    // limit lets this viewport go.
+    const within = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), wanted))
+    const zoom = map.transform.applyConstrain(map.getCenter(), within).zoom
+    carriedZoom = zoom
+    map.easeTo({ zoom, duration: 250 })
+  }
+
   const userMoved = () => {
     userChoseView = true
     handlers.onUserMove()
@@ -208,12 +222,16 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
+    // A zoom-button step that was stopped before it arrived — by the app or
+    // by the user's own hand — ends at a zoom nobody chose.
+    const cutStep = carriedZoom !== null && Math.abs(map.getZoom() - carriedZoom) > 0.001
     carriedZoom = null
     if (jumping) return
     if (flight) {
       flight = null
       return
     }
+    if (cutStep) return
     if (!userChoseView) return
     userChoseView = false
     if (positionShown) return
@@ -273,24 +291,29 @@ export function createBarrioMap(
 
     setBottomPadding(px) {
       bottomPx = px
-      // setPadding stops any ease where it is. Picking a pin both starts one
-      // and resizes the sheet, so the ease is sent again with the new
-      // padding instead of being cut short of the pin.
-      if (flight) ease(flight, carriedZoom !== null)
+      // Zero is "not measured yet", not a height.
+      const opening = !framed && px > 0
+      // setPadding stops whatever is moving, so a move under way is sent
+      // again: picking a pin both starts an ease and resizes the sheet, and
+      // a zoom-button step would otherwise end part-way. The opening fit
+      // replaces either.
+      const step = flight ? null : carriedZoom
+      if (flight && !opening) ease(flight, carriedZoom !== null)
       else jump(() => map.setPadding(padding()))
-      // The opening frame is fitted once the sheet's height is known, so the
-      // barrio lands in the part of the map that is actually visible. Zero
-      // is "not measured yet", not a height.
-      if (!framed && px > 0) {
-        framed = true
+      if (opening) {
+        // The opening frame is fitted once the sheet's height is known, so
+        // the barrio lands in the part of the map that is actually visible.
         // The sheet is already in the map's own padding (set just above);
         // fitBounds adds its padding on top, so only the margins go here.
+        framed = true
         jump(() =>
           map.fitBounds(LA_LATINA_BOUNDS, {
             padding: { top: TOP_CHROME_PX, bottom: 16, left: 16, right: 16 },
             duration: 0,
           }),
         )
+      } else if (step !== null) {
+        zoomStep(step)
       }
     },
 
@@ -303,19 +326,13 @@ export function createBarrioMap(
       // stops whatever is moving: without this, each one cut the zoom-in of
       // the one before, or a zoom-button step, part-way. Only following
       // carries a zoom on; a pin picked meanwhile keeps the zoom it finds.
-      const zoom =
-        minZoom !== undefined && map.getZoom() < minZoom ? minZoom : (carriedZoom ?? undefined)
+      const heading = carriedZoom ?? map.getZoom()
+      const zoom = minZoom !== undefined && heading < minZoom ? minZoom : (carriedZoom ?? undefined)
       ease({ center: [target.lng, target.lat], ...(zoom !== undefined ? { zoom } : {}) }, true)
     },
 
     zoomBy(delta) {
-      // An app ease in flight ends as the app's (see ease()); the zoom is
-      // the user's.
-      map.stop()
-      userChoseView = true
-      const zoom = map.getZoom() + delta
-      carriedZoom = zoom
-      map.easeTo({ zoom, duration: 250 })
+      zoomStep(map.getZoom() + delta)
     },
 
     destroy() {

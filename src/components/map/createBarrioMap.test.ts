@@ -16,6 +16,8 @@ const recorded = vi.hoisted(() => ({
   easing: false,
   // prefers-reduced-motion: MapLibre ends an ease before easeTo returns.
   reducedMotion: false,
+  // The furthest out the pan limit lets the viewport zoom.
+  boundsMinZoom: 0,
   meData: [] as object[],
   meDot: null as HTMLElement | null,
 }))
@@ -51,6 +53,18 @@ vi.mock('maplibre-gl', () => {
     }
     getZoom() {
       return recorded.zoom
+    }
+    transform = {
+      applyConstrain: (center: { lng: number; lat: number }, zoom: number) => ({
+        center,
+        zoom: Math.max(zoom, recorded.boundsMinZoom),
+      }),
+    }
+    getMinZoom() {
+      return 0
+    }
+    getMaxZoom() {
+      return 20
     }
     getCenter() {
       return { lng: -3.71, lat: 40.411 }
@@ -92,7 +106,12 @@ vi.mock('maplibre-gl', () => {
 })
 
 const emit = (type: string, event: { originalEvent?: Event } = {}) => {
-  if (type === 'moveend') recorded.easing = false
+  if (type === 'moveend') {
+    // An ease left to run arrives at its zoom; one ended by stop() does not.
+    const landing = recorded.easing ? recorded.eases.at(-1)?.zoom : undefined
+    if (landing !== undefined) recorded.zoom = landing
+    recorded.easing = false
+  }
   ;(recorded.handlers[type] ?? []).forEach((handler) => handler(event))
 }
 const userDrag = () => {
@@ -100,6 +119,11 @@ const userDrag = () => {
   emit('moveend')
 }
 const stored = () => localStorage.getItem('lis.map.view')
+// What MapLibre does when a gesture takes over: the ease ends where it is.
+const interrupt = () => {
+  recorded.easing = false
+  emit('moveend')
+}
 
 function mount() {
   const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0, mounts: [] as MarkerMount[] }
@@ -121,6 +145,7 @@ beforeEach(() => {
   recorded.zoom = 15
   recorded.easing = false
   recorded.reducedMotion = false
+  recorded.boundsMinZoom = 0
   recorded.meData.length = 0
   recorded.meDot = null
   for (const type of Object.keys(recorded.handlers)) delete recorded.handlers[type]
@@ -176,7 +201,7 @@ describe('createBarrioMap', () => {
 
   it("a zoom button pressed during a move to a pin is still the user's choice", () => {
     const { controller } = mount()
-    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+    controller.goTo({ lat: 40.4115, lng: -3.712 })
     controller.zoomBy(1)
     expect(stored()).toBeNull()
     emit('moveend')
@@ -420,6 +445,173 @@ describe('createBarrioMap', () => {
     emit('moveend')
     controller.follow({ lat: 40.4113, lng: -3.71 })
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a zoom-button step pressed during the zoom-in to the position is carried on by the next fix', () => {
+    const { controller } = mount()
+    controller.follow({ lat: 40.411, lng: -3.71 }, 17)
+    controller.zoomBy(1)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 16 })
+  })
+
+  it('with reduced motion a zoom step has landed before the next fix: nothing to carry', () => {
+    recorded.reducedMotion = true
+    const { controller } = mount()
+    controller.zoomBy(1)
+    controller.follow({ lat: 40.4111, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+    controller.follow({ lat: 40.4112, lng: -3.71 }, 17)
+    controller.follow({ lat: 40.4113, lng: -3.71 })
+    expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+
+  it('a tap on locate during a zoom step ends at least at street level, and never cuts a step beyond it', () => {
+    const { controller } = mount()
+    recorded.zoom = 17.5
+    controller.zoomBy(-1)
+    recorded.zoom = 17.2
+    controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
+    expect(recorded.eases.at(-1)?.zoom).toBe(17)
+    emit('moveend')
+    recorded.zoom = 16.5
+    controller.zoomBy(1)
+    recorded.zoom = 16.8
+    controller.follow({ lat: 40.4112, lng: -3.71 }, 17)
+    expect(recorded.eases.at(-1)?.zoom).toBe(17.5)
+  })
+
+  it('a sheet resize during a zoom-button step lets the step finish, in both directions', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    controller.setBottomPadding(300)
+    expect(recorded.paddings.at(-1)?.bottom).toBe(300)
+    expect(recorded.eases.at(-1)?.zoom).toBe(16)
+    // the step was stopped part-way: that zoom is not the user's view
+    expect(stored()).toBeNull()
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+    controller.zoomBy(-1)
+    controller.setBottomPadding(120)
+    expect(recorded.eases.at(-1)?.zoom).toBe(15)
+    emit('moveend')
+    controller.setBottomPadding(200)
+    expect(recorded.eases).toHaveLength(4)
+  })
+
+  it('a sheet resize during the zoom-in to the position re-sends that move, not a zoom step', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
+    controller.setBottomPadding(300)
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 17 })
+    emit('moveend')
+    expect(stored()).toBeNull()
+  })
+
+  it('a zoom step cut by a move to a pin, or by a second press, does not store its half-made zoom', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    controller.goTo({ lat: 40.4125, lng: -3.7135 })
+    emit('moveend')
+    expect(stored()).toBeNull()
+    controller.zoomBy(1)
+    controller.zoomBy(1)
+    expect(stored()).toBeNull()
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom step that ends at the zoom limit still counts as arrived', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    recorded.zoom = 19.6
+    controller.zoomBy(1)
+    expect(recorded.eases.at(-1)?.zoom).toBe(20)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom-out step that the pan limit stops short still counts as arrived', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    recorded.boundsMinZoom = 14.4
+    controller.zoomBy(-1)
+    expect(recorded.eases.at(-1)?.zoom).toBe(14.4)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom-out step at the lowest zoom still counts as arrived', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    recorded.zoom = 0.4
+    controller.zoomBy(-1)
+    expect(recorded.eases.at(-1)?.zoom).toBe(0)
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a zoom-out step that is cut stores nothing either, however close it got', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(-1)
+    recorded.zoom = 14.3
+    interrupt()
+    expect(stored()).toBeNull()
+  })
+
+  it('a drag that takes over a zoom step stores the drag, not the half-made zoom', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    interrupt()
+    expect(stored()).toBeNull()
+    userDrag()
+    expect(stored()).not.toBeNull()
+  })
+
+  it('the wheel taking over a zoom step stores the wheel zoom, not the half-made one', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    controller.zoomBy(1)
+    emit('wheel')
+    interrupt()
+    expect(stored()).toBeNull()
+    emit('moveend')
+    expect(stored()).not.toBeNull()
+  })
+
+  it('a sheet resize that cuts the glide of a user drag still stores where it stopped', () => {
+    const { controller } = mount()
+    controller.setBottomPadding(80)
+    emit('movestart', { originalEvent: new Event('touchstart') })
+    recorded.easing = true
+    controller.setBottomPadding(120)
+    expect(stored()).not.toBeNull()
+  })
+
+  it('the opening fit replaces a move started before the sheet was measured', () => {
+    const { controller } = mount()
+    controller.goTo({ lat: 40.4125, lng: -3.7135 })
+    controller.setBottomPadding(300)
+    expect(recorded.paddings.map((p) => p.bottom)).toEqual([300])
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(1)
+    emit('moveend')
+    expect(stored()).toBeNull()
+  })
+
+  it('the opening fit wins over a zoom step pressed before the sheet was measured', () => {
+    const { controller } = mount()
+    controller.zoomBy(1)
+    controller.zoomBy(1)
+    controller.setBottomPadding(300)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(2)
+    expect(stored()).toBeNull()
   })
 
   it('a zoom-out step is carried on too, and a sheet resize keeps it', () => {
