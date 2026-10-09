@@ -35,17 +35,17 @@ describe('spriteRects', () => {
       ]),
     ]
     for (const [grid, resolve] of cases) {
-      const painted = grid
-        .join('')
-        .split('')
-        .filter((l) => resolve(l) !== null).length
-      const covered = spriteRects(grid, resolve).reduce((sum, r) => sum + r.width, 0)
-      expect(covered).toBe(painted)
-      for (const rect of spriteRects(grid, resolve)) {
-        const cells = grid[rect.y].slice(rect.x, rect.x + rect.width).split('')
-        expect(cells.map(resolve)).toEqual(cells.map(() => rect.fill))
-      }
-      expect(painted).toBeGreaterThan(0)
+      const painted = grid.flatMap((row, y) =>
+        row.split('').flatMap((letter, x) => {
+          const fill = resolve(letter)
+          return fill === null ? [] : [`${x},${y},${fill}`]
+        }),
+      )
+      const drawn = spriteRects(grid, resolve).flatMap((rect) =>
+        Array.from({ length: rect.width }, (_, i) => `${rect.x + i},${rect.y},${rect.fill}`),
+      )
+      expect(painted.length).toBeGreaterThan(0)
+      expect(drawn.sort()).toEqual(painted.sort())
     }
   })
 })
