@@ -15,7 +15,7 @@ vi.mock('./createBarrioMap', () => ({
     setHeat: (on) => calls.log.push(`heat ${on}`),
     setMe: (me) => calls.log.push(`me ${me ? me.lat : null}`),
     setBottomPadding: (px) => calls.log.push(`padding ${px}`),
-    goTo: (target) => calls.log.push(`goTo ${target.lat}`),
+    goTo: (target) => calls.log.push(`goTo ${target.id} ${target.lat}`),
     follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
     zoomBy: (delta) => calls.log.push(`zoomBy ${delta}`),
     destroy: () => calls.log.push('destroy'),
@@ -73,11 +73,17 @@ describe('BarrioMap', () => {
         selectedId="a"
         heat
         bottomPadding={280}
-        focus={{ lat: 40.411, lng: -3.71 }}
+        focus={{ id: 'a', lat: 40.411, lng: -3.71 }}
         zoomStep={{ delta: 1 }}
       />,
     )
-    expect(calls.log).toEqual(['selected a', 'heat true', 'padding 280', 'goTo 40.411', 'zoomBy 1'])
+    expect(calls.log).toEqual([
+      'selected a',
+      'heat true',
+      'padding 280',
+      'goTo a 40.411',
+      'zoomBy 1',
+    ])
     view.unmount()
     expect(calls.log.at(-1)).toBe('destroy')
   })

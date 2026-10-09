@@ -63,6 +63,7 @@ vi.mock('@/components/map/BarrioMap', () => ({
     sightings,
     selectedId,
     heat,
+    focus,
     onPick,
     onMapTap,
     onUserMove,
@@ -73,6 +74,7 @@ vi.mock('@/components/map/BarrioMap', () => ({
     sightings: MapSightingGeo[]
     selectedId: string | null
     heat: boolean
+    focus: { id?: string; lat: number; lng: number } | null
     onPick: (id: string) => void
     onMapTap: () => void
     onUserMove: () => void
@@ -84,6 +86,7 @@ vi.mock('@/components/map/BarrioMap', () => ({
       data-testid="map"
       data-heat={heat}
       data-selected={selectedId ?? ''}
+      data-focus={focus ? `${focus.id} ${focus.lat},${focus.lng}` : ''}
       data-follow={follow}
       data-follow-request={followRequest}
       data-me={me ? `${me.lat},${me.lng}` : ''}
@@ -329,6 +332,8 @@ describe('map screen', () => {
     await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
     const map = screen.getByTestId('map')
     expect(map).toHaveAttribute('data-selected', 's-pending')
+    // the map is told which sighting to go to, so it can go to where it draws it
+    expect(map).toHaveAttribute('data-focus', 's-pending 40.4109,-3.7074')
     expect(screen.getByText('La Latina · hace 35 min')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Mapa de calor' }))

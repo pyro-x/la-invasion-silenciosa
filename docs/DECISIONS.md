@@ -565,3 +565,7 @@ Left open, on purpose:
 **Why:** the review exists to find defects, not to converge on zero remarks; past a point each round costs more than what it finds, and only the owner can say where that point is for a given change. And a visual change is judged by looking: the before/after pair of LCHP-41 settled in seconds what a pixel-difference percentage had not.
 **Trail:** LCHP-35 (first PR under both rules; budget three) · `AGENTS.md` «Linear and GitHub — how we work».
 
+### D-063 · Addendum 3 · 2026-10-09 · Review round 3: both seats approve
+
+Round 3, the last of the budget, on `a5c68aa`: Codex and Opus both approve; nothing to fix before merge. Folded in because it was only a test: the page-to-map half of the fanned-pin fix was unpinned (dropping the id from the focus passed every test), so the page test now asserts the focus it sends. The rest went to LCHP-42 and `FINDINGS.md`: a locate tap not superseding a cluster that is still opening; the camera not following a picked pin whose slot changes on refresh; the fallback dots on a partial artwork failure; more than eighteen sightings on one point; the blink's unmeasured cost; the chip ring's phase; one surviving mutation; Safari and Firefox unverified. Still David's: whether the heat map counts validated sightings only.
+
