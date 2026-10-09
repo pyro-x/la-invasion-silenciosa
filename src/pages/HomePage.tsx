@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { shouldShowOnboarding } from '@/lib/onboarding'
-import logoChispera from '@/assets/logo-chispera.png'
+import logoChispera from '@/assets/logo-chispera.svg'
 
 const MOBILE_MAX_WIDTH = 540
 
