@@ -57,8 +57,8 @@ export type BarrioMapController = {
   destroy: () => void
 }
 
-// The map repaints whole on each change of opacity; twenty a second is smooth
-// for a slow fade and a third of the work.
+// Twenty changes of opacity a second are smooth for a slow fade. They do not
+// make the map repaint only twenty times: see the blink.
 const BLINK_STEP_MS = 50
 
 const VIEW_KEY = 'lis.map.view'
@@ -74,8 +74,6 @@ const ME_POINT = 'me-point'
 const SIGHTINGS = 'sightings'
 const HEAT = 'sightings-heat'
 const SELECTED = 'sighting-selected'
-// Plain dots, drawn only if a pin image could not be made.
-const DOTS = 'sighting-dots'
 const PIN_LAYERS = [
   'sighting-clusters',
   'sighting-cluster-count',
@@ -261,6 +259,7 @@ export function createBarrioMap(
   // step with them.
   let blinkFrame: number | null = null
   let lastBlink = 0
+  let bottomPx = 0
   let pickedPending = false
 
   // A pin drawn on its own is left out of the layer it would otherwise be in.
@@ -279,7 +278,8 @@ export function createBarrioMap(
     map.setFilter('sighting-points', unpicked('approved'))
     map.setFilter('sighting-pending', unpicked('pending'))
     // A picked pending pin keeps blinking; any other stays solid.
-    if (!pickedPending || blinkFrame === null) map.setPaintProperty(SELECTED, 'icon-opacity', 1)
+    if (!pickedPending || blinkFrame === null) map.setPaintProperty(SELECTED, fade(), 1)
+    focusOnPicked()
   }
 
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')
@@ -288,8 +288,50 @@ export function createBarrioMap(
     if (now - lastBlink < BLINK_STEP_MS) return
     lastBlink = now
     const opacity = blinkOpacity(now)
-    map.setPaintProperty('sighting-pending', 'icon-opacity', opacity)
-    if (pickedPending) map.setPaintProperty(SELECTED, 'icon-opacity', opacity)
+    map.setPaintProperty('sighting-pending', fade(), opacity)
+    if (pickedPending) map.setPaintProperty(SELECTED, fade(), opacity)
+  }
+  // Fading pins nobody can see would still repaint the whole map on every
+  // frame: after each change the map keeps drawing for the 300 ms it gives
+  // its symbols to settle, and the next change comes sooner. Whether a
+  // pending pin is on screen is only known once the map has drawn, so it is
+  // assumed after anything that can change it and checked a moment later —
+  // by a timer, since a blinking map never reports idle and one waiting for
+  // street tiles does not either. The wait lets the map place the pins of
+  // the new view first.
+  const PLACED_MS = 400
+  let pendingSeen = false
+  let lookTimer: number | null = null
+  // On a slow device the first look can still read the previous view's pins,
+  // and a wrong "yes" would keep the blink going unseen: it looks twice.
+  const lookSoon = (again = true) => {
+    if (lookTimer !== null) window.clearTimeout(lookTimer)
+    lookTimer = window.setTimeout(() => {
+      lookTimer = null
+      if (destroyed || !pinsReady) return
+      if (map.isMoving() || !map.isSourceLoaded(SIGHTINGS)) {
+        lookSoon(again)
+        return
+      }
+      lookForPending()
+      if (again && !heat) lookSoon(false)
+    }, PLACED_MS)
+  }
+  // What the neighbour can see: the map continues under the sheet.
+  const inSight = (layer: string) => {
+    const { clientWidth, clientHeight } = map.getCanvas()
+    const shown: [maplibregl.PointLike, maplibregl.PointLike] = [
+      [0, 0],
+      [clientWidth, Math.max(0, clientHeight - bottomPx)],
+    ]
+    return map.queryRenderedFeatures(shown, { layers: [layer] }).length > 0
+  }
+  function lookForPending() {
+    if (!pinsReady || heat) return
+    if (lookTimer !== null) window.clearTimeout(lookTimer)
+    lookTimer = null
+    pendingSeen = inSight('sighting-pending') || (pickedPending && inSight(SELECTED))
+    syncBlink()
   }
   function syncBlink() {
     const wanted =
@@ -298,14 +340,14 @@ export function createBarrioMap(
       !heat &&
       document.visibilityState === 'visible' &&
       !reducedMotion?.matches &&
-      sightings.some((s) => s.status === 'pending')
+      pendingSeen
     if (wanted && blinkFrame === null) blinkFrame = requestAnimationFrame(tick)
     if (!wanted && blinkFrame !== null) {
       cancelAnimationFrame(blinkFrame)
       blinkFrame = null
       if (pinsReady && !destroyed) {
-        map.setPaintProperty('sighting-pending', 'icon-opacity', 1)
-        map.setPaintProperty(SELECTED, 'icon-opacity', 1)
+        map.setPaintProperty('sighting-pending', fade(), 1)
+        map.setPaintProperty(SELECTED, fade(), 1)
       }
     }
   }
@@ -319,20 +361,24 @@ export function createBarrioMap(
     // those on one spot should pile up there.
     source(HEAT)?.setData(points(sightings))
     drawSelected()
+    pendingSeen = sightings.some((s) => s.status === 'pending')
+    lookSoon()
     syncBlink()
   }
-
-  const pinLayers = () => (artFailed ? [...PIN_LAYERS, DOTS] : PIN_LAYERS)
-  const tapLayers = () => (artFailed ? [...TAP_LAYERS, DOTS] : TAP_LAYERS)
 
   function drawMode() {
     if (!pinsReady) return
-    for (const id of pinLayers()) map.setLayoutProperty(id, 'visibility', heat ? 'none' : 'visible')
+    for (const id of PIN_LAYERS) map.setLayoutProperty(id, 'visibility', heat ? 'none' : 'visible')
     map.setLayoutProperty('sighting-heat', 'visibility', heat ? 'visible' : 'none')
+    if (!heat) lookSoon()
     syncBlink()
   }
 
+  // A browser that cannot turn the artwork into images gets the same three
+  // layers as plain dots: everything else — taps, selection, the blink, the
+  // heat map — works on them unchanged.
   let artFailed = false
+  const fade = () => (artFailed ? 'circle-opacity' : 'icon-opacity')
   async function registerPins() {
     // Pixel art is only crisp at whole multiples of its size.
     const ratio = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)))
@@ -344,8 +390,6 @@ export function createBarrioMap(
           const name = pinName(species, state)
           if (!map.hasImage(name)) map.addImage(name, image, { pixelRatio: ratio })
         } catch {
-          // A browser that cannot turn the artwork into an image still gets
-          // a map with something to tap: see the dots layer.
           artFailed = true
         }
       }
@@ -457,58 +501,71 @@ export function createBarrioMap(
       },
       paint: { 'text-color': onAccent },
     })
-    if (artFailed) {
-      map.addLayer({
-        id: DOTS,
-        type: 'circle',
-        source: SIGHTINGS,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-radius': 8,
-          'circle-color': [
-            'case',
-            ['==', ['get', 'status'], 'pending'],
-            colors.warn,
-            colors.accent,
-          ],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': colors.card,
-        },
-      })
-    }
+    const still = { duration: 0, delay: 0 }
     const pin = (state: PinState): maplibregl.SymbolLayerSpecification['layout'] => ({
       'icon-image': ['concat', 'pin-', ['get', 'species'], `-${state}`],
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
     })
-    map.addLayer({
-      id: 'sighting-points',
-      type: 'symbol',
-      source: SIGHTINGS,
-      filter: unpicked('approved'),
-      layout: pin('validated'),
+    const dot = (color: string, ring: string, picked = false) => ({
+      'circle-radius': picked ? 10 : 8,
+      'circle-color': color,
+      'circle-stroke-width': picked ? 4 : 2,
+      'circle-stroke-color': ring,
+      'circle-opacity': 1,
+      'circle-opacity-transition': still,
     })
-    map.addLayer({
-      id: 'sighting-pending',
-      type: 'symbol',
-      source: SIGHTINGS,
-      filter: unpicked('pending'),
-      layout: pin('pending'),
-      paint: { 'icon-opacity': 1, 'icon-opacity-transition': { duration: 0, delay: 0 } },
-    })
-    map.addLayer({
-      id: SELECTED,
-      type: 'symbol',
-      source: SELECTED,
-      layout: pin('selected'),
-      paint: { 'icon-opacity': 1, 'icon-opacity-transition': { duration: 0, delay: 0 } },
-    })
+    const drawnAs = [
+      { id: 'sighting-points', state: 'validated', filter: unpicked('approved') },
+      { id: 'sighting-pending', state: 'pending', filter: unpicked('pending') },
+    ] as const
+    for (const { id, state, filter } of drawnAs) {
+      if (artFailed) {
+        const color = state === 'pending' ? colors.warn : colors.accent
+        map.addLayer({
+          id,
+          type: 'circle',
+          source: SIGHTINGS,
+          filter,
+          paint: dot(color, colors.card),
+        })
+      } else {
+        map.addLayer({
+          id,
+          type: 'symbol',
+          source: SIGHTINGS,
+          filter,
+          layout: pin(state),
+          paint: { 'icon-opacity': 1, 'icon-opacity-transition': still },
+        })
+      }
+    }
+    if (artFailed) {
+      map.addLayer({
+        id: SELECTED,
+        type: 'circle',
+        source: SELECTED,
+        paint: dot(colors.card, colors.accent, true),
+      })
+    } else {
+      map.addLayer({
+        id: SELECTED,
+        type: 'symbol',
+        source: SELECTED,
+        layout: pin('selected'),
+        paint: { 'icon-opacity': 1, 'icon-opacity-transition': still },
+      })
+    }
 
-    for (const id of tapLayers()) {
+    for (const id of TAP_LAYERS) {
       map.on('mouseenter', id, () => (map.getCanvas().style.cursor = 'pointer'))
       map.on('mouseleave', id, () => (map.getCanvas().style.cursor = ''))
     }
   }
+
+  map.on('idle', () => {
+    if (lookTimer !== null || blinkFrame === null) lookForPending()
+  })
 
   map.on('load', () => {
     addMeLayers()
@@ -525,7 +582,6 @@ export function createBarrioMap(
     })
   })
 
-  let bottomPx = 0
   const padding = () => ({ top: 0, left: 0, right: 0, bottom: bottomPx })
 
   // Only a view the user chose is remembered. The app's own moves — the
@@ -547,6 +603,20 @@ export function createBarrioMap(
   let carriedZoom: number | null = null
   // Where such a step is also heading, when it moves the centre (a cluster).
   let stepCenter: [number, number] | null = null
+  // The sighting the camera was last sent to and has stayed on: if a refresh
+  // moves where it is drawn (a cell-mate arrived or left), the camera goes
+  // with it. Anything else the user or the app does with the camera ends it.
+  let focusedOn: string | null = null
+  let focusedAt: LngLat | null = null
+  function focusOnPicked() {
+    if (focusedOn === null || focusedOn !== selectedId) return
+    const spot = drawn.find((s) => s.id === focusedOn)
+    if (!spot || !focusedAt) return
+    if (spot.lng === focusedAt.lng && spot.lat === focusedAt.lat) return
+    focusedAt = { lng: spot.lng, lat: spot.lat }
+    ease({ center: [spot.lng, spot.lat] })
+  }
+
   // Opening a cluster waits for the map's answer. Whatever is asked of the
   // map meanwhile — another tap, a drag, a pin picked, a zoom button, a
   // change of mode, fresh sightings — is newer, and wins. The app's own
@@ -577,6 +647,7 @@ export function createBarrioMap(
   // A step the user asked for — a zoom button, a tap on a cluster: the
   // camera move is the app's call, the choice is the user's.
   const userStep = (wanted: number, center?: [number, number]) => {
+    focusedOn = null
     map.stop()
     userChoseView = true
     const zoom = reachable(wanted)
@@ -587,6 +658,7 @@ export function createBarrioMap(
 
   const userMoved = () => {
     intent++
+    focusedOn = null
     userChoseView = true
     handlers.onUserMove()
   }
@@ -595,6 +667,7 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
+    lookSoon()
     // A step that was stopped before it arrived — by the app or by the
     // user's own hand — ends at a zoom nobody chose. Arrival is judged
     // against what is reachable now: the window may have changed size on
@@ -625,7 +698,7 @@ export function createBarrioMap(
               [x - TAP_SLOP_PX, y - TAP_SLOP_PX],
               [x + TAP_SLOP_PX, y + TAP_SLOP_PX],
             ],
-            { layers: tapLayers() },
+            { layers: TAP_LAYERS },
           )
         : []
     let nearest: { center: [number, number]; id: string; cluster: number } | null = null
@@ -678,6 +751,7 @@ export function createBarrioMap(
     setSelected(id) {
       selectedId = id
       drawSelected()
+      lookSoon()
     },
 
     setHeat(on) {
@@ -699,6 +773,7 @@ export function createBarrioMap(
 
     setBottomPadding(px) {
       bottomPx = px
+      lookSoon()
       // Zero is "not measured yet", not a height.
       const opening = !framed && px > 0
       // setPadding stops whatever is moving, so a move under way is sent
@@ -729,10 +804,17 @@ export function createBarrioMap(
     goTo(target) {
       intent++
       const spot = drawn.find((s) => s.id === target.id) ?? target
+      focusedOn = target.id ?? null
+      focusedAt = { lng: spot.lng, lat: spot.lat }
       ease({ center: [spot.lng, spot.lat] })
     },
 
     follow(target, minZoom) {
+      // With a minimum zoom this is the neighbour's tap on the locate
+      // button, which supersedes a cluster still opening; without one it is
+      // a position update, which does not.
+      if (minZoom !== undefined) intent++
+      focusedOn = null
       // A phone sends several fixes in its first second, and a recentre
       // stops whatever is moving: without this, each one cut the zoom-in of
       // the one before, or a zoom-button step, part-way. Only following
@@ -756,6 +838,7 @@ export function createBarrioMap(
 
     destroy() {
       destroyed = true
+      if (lookTimer !== null) window.clearTimeout(lookTimer)
       syncBlink()
       document.removeEventListener('visibilitychange', syncBlink)
       reducedMotion?.removeEventListener('change', syncBlink)
