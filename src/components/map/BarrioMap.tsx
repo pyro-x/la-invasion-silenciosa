@@ -12,8 +12,11 @@ import {
 } from './createBarrioMap'
 import type { MapSightingGeo } from '@/types/sighting'
 
-/** A one-off camera move; a new object identity = a new move. */
-export type MapFocus = LngLat
+/**
+ * A one-off camera move; a new object identity = a new move. With the id of
+ * a sighting the map goes to where it draws that sighting.
+ */
+export type MapFocus = LngLat & { id?: string }
 
 // Close enough to read street names around the user's position.
 const FOLLOW_MIN_ZOOM = 17

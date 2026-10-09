@@ -36,6 +36,8 @@ const recorded = vi.hoisted(() => ({
   expansionZoom: 17,
   // When set, a cluster's zoom is answered only when the test says so.
   holdExpansion: false,
+  // The map has forgotten the cluster (a refresh replaced it).
+  failExpansion: false,
   answerExpansion: [] as (() => void)[],
   // Names of pin images the browser fails to make.
   brokenArt: false,
@@ -120,7 +122,11 @@ vi.mock('maplibre-gl', () => {
       return {
         setData: (data: object) => found.data.push(data),
         getClusterExpansionZoom: () =>
-          new Promise<number>((resolve) => {
+          new Promise<number>((resolve, reject) => {
+            if (recorded.failExpansion) {
+              reject(new Error('no such cluster'))
+              return
+            }
             const answer = () => resolve(recorded.expansionZoom)
             if (recorded.holdExpansion) recorded.answerExpansion.push(answer)
             else answer()
@@ -261,6 +267,7 @@ beforeEach(() => {
   recorded.visibility = {}
   recorded.paints.length = 0
   recorded.holdExpansion = false
+  recorded.failExpansion = false
   recorded.answerExpansion.length = 0
   recorded.brokenArt = false
   recorded.motionListeners = 0
@@ -981,6 +988,90 @@ describe('createBarrioMap', () => {
       await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
     })
 
+    it('a later tap, a picked pin, a zoom button or fresh sightings also win over a late cluster', async () => {
+      const { controller, calls } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.holdExpansion = true
+      const late = async () => {
+        recorded.answerExpansion.splice(0).forEach((answer) => answer())
+        await Promise.resolve()
+        await Promise.resolve()
+      }
+      const before = () => recorded.eases.length
+
+      // another tap, on a pin
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      tap(-3.71, 40.411)
+      let eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+      expect(calls.picked).toEqual(['a'])
+
+      // a pin picked from the list
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      controller.goTo({ lat: 40.4125, lng: -3.7135 })
+      eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+      expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+
+      // a zoom button
+      emit('moveend')
+      tap(-3.711, 40.412)
+      controller.zoomBy(1)
+      eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+      expect(recorded.eases.at(-1)?.center).toBeUndefined()
+
+      // the sightings were refreshed: the cluster may be another one now
+      emit('moveend')
+      tap(-3.711, 40.412)
+      controller.setSightings([sighting('a', 'approved')])
+      eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+    })
+
+    it("the app's own re-sends do not cancel a cluster that is opening", async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.holdExpansion = true
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      controller.setBottomPadding(300)
+      controller.follow({ lat: 40.4111, lng: -3.71 })
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await vi.waitFor(() =>
+        expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 17 }),
+      )
+    })
+
+    it('a cluster the map no longer knows is a lost tap, not an error', async () => {
+      const { calls } = await mountReady()
+      recorded.failExpansion = true
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(recorded.eases).toHaveLength(0)
+      expect(calls.userMoves).toBe(0)
+    })
+
+    it('goes to where a sighting is drawn, not to the point it shares', async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      controller.setSightings([sighting('m', 'approved'), sighting('n', 'approved')])
+      const [lng, lat] = coordinatesOf('sightings', 'n') ?? [0, 0]
+      expect([lng, lat]).not.toEqual([-3.71, 40.411])
+      controller.goTo({ id: 'n', lat: 40.411, lng: -3.71 })
+      expect(recorded.eases.at(-1)?.center).toEqual([lng, lat])
+      controller.goTo({ id: 'gone', lat: 40.411, lng: -3.71 })
+      expect(recorded.eases.at(-1)?.center).toEqual([-3.71, 40.411])
+    })
+
     it('a zoom button pressed while a cluster opens keeps heading for the cluster', async () => {
       const { controller } = await mountReady()
       controller.setBottomPadding(80)
@@ -1140,7 +1231,8 @@ describe('fanOut', () => {
     )
 
   it('leaves a sighting alone on its coordinate where it is', () => {
-    expect(fanOut([at('a'), at('b', -3.72)])).toEqual([at('a'), at('b', -3.72)])
+    const apart = [at('a'), at('b', -3.72), at('c', -3.71, 40.412)]
+    expect(fanOut(apart)).toEqual(apart)
   })
 
   it('sets sightings that share a coordinate on a ring around it, ten metres out', () => {

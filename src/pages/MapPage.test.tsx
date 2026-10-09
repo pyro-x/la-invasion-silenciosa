@@ -336,7 +336,7 @@ describe('map screen', () => {
     expect(map).toHaveAttribute('data-selected', '')
     const sheet = within(screen.getByRole('region', { name: 'Avistamientos cerca de ti' }))
     // the heat is of what the barrio has confirmed: one of the two fixtures
-    expect(sheet.getByText('1 validados')).toBeInTheDocument()
+    expect(sheet.getByText('1 validado')).toBeInTheDocument()
     expect(
       sheet.getByText('Dónde se concentran los avistamientos que el barrio ya ha confirmado.'),
     ).toBeInTheDocument()
@@ -349,7 +349,6 @@ describe('map screen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Avistamientos' }))
     expect(map).toHaveAttribute('data-heat', 'false')
-    expect(screen.getByRole('button', { name: 'Plegar la lista' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Plegar la lista' })).toBeInTheDocument()
     expect(sheet.getByText('La Latina · hace 35 min')).toBeInTheDocument()
   })

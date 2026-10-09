@@ -544,3 +544,24 @@ Two seats (Codex adversarial, Claude Opus independent) reviewed `5b80237`; both 
 - Tests: the map stub now keeps the layer and property of each paint change, the query box, the source options, and can hold a cluster's answer or fail the artwork, which is what let thirteen mutations through.
 Not changed: the chip ring computes its phase once, so toggling reduced motion while the screen is open leaves it out of step until it is reopened.
 
+### D-063 · Addendum 2 · 2026-10-09 · Review round 2
+
+Round 2 on `14d143c`: Codex asked for one change, Opus approved with notes. Closed:
+- **Picking a fanned sighting goes to where it is drawn** (MEDIUM, Opus). The page sent the map to the sighting's own coordinate — the shared point — while the pin was drawn up to 20 m away: 44–88 px off-centre at z18 and off-screen at high zoom. A focus now carries the sighting's id and the controller resolves it to the drawn position.
+- **What supersedes a cluster that is still opening is what was asked of the map, not the app's own re-sends** (MEDIUM, Codex; LOW, Opus — two sides of one mechanism). Fresh sightings now cancel it (the cluster may be another one); so do another tap, a drag, a pin picked, a zoom button and a change of mode. A sheet resize or a position update re-sending a move no longer does: the first fix had made a GPS fix win over the neighbour's tap.
+- Wording: fanned positions stay inside the grid's imprecision for up to eighteen sightings on a point, not without limit; "a refresh does not shuffle them" holds for the same sightings, and one more in the cell can move the others a slot. Two file-header comments still described a heat map of every sighting.
+- «1 validado» in the singular; a duplicate assertion removed; tests for another tap winning, a failed cluster lookup, a focus on a fanned sighting, and sightings that share only one axis.
+Left open, on purpose:
+- **Heat of validated only awaits David's yes.** With a young pilot, mostly pending, the heat map would be nearly empty; if he confirms, rules line «cada avistamiento es un foco» gets reworded in the same PR as the confirmation.
+- A partial artwork failure draws the fallback dots under healthy pins too, where they show through a pending pin mid-blink; with a total failure the picked sighting is not marked and pending dots do not blink. A fallback of a fallback.
+- From the nineteenth sighting on one point, the third ring lands nearer a neighbouring cell's point than its own. Months of data away.
+
+## D-064 · 2026-10-09 · Workflow: a review loop has a budget set at kickoff; a PR that changes what the user sees shows it (amends D-033)
+
+**Decision (David, 2026-10-09):** two rules join the workflow in `AGENTS.md`.
+1. **The number of review rounds is decided at the start of a ticket, from its complexity**, and written in the kickoff comment. When it is spent without a clean verdict the loop stops and the open findings go to David with a recommendation each. Working scale: none or one round for docs and trivial changes, two for a small contained change, three or four for a substantial or stateful one or anything in the security-critical zone.
+2. **A PR with a visible change carries screenshots in its body**, before/after pairs with the same fixture data and viewport. They are published on a `pr-assets` branch and linked by commit, so `main` carries no images.
+**Alternatives:** review until every seat approves (LCHP-34 ran thirteen rounds over three PRs, each fix surfacing a narrower finding on controls most users never see) · a flat cap of two for everything (what was applied to LCHP-41 and at first to LCHP-35 by over-reading what David had said about one loop; a rewrite of the map controller is not a two-round change) · screenshots only in the chat with the agent (David cannot share them, and reviews by eye on his phone) · images committed to `main` (permanent weight in the history for something read once).
+**Why:** the review exists to find defects, not to converge on zero remarks; past a point each round costs more than what it finds, and only the owner can say where that point is for a given change. And a visual change is judged by looking: the before/after pair of LCHP-41 settled in seconds what a pixel-difference percentage had not.
+**Trail:** LCHP-35 (first PR under both rules; budget three) · `AGENTS.md` «Linear and GitHub — how we work».
+

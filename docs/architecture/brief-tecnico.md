@@ -1282,7 +1282,10 @@ datos que el propio mapa dibuja.
   separa y solo se podría tocar el de arriba. Se **dibujan en abanico**
   alrededor del punto compartido (anillos de 10 m: seis en el primero,
   doce en el siguiente), en orden de identificador para que no cambien de
-  sitio al refrescar. Solo se mueve el dibujo, menos que la imprecisión de
+  sitio al refrescar con los mismos avistamientos (uno nuevo en la celda
+  puede correr un hueco a los demás). Al elegir uno, el mapa va a donde
+  está dibujado. Solo se mueve el dibujo — hasta dieciocho en un punto,
+  menos que la imprecisión de
   la propia rejilla; no existe ni se revela ninguna coordenada más fina.
   El mapa de calor usa el punto compartido real.
 * **El avistamiento elegido se dibuja desde su propia fuente, sin
@@ -1303,7 +1306,10 @@ datos que el propio mapa dibuja.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
   (amarillo → rojo oscuro) sobre los avistamientos **validados**, como
   dicen las reglas («Validado: … se integra en el mapa de calor»); los
-  pendientes no cuentan hasta que el barrio los confirma. En ese modo no
+  pendientes no cuentan hasta que el barrio los confirma. **Pendiente de
+  que David lo confirme:** las mismas reglas dicen también «cada
+  avistamiento es un foco», y con un piloto joven, casi todo pendiente, el
+  mapa de calor saldría casi vacío. En ese modo no
   hay pines ni lista «Cerca de ti» ni avistamiento elegido: la hoja, sin
   tirador, muestra «Mapa de calor · N validados» y una línea, y un toque
   en el mapa no elige nada. Entra en el MVP por decisión de David (el brief lo tenía como

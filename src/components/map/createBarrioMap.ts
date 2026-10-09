@@ -4,8 +4,8 @@
 // never touches the map library.
 //
 // Sightings are map data (LCHP-35): one clustered GeoJSON source drawn by
-// symbol layers, the same points again as a heat map, and the picked one on
-// its own so a cluster can never hide it.
+// symbol layers, the validated ones again as a heat map, and the picked one
+// on its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
 import { blinkOpacity } from './blink'
@@ -43,8 +43,11 @@ export type BarrioMapController = {
   setMe: (position: MePosition | null) => void
   /** Space covered by the bottom sheet: the map centres above it. */
   setBottomPadding: (px: number) => void
-  /** Eases to a point, at the zoom the map has. */
-  goTo: (target: LngLat) => void
+  /**
+   * Eases to a point, at the zoom the map has. With the id of a sighting, to
+   * where that sighting is drawn, which need not be its own coordinate.
+   */
+  goTo: (target: LngLat & { id?: string }) => void
   /**
    * Eases to the neighbour's position, carrying on a zoom still under way.
    * `minZoom` zooms in if the map would otherwise end further out.
@@ -102,8 +105,10 @@ const FAN_M = 10
  * be one pin that no zoom can take apart, and only the top one could be
  * tapped. Those are set on rings around their shared point instead — six on
  * the first, twelve on the next — in the order of their ids, so a refresh
- * does not shuffle them. Only the drawing moves, by less than the grid's
- * own imprecision; nothing finer than the public coordinate exists here.
+ * with the same sightings does not shuffle them (one more in the cell can
+ * move the others a slot). Only the drawing moves — for up to eighteen on a
+ * point, by less than the grid's own imprecision — and nothing finer than
+ * the public coordinate exists here.
  */
 export function fanOut<T extends LngLat & { id: string }>(sightings: readonly T[]): T[] {
   const cells = new Map<string, T[]>()
@@ -534,14 +539,15 @@ export function createBarrioMap(
   let carriedZoom: number | null = null
   // Where such a step is also heading, when it moves the centre (a cluster).
   let stepCenter: [number, number] | null = null
-  // Opening a cluster waits for the map's answer; whatever the user or the
-  // app does meanwhile is newer, and wins.
+  // Opening a cluster waits for the map's answer. Whatever is asked of the
+  // map meanwhile — another tap, a drag, a pin picked, a zoom button, a
+  // change of mode, fresh sightings — is newer, and wins. The app's own
+  // re-sends (a sheet resize, a position update) are not.
   let intent = 0
 
   const ease = (to: { center: [number, number]; zoom?: number }) => {
     // easeTo stops the previous ease itself, but only after `flight` is
     // set below: its moveend would then be taken for this one's.
-    intent++
     map.stop()
     userChoseView = false
     flight = to
@@ -563,7 +569,6 @@ export function createBarrioMap(
   // A step the user asked for — a zoom button, a tap on a cluster: the
   // camera move is the app's call, the choice is the user's.
   const userStep = (wanted: number, center?: [number, number]) => {
-    intent++
     map.stop()
     userChoseView = true
     const zoom = reachable(wanted)
@@ -642,18 +647,21 @@ export function createBarrioMap(
     const { cluster, center } = nearest
     void source(SIGHTINGS)
       ?.getClusterExpansionZoom(cluster)
-      .then((zoom) => {
-        if (destroyed || mine !== intent) return
-        handlers.onUserMove()
-        userStep(zoom, center)
-      })
-      // A cluster that a refresh has replaced meanwhile: the tap is lost,
-      // and the next one finds the new cluster.
-      .catch(() => {})
+      .then(
+        (zoom) => {
+          if (destroyed || mine !== intent) return
+          handlers.onUserMove()
+          userStep(zoom, center)
+        },
+        // The map no longer knows that cluster: the tap is lost, and the
+        // next one finds whatever is there now.
+        () => {},
+      )
   })
 
   return {
     setSightings(next) {
+      intent++
       sightings = next
       drawn = fanOut(next)
       drawSightings()
@@ -711,7 +719,9 @@ export function createBarrioMap(
     },
 
     goTo(target) {
-      ease({ center: [target.lng, target.lat] })
+      intent++
+      const spot = drawn.find((s) => s.id === target.id) ?? target
+      ease({ center: [spot.lng, spot.lat] })
     },
 
     follow(target, minZoom) {
@@ -725,6 +735,7 @@ export function createBarrioMap(
     },
 
     zoomBy(delta) {
+      intent++
       // A second press while a step is still under way adds to where that
       // step was heading, not to where it had got to.
       const stepping = !flight && carriedZoom !== null
