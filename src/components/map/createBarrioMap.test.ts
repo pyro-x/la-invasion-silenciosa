@@ -59,10 +59,11 @@ const recorded = vi.hoisted(() => ({
   prefersReducedMotion: false,
   motionListeners: 0,
   // Whether a pending pin is among what the map has drawn on the screen.
-  pendingOnScreen: true,
-  looks: [] as string[],
+  // The pin layers with something drawn in the part of the map in sight.
+  onScreen: ['sighting-pending', 'sighting-selected'],
+  looks: [] as { layer: string; box: number[][] }[],
   moving: false,
-  tilesLoaded: true,
+  sightingsLoaded: true,
 }))
 
 vi.mock('./attribution', () => ({ addAttribution: () => () => {} }))
@@ -174,19 +175,18 @@ vi.mock('maplibre-gl', () => {
     isMoving() {
       return recorded.moving
     }
-    areTilesLoaded() {
-      return recorded.tilesLoaded
+    isSourceLoaded() {
+      return recorded.sightingsLoaded
     }
-    // With a box: what a tap hits. Without: what is drawn on the screen.
-    queryRenderedFeatures(
-      boxOrOptions: number[][] | { layers: string[] },
-      options?: { layers: string[] },
-    ) {
-      if (!Array.isArray(boxOrOptions)) {
-        recorded.looks.push(boxOrOptions.layers.join(','))
-        return recorded.pendingOnScreen ? [pinOnScreen] : []
+    // One pin layer over the part of the map in sight: is one drawn there?
+    // Anything else is what a tap hits.
+    queryRenderedFeatures(box: number[][], options: { layers: string[] }) {
+      const [layer] = options.layers
+      if (options.layers.length === 1 && layer !== undefined) {
+        recorded.looks.push({ layer, box })
+        return recorded.onScreen.includes(layer) ? [pinOnScreen] : []
       }
-      recorded.queries.push({ box: boxOrOptions, layers: options?.layers ?? [] })
+      recorded.queries.push({ box, layers: options.layers })
       return recorded.hits
     }
     // A flat world, a hundred thousand pixels to the degree.
@@ -194,7 +194,7 @@ vi.mock('maplibre-gl', () => {
       return { x: (lng + 3.72) * 100_000, y: (40.42 - lat) * 100_000 }
     }
     getCanvas() {
-      return { style: recorded.cursor }
+      return { style: recorded.cursor, clientWidth: 390, clientHeight: 780 }
     }
     remove() {}
   }
@@ -304,10 +304,10 @@ beforeEach(() => {
   recorded.answerExpansion.length = 0
   recorded.brokenArt = false
   recorded.motionListeners = 0
-  recorded.pendingOnScreen = true
+  recorded.onScreen = ['sighting-pending', 'sighting-selected']
   recorded.looks.length = 0
   recorded.moving = false
-  recorded.tilesLoaded = true
+  recorded.sightingsLoaded = true
   recorded.images.length = 0
   recorded.hits = []
   recorded.queries.length = 0
@@ -1297,7 +1297,7 @@ describe('createBarrioMap', () => {
       expect(recorded.frames).toHaveLength(1)
 
       // the neighbour pans away from every pending pin
-      recorded.pendingOnScreen = false
+      recorded.onScreen = []
       userDrag()
       emit('idle')
       expect(recorded.frames).toHaveLength(0)
@@ -1309,35 +1309,125 @@ describe('createBarrioMap', () => {
       expect(recorded.looks.length).toBeLessThanOrEqual(2)
       expect(recorded.frames).toHaveLength(0)
 
-      recorded.pendingOnScreen = true
+      recorded.onScreen = ['sighting-pending']
       userDrag()
       emit('idle')
       expect(recorded.frames).toHaveLength(1)
     })
 
-    it('finds out by itself that the pending pins left the screen: a blinking map is never idle', async () => {
-      const { controller } = await mountReady()
-      controller.setSightings(pending)
-      recorded.pendingOnScreen = false
-      userDrag()
-      const moved = performance.now()
+    describe('without the map ever reporting idle', () => {
+      // A blinking map never does, and neither does one waiting for street tiles.
+      const WAIT = 400
+      const mountTimed = async () => {
+        const mounted = await mountReady()
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+        return mounted
+      }
+      afterEach(() => {
+        vi.useRealTimers()
+      })
 
-      // too soon: the map has not placed the pins of the new view yet
-      frame(moved + 100)
-      expect(recorded.frames.length).toBeGreaterThan(0)
+      it('finds out that the pending pins left the screen', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        recorded.onScreen = []
+        userDrag()
 
-      // still loading, or still moving: not yet either
-      recorded.tilesLoaded = false
-      frame(moved + 500)
-      recorded.tilesLoaded = true
-      recorded.moving = true
-      frame(moved + 600)
-      expect(recorded.frames.length).toBeGreaterThan(0)
+        // too soon: the map has not placed the pins of the new view yet
+        vi.advanceTimersByTime(WAIT - 100)
+        expect(recorded.frames.length).toBeGreaterThan(0)
 
-      recorded.moving = false
-      frame(moved + 700)
-      expect(recorded.frames).toHaveLength(0)
-      expect(opacityOf('sighting-pending')).toBe(1)
+        // still moving, or its own data still loading: it waits and asks again
+        recorded.moving = true
+        vi.advanceTimersByTime(WAIT)
+        recorded.moving = false
+        recorded.sightingsLoaded = false
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames.length).toBeGreaterThan(0)
+        expect(recorded.looks).toHaveLength(0)
+
+        recorded.sightingsLoaded = true
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(0)
+        expect(opacityOf('sighting-pending')).toBe(1)
+      })
+
+      it('finds out that one came back', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        recorded.onScreen = []
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(0)
+
+        recorded.onScreen = ['sighting-pending']
+        userDrag()
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(1)
+      })
+
+      it('stops when a picked pending pin, the only one in sight, is put away', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        // the others are inside a cluster badge; the picked one is drawn on its own
+        recorded.onScreen = ['sighting-selected']
+        controller.setSelected('p')
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames.length).toBeGreaterThan(0)
+
+        recorded.onScreen = []
+        controller.setSelected(null)
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(0)
+      })
+
+      it('does not count a picked pin that is not pending', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        recorded.onScreen = ['sighting-selected']
+        controller.setSelected('a')
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(0)
+      })
+
+      it('looks only at the part of the map above the sheet', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        controller.setBottomPadding(300)
+        recorded.looks.length = 0
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.looks.at(0)).toEqual({
+          layer: 'sighting-pending',
+          box: [
+            [0, 0],
+            [390, 480],
+          ],
+        })
+      })
+
+      it('does not look in heat mode, nor after the map is gone', async () => {
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        controller.setHeat(true)
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.looks).toHaveLength(0)
+
+        controller.setHeat(false)
+        controller.destroy()
+        vi.advanceTimersByTime(WAIT * 3)
+        expect(recorded.looks).toHaveLength(0)
+      })
+
+      it('rests on dots as on pins', async () => {
+        recorded.brokenArt = true
+        const { controller } = await mountTimed()
+        controller.setSightings(pending)
+        recorded.paints.length = 0
+        recorded.onScreen = []
+        vi.advanceTimersByTime(WAIT)
+        expect(recorded.frames).toHaveLength(0)
+        expect(opacityOf('sighting-pending', 'circle-opacity')).toBe(1)
+        expect(opacityOf('sighting-pending')).toBeUndefined()
+      })
     })
 
     it('does not look at the screen on every repaint while it blinks', async () => {

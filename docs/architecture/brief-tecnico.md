@@ -1300,13 +1300,15 @@ datos que el propio mapa dibuja.
   chip parpadean a la vez**. El pin elegido, si está pendiente, sigue
   parpadeando (su ficha lo dice). Se detiene con la pestaña oculta, en modo
   calor, con `prefers-reduced-motion` y **cuando no hay ningún pin
-  pendiente dibujado en pantalla** (ninguno a la vista, o todos dentro de
-  una agrupación): se lo pregunta al propio mapa poco después de cada
-  movimiento o cambio de datos, y vuelve cuando reaparece uno. Coste
-  conocido: mientras parpadea, el mapa se repinta entero esas veinte veces
-  por segundo aunque nadie lo mueva (una animación CSS no costaba nada).
-  Medido sin GPU, diez segundos sin tocar el mapa: sin pendientes en
-  pantalla, ningún repintado; con uno, el hilo principal ocupado todo el
+  pendiente a la vista** (ninguno en la parte del mapa que la hoja no
+  tapa, o todos dentro de una agrupación): se lo pregunta al propio mapa
+  poco después de cada movimiento, cambio de datos, de selección o de
+  altura de la hoja, y vuelve cuando reaparece uno. Coste conocido:
+  mientras parpadea, el mapa se repinta entero en cada fotograma aunque
+  nadie lo mueva (tras cada cambio MapLibre sigue dibujando 300 ms, y el
+  siguiente cambio llega antes; una animación CSS no costaba nada).
+  Medido sin GPU, diez segundos sin tocar el mapa: sin pendientes a la
+  vista, ningún repintado; con uno, el hilo principal ocupado todo el
   tiempo. Falta la medida en un teléfono real.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
   (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su

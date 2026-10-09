@@ -57,8 +57,8 @@ export type BarrioMapController = {
   destroy: () => void
 }
 
-// The map repaints whole on each change of opacity; twenty a second is smooth
-// for a slow fade and a third of the work.
+// Twenty changes of opacity a second are smooth for a slow fade. They do not
+// make the map repaint only twenty times: see the blink.
 const BLINK_STEP_MS = 50
 
 const VIEW_KEY = 'lis.map.view'
@@ -259,6 +259,7 @@ export function createBarrioMap(
   // step with them.
   let blinkFrame: number | null = null
   let lastBlink = 0
+  let bottomPx = 0
   let pickedPending = false
 
   // A pin drawn on its own is left out of the layer it would otherwise be in.
@@ -289,30 +290,41 @@ export function createBarrioMap(
     const opacity = blinkOpacity(now)
     map.setPaintProperty('sighting-pending', fade(), opacity)
     if (pickedPending) map.setPaintProperty(SELECTED, fade(), opacity)
-    if (recheckPending && now >= recheckAt && !map.isMoving() && map.areTilesLoaded()) {
-      lookForPending()
-    }
   }
-  // Fading pins nobody can see would still repaint the whole map twenty
-  // times a second. Whether one is on screen is only known once the map has
-  // drawn, so it is assumed after new data and checked a moment later. The
-  // blink itself can keep the map from ever reporting idle, so while it runs
-  // it does the checking; the wait lets the map place the pins of the new
-  // view first (it does so at most every 300 ms).
+  // Fading pins nobody can see would still repaint the whole map on every
+  // frame: after each change the map keeps drawing for the 300 ms it gives
+  // its symbols to settle, and the next change comes sooner. Whether a
+  // pending pin is on screen is only known once the map has drawn, so it is
+  // assumed after anything that can change it and checked a moment later —
+  // by a timer, since a blinking map never reports idle and one waiting for
+  // street tiles does not either. The wait lets the map place the pins of
+  // the new view first.
   const PLACED_MS = 400
   let pendingSeen = false
-  let recheckPending = false
-  let recheckAt = 0
+  let lookTimer: number | null = null
   const lookSoon = () => {
-    recheckPending = true
-    recheckAt = performance.now() + PLACED_MS
+    if (lookTimer !== null) window.clearTimeout(lookTimer)
+    lookTimer = window.setTimeout(() => {
+      lookTimer = null
+      if (destroyed) return
+      if (map.isMoving() || !pinsReady || !map.isSourceLoaded(SIGHTINGS)) lookSoon()
+      else lookForPending()
+    }, PLACED_MS)
+  }
+  // What the neighbour can see: the map continues under the sheet.
+  const inSight = (layer: string) => {
+    const { clientWidth, clientHeight } = map.getCanvas()
+    const shown: [maplibregl.PointLike, maplibregl.PointLike] = [
+      [0, 0],
+      [clientWidth, Math.max(0, clientHeight - bottomPx)],
+    ]
+    return map.queryRenderedFeatures(shown, { layers: [layer] }).length > 0
   }
   function lookForPending() {
     if (!pinsReady || heat) return
-    recheckPending = false
-    pendingSeen =
-      map.queryRenderedFeatures({ layers: ['sighting-pending'] }).length > 0 ||
-      (pickedPending && map.queryRenderedFeatures({ layers: [SELECTED] }).length > 0)
+    if (lookTimer !== null) window.clearTimeout(lookTimer)
+    lookTimer = null
+    pendingSeen = inSight('sighting-pending') || (pickedPending && inSight(SELECTED))
     syncBlink()
   }
   function syncBlink() {
@@ -546,7 +558,7 @@ export function createBarrioMap(
   }
 
   map.on('idle', () => {
-    if (recheckPending || blinkFrame === null) lookForPending()
+    if (lookTimer !== null || blinkFrame === null) lookForPending()
   })
 
   map.on('load', () => {
@@ -564,7 +576,6 @@ export function createBarrioMap(
     })
   })
 
-  let bottomPx = 0
   const padding = () => ({ top: 0, left: 0, right: 0, bottom: bottomPx })
 
   // Only a view the user chose is remembered. The app's own moves — the
@@ -734,6 +745,7 @@ export function createBarrioMap(
     setSelected(id) {
       selectedId = id
       drawSelected()
+      lookSoon()
     },
 
     setHeat(on) {
@@ -755,6 +767,7 @@ export function createBarrioMap(
 
     setBottomPadding(px) {
       bottomPx = px
+      lookSoon()
       // Zero is "not measured yet", not a height.
       const opening = !framed && px > 0
       // setPadding stops whatever is moving, so a move under way is sent
