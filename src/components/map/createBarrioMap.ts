@@ -291,8 +291,52 @@ export function createBarrioMap(
     map.setPaintProperty('sighting-pending', 'icon-opacity', opacity)
     if (pickedPending) map.setPaintProperty(SELECTED, 'icon-opacity', opacity)
   }
+  // SPIKE (never merged): a meter of what the map costs, and a switch for
+  // the blink, to read on a real phone.
+  let blinkEnabled = true
+  let paints = 0
+  let busyMs = 0
+  const paint = map._render.bind(map)
+  map._render = (stamp: number) => {
+    const started = performance.now()
+    const result = paint(stamp)
+    busyMs += performance.now() - started
+    paints++
+    return result
+  }
+  const meter = document.createElement('div')
+  meter.style.cssText =
+    'position:fixed;top:72px;left:8px;z-index:60;background:#fffdf8;border:2px solid #ddccaf;border-radius:10px;padding:8px 10px;font:12px/1.4 monospace;color:#2a1410;max-width:60vw'
+  const readout = document.createElement('div')
+  readout.textContent = 'midiendo…'
+  const toggle = document.createElement('button')
+  toggle.style.cssText =
+    'margin-top:6px;padding:8px 10px;border-radius:8px;border:2px solid #a00000;background:#a00000;color:#fff5ea;font:12px monospace'
+  toggle.textContent = 'Parpadeo: SÍ'
+  toggle.onclick = () => {
+    blinkEnabled = !blinkEnabled
+    toggle.textContent = blinkEnabled ? 'Parpadeo: SÍ' : 'Parpadeo: NO'
+    syncBlink()
+  }
+  meter.append(readout, toggle)
+  document.body.append(meter)
+  const meterTimer = setInterval(() => {
+    const perSecond = paints / 3
+    const each = paints ? busyMs / paints : 0
+    readout.textContent =
+      perSecond.toFixed(1) +
+      ' pintados/s · ' +
+      each.toFixed(1) +
+      ' ms c/u · ' +
+      (busyMs / 30).toFixed(0) +
+      '% del hilo'
+    paints = 0
+    busyMs = 0
+  }, 3000)
+
   function syncBlink() {
     const wanted =
+      blinkEnabled &&
       pinsReady &&
       !destroyed &&
       !heat &&
@@ -756,6 +800,8 @@ export function createBarrioMap(
 
     destroy() {
       destroyed = true
+      clearInterval(meterTimer)
+      meter.remove()
       syncBlink()
       document.removeEventListener('visibilitychange', syncBlink)
       reducedMotion?.removeEventListener('change', syncBlink)
