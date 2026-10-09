@@ -3,8 +3,10 @@
 // sheet carries the sighting detail and the «Cerca de ti» list, and the map
 // centres itself in the part the sheet leaves free.
 //
-// Validated sightings show the species sprite; pending ones blink with an
-// amber ring. The detail shows species · status · age · approximate location
+// The map draws the sightings itself: validated ones as the species sprite,
+// pending ones blinking with an amber ring, clusters where they overlap, or
+// a heat map of all of them. The detail shows species · status · age ·
+// approximate location
 // — NO author and NO exact street (the public view exposes neither; golden
 // rule / D-046). «Ver evidencia» loads the photo on demand. «Verificar»
 // (LCHP-15) opens the verification modal from its two doors — the detail
@@ -12,6 +14,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
+import { blinkDelayMs } from '@/components/map/blink'
 import { MapSheet } from '@/components/map/MapSheet'
 import type { MapFocus } from '@/components/map/BarrioMap'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
@@ -42,25 +45,11 @@ const BarrioMap = lazy(() =>
   import('@/components/map/BarrioMap').then((m) => ({ default: m.BarrioMap })),
 )
 
-function SightingMarker({ sighting, selected }: { sighting: MapSightingGeo; selected: boolean }) {
-  const pending = sighting.status === 'pending'
-  return (
-    <div
-      className={pending ? 'map-pin is-pending' : 'map-pin'}
-      style={{
-        width: 34,
-        height: 34,
-        display: 'grid',
-        placeItems: 'center',
-        borderRadius: 8,
-        background: 'var(--card)',
-        border: `2px solid ${selected ? 'var(--accent)' : pending ? 'var(--warn)' : 'var(--line)'}`,
-        boxShadow: selected ? '0 0 0 3px var(--accent)' : '0 1px 3px rgba(0,0,0,0.25)',
-      }}
-    >
-      <CreatureSprite id={sighting.speciesId} scale={2} />
-    </div>
-  )
+// The ring of the «Por verificar» chips blinks in step with the pending
+// pins: it starts its CSS animation where the page's clock already is.
+function BlinkRing() {
+  const [delay] = useState(() => blinkDelayMs(performance.now()))
+  return <span className="chip-ring" aria-hidden style={{ animationDelay: `${delay}ms` }} />
 }
 
 // Evidence is keyed to the sighting that requested it (Codex review, HIGH):
@@ -124,6 +113,7 @@ export function MapPage() {
   const {
     data: sightings = NO_SIGHTINGS,
     isError,
+    isSuccess,
     refetch,
   } = useQuery({
     queryKey: ['sightings', 'map'],
@@ -140,7 +130,7 @@ export function MapPage() {
     setSheetOpen(true)
     setFollowing(false)
     const target = sightings.find((s) => s.id === id)
-    if (target) setFocus({ lat: target.lat, lng: target.lng })
+    if (target) setFocus({ id: target.id, lat: target.lat, lng: target.lng })
   }
 
   const onVerifyResult = (outcome: VerifyOutcome) => {
@@ -186,6 +176,13 @@ export function MapPage() {
     setSheetOpen(open)
   }
 
+  // The heat map shows where sightings pile up, not which: nothing stays
+  // picked, and the list of single creatures gives way to it.
+  const showHeat = () => {
+    setHeat(true)
+    setSel(null)
+  }
+
   // The native permission prompt fires here and only here: on this tap.
   const locate = () => {
     setDismissedNotice(null)
@@ -217,11 +214,27 @@ export function MapPage() {
       <span className="eyebrow">Cerca de ti</span>
       {!isError && (
         <span className="chip chip-warn">
-          <span className="chip-ring" aria-hidden />
+          <BlinkRing />
           {pending.length} Por verificar
         </span>
       )}
     </button>
+  )
+
+  const heatHeader = (
+    <div className="stack" style={{ gap: 4 }}>
+      <div className="map-sheet-row">
+        <span className="eyebrow">Mapa de calor</span>
+        {isSuccess && (
+          <span className="chip">
+            {sightings.length} {sightings.length === 1 ? 'avistamiento' : 'avistamientos'}
+          </span>
+        )}
+      </div>
+      <p className="map-card-text map-card-hint" style={{ margin: 0 }}>
+        Dónde se concentran los avistamientos. Los validados pesan más.
+      </p>
+    </div>
   )
 
   // In the part of the sheet that stays when it is folded: the answer to a
@@ -254,12 +267,12 @@ export function MapPage() {
         fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg2)' }} />}
       >
         <BarrioMap
-          sightings={heat || isError ? NO_SIGHTINGS : sightings}
+          sightings={isError ? NO_SIGHTINGS : sightings}
           selectedId={sel}
+          heat={heat}
           onPick={pick}
           onMapTap={() => setSel(null)}
           onUserMove={() => setFollowing(false)}
-          renderMarker={(s, selected) => <SightingMarker sighting={s} selected={selected} />}
           me={me && !outsideBarrio ? me : null}
           follow={follow}
           followRequest={locateCount}
@@ -279,12 +292,7 @@ export function MapPage() {
           >
             Avistamientos
           </button>
-          <button
-            type="button"
-            className="map-mode"
-            aria-pressed={heat}
-            onClick={() => setHeat(true)}
-          >
+          <button type="button" className="map-mode" aria-pressed={heat} onClick={showHeat}>
             Mapa de calor
           </button>
         </div>
@@ -312,23 +320,6 @@ export function MapPage() {
           </div>
         </div>
       )}
-      {heat && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 2,
-            display: 'grid',
-            placeItems: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <span className="chip mono map-note" style={{ fontSize: 10 }}>
-            Mapa de calor · próximamente
-          </span>
-        </div>
-      )}
-
       <div className="map-float map-fabs">
         <button
           type="button"
@@ -362,6 +353,7 @@ export function MapPage() {
       <MapSheet
         label="Avistamientos cerca de ti"
         open={sheetOpen}
+        foldable={!heat}
         onToggle={foldSheet}
         headerKey={String(pickCount)}
         onHeight={setSheetHeight}
@@ -393,7 +385,7 @@ export function MapPage() {
                           'chip ' + (selS.status === 'pending' ? 'chip-warn' : 'chip-good')
                         }
                       >
-                        {selS.status === 'pending' && <span className="chip-ring" aria-hidden />}
+                        {selS.status === 'pending' && <BlinkRing />}
                         {selS.status === 'pending' ? 'Por verificar' : 'Validado'}
                       </span>
                     </div>
@@ -429,6 +421,8 @@ export function MapPage() {
                   )}
                 </div>
               </div>
+            ) : heat ? (
+              heatHeader
             ) : (
               nearbyHeader
             )}
@@ -440,7 +434,7 @@ export function MapPage() {
             first; its «Verificar» goes straight to the modal (the second
             door, LCHP-15). Verifying means "I have seen it too", so the
             neighbour can look before committing. */}
-        {pending.map((s) => (
+        {(heat ? NO_SIGHTINGS : pending).map((s) => (
           <div key={s.id} className="panel map-nearby-row">
             <button type="button" className="map-nearby-show" onClick={() => pick(s.id)}>
               <CreatureSprite id={s.speciesId} scale={2.8} />

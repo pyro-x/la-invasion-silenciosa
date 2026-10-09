@@ -103,7 +103,7 @@ La app recuerda esta regla en el onboarding, en el flujo de captura y en la band
 ```
 
 - **Pendiente:** recién enviado; se muestra con marcador de aviso (parpadea en el mapa) y aparece en "Cerca de ti · por verificar".
-- **Validado:** confirmado por la comunidad; suma al autor y se integra en el mapa de calor.
+- **Validado:** confirmado por la comunidad; suma al autor y pesa más en el mapa de calor.
 - **Descartado:** incumple la regla de oro o es erróneo; puede reclasificarse a otra criatura antes de descartar.
 
 ---
@@ -127,7 +127,7 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
   - Toggle **Avistamientos / Mapa de calor**.
   - Tocar un pin → ficha rápida (criatura, calle, autor, estado); si está pendiente, botón **Verificar**.
   - Lista **"Cerca de ti · por verificar"** con scroll propio (el mapa queda fijo y se adapta a la altura disponible).
-- **Mapa de calor:** densidad real — cada avistamiento es un foco que se intensifica (amarillo → naranja → rojo) donde se solapan.
+- **Mapa de calor:** densidad real — cada avistamiento es un foco que se intensifica (amarillo → naranja → rojo) donde se solapan. Cuentan todos, también los pendientes; los validados pesan más.
 
 ### 3 · Especies (Pokédex)
 - **Contenido:** listado de las 4 criaturas con número, nombre, descripción, rareza y progreso (capturadas / total).

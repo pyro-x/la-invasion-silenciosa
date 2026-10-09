@@ -477,11 +477,6 @@ body {
   background: var(--accent);
   color: var(--on-accent);
 }
-.map-note {
-  background: var(--card);
-  color: var(--ink-dim);
-  box-shadow: var(--shadow);
-}
 .map-sheet-row {
   display: flex;
   align-items: center;
@@ -522,9 +517,6 @@ body {
   min-height: 44px;
   padding: 0 14px;
   cursor: pointer;
-}
-.map-pin.is-pending {
-  animation: blinkdot 1.4s ease-in-out infinite;
 }
 /* Blinks at the pace of the pending pins: it is what ties their orange
    ring to «Por verificar». Round, because a square read as a checkbox. */
@@ -622,6 +614,10 @@ body {
   cursor: pointer;
   touch-action: none;
 }
+.map-sheet-top {
+  flex: 0 0 auto;
+  height: 14px;
+}
 .map-sheet-handle::before {
   content: '';
   width: 40px;
@@ -641,14 +637,6 @@ body {
 .map-sheet-body::-webkit-scrollbar {
   width: 0;
 }
-.map-me-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent2);
-  border: 3px solid #fff;
-  box-shadow: 0 0 0 2px rgba(16, 80, 22, 0.3);
-}
 /* The data credit rides above the sheet, bottom-left. */
 .map-screen .maplibregl-ctrl-bottom-left {
   bottom: var(--sheet-h);
@@ -660,7 +648,6 @@ body {
     transition: none;
   }
   .map-fab.is-busy svg,
-  .map-pin.is-pending,
   .chip-ring {
     animation: none;
   }

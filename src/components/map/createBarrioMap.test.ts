@@ -1,9 +1,28 @@
-import { circlePolygon, createBarrioMap, type MarkerMount } from './createBarrioMap'
+import {
+  circlePolygon,
+  createBarrioMap,
+  fanOut,
+  HEAT_WEIGHT,
+  type BarrioMapController,
+} from './createBarrioMap'
+import type { MapSightingGeo } from '@/types/sighting'
 
-type MapHandler = (event: { originalEvent?: Event }) => void
+type MapEvent = { originalEvent?: Event; point?: { x: number; y: number } }
+type MapHandler = (event: MapEvent) => void
 type EaseOptions = { center?: [number, number]; zoom?: number; padding?: { bottom: number } }
 type MapOptions = { center?: [number, number]; zoom?: number; bounds?: number[][] }
-
+type Hit = {
+  geometry: { type: 'Point'; coordinates: [number, number] }
+  properties: { id?: string; cluster_id?: number }
+}
+type Layer = {
+  id: string
+  type: string
+  source: string
+  filter?: object
+  paint?: Record<string, object | number | string>
+}
+type SourceSpec = { cluster?: boolean; clusterMaxZoom?: number; clusterProperties?: object }
 const recorded = vi.hoisted(() => ({
   options: [] as MapOptions[],
   handlers: {} as Record<string, MapHandler[]>,
@@ -18,53 +37,64 @@ const recorded = vi.hoisted(() => ({
   reducedMotion: false,
   // The furthest out the pan limit lets the viewport zoom.
   boundsMinZoom: 0,
-  meData: [] as object[],
-  meDot: null as HTMLElement | null,
+  sources: {} as Record<string, { spec: SourceSpec; data: object[] }>,
+  layers: [] as Layer[],
+  filters: {} as Record<string, object>,
+  visibility: {} as Record<string, string>,
+  paints: [] as { layer: string; name: string; value: number }[],
+  images: [] as { name: string; pixelRatio: number }[],
+  hits: [] as Hit[],
+  queries: [] as { box: number[][]; layers: string[] }[],
+  expansionZoom: 17,
+  // When set, a cluster's zoom is answered only when the test says so.
+  holdExpansion: false,
+  // The map has forgotten the cluster (a refresh replaced it).
+  failExpansion: false,
+  answerExpansion: [] as (() => void)[],
+  // Names of pin images the browser fails to make.
+  brokenArt: false,
+  cursor: { cursor: '' },
+  frames: [] as FrameRequestCallback[],
+  prefersReducedMotion: false,
+  motionListeners: 0,
 }))
 
 vi.mock('./attribution', () => ({ addAttribution: () => () => {} }))
 
+vi.mock('./pinArt', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./pinArt')>()),
+  rasterisePin: () =>
+    recorded.brokenArt
+      ? Promise.reject(new Error('this browser cannot decode the artwork'))
+      : Promise.resolve(document.createElement('img')),
+}))
+
 vi.mock('maplibre-gl', () => {
-  class Marker {
-    element: HTMLElement
-    constructor(options: { element: HTMLElement }) {
-      this.element = options.element
-    }
-    setLngLat() {
-      return this
-    }
-    addTo() {
-      if (this.element.className === 'map-me-dot') recorded.meDot = this.element
-      return this
-    }
-    remove() {
-      if (this.element.className === 'map-me-dot') recorded.meDot = null
-    }
-    getElement() {
-      return this.element
-    }
-  }
   class Map {
     constructor(options: MapOptions) {
       recorded.options.push(options)
     }
-    on(type: string, handler: MapHandler) {
-      ;(recorded.handlers[type] ??= []).push(handler)
+    on(type: string, layerOrHandler: string | MapHandler, handler?: MapHandler) {
+      const key = typeof layerOrHandler === 'string' ? `${type}:${layerOrHandler}` : type
+      const fn = typeof layerOrHandler === 'string' ? handler : layerOrHandler
+      if (fn) (recorded.handlers[key] ??= []).push(fn)
     }
     getZoom() {
       return recorded.zoom
-    }
-    transform = {
-      applyConstrain: (center: { lng: number; lat: number }, zoom: number) => ({
-        center,
-        zoom: Math.max(zoom, recorded.boundsMinZoom),
-      }),
     }
     getMinZoom() {
       return 0
     }
     getMaxZoom() {
       return 20
+    }
+    // As MapLibre: inside the zoom limits, and no further out than the pan
+    // limit lets the viewport go.
+    transform = {
+      applyConstrain: (center: { lng: number; lat: number }, zoom: number) => ({
+        center,
+        zoom: Math.min(20, Math.max(zoom, 0, recorded.boundsMinZoom)),
+      }),
     }
     getCenter() {
       return { lng: -3.71, lat: 40.411 }
@@ -95,17 +125,62 @@ vi.mock('maplibre-gl', () => {
       this.fire('movestart')
       this.fire('moveend')
     }
-    addSource() {}
-    addLayer() {}
-    getSource() {
-      return { setData: (data: object) => recorded.meData.push(data) }
+    addSource(id: string, spec: SourceSpec) {
+      recorded.sources[id] = { spec, data: [] }
+    }
+    getSource(id: string) {
+      const found = recorded.sources[id]
+      if (!found) return undefined
+      return {
+        setData: (data: object) => found.data.push(data),
+        getClusterExpansionZoom: () =>
+          new Promise<number>((resolve, reject) => {
+            if (recorded.failExpansion) {
+              reject(new Error('no such cluster'))
+              return
+            }
+            const answer = () => resolve(recorded.expansionZoom)
+            if (recorded.holdExpansion) recorded.answerExpansion.push(answer)
+            else answer()
+          }),
+      }
+    }
+    addLayer(layer: Layer) {
+      recorded.layers.push(layer)
+      if (layer.filter) recorded.filters[layer.id] = layer.filter
+    }
+    setFilter(id: string, filter: object) {
+      recorded.filters[id] = filter
+    }
+    setLayoutProperty(id: string, name: string, value: string) {
+      if (name === 'visibility') recorded.visibility[id] = value
+    }
+    setPaintProperty(layer: string, name: string, value: number) {
+      recorded.paints.push({ layer, name, value })
+    }
+    hasImage(name: string) {
+      return recorded.images.some((image) => image.name === name)
+    }
+    addImage(name: string, _image: HTMLImageElement, options: { pixelRatio: number }) {
+      recorded.images.push({ name, pixelRatio: options.pixelRatio })
+    }
+    queryRenderedFeatures(box: number[][], options: { layers: string[] }) {
+      recorded.queries.push({ box, layers: options.layers })
+      return recorded.hits
+    }
+    // A flat world, a hundred thousand pixels to the degree.
+    project([lng, lat]: [number, number]) {
+      return { x: (lng + 3.72) * 100_000, y: (40.42 - lat) * 100_000 }
+    }
+    getCanvas() {
+      return { style: recorded.cursor }
     }
     remove() {}
   }
-  return { default: { Map, Marker } }
+  return { default: { Map } }
 })
 
-const emit = (type: string, event: { originalEvent?: Event } = {}) => {
+const emit = (type: string, event: MapEvent = {}) => {
   if (type === 'moveend') {
     // An ease left to run arrives at its zoom; one ended by stop() does not.
     const landing = recorded.easing ? recorded.eases.at(-1)?.zoom : undefined
@@ -124,16 +199,68 @@ const interrupt = () => {
   recorded.easing = false
   emit('moveend')
 }
+const screenPoint = (lng: number, lat: number) => ({
+  x: (lng + 3.72) * 100_000,
+  y: (40.42 - lat) * 100_000,
+})
+const tap = (lng: number, lat: number) => emit('click', { point: screenPoint(lng, lat) })
+const pinHit = (id: string, lng: number, lat: number): Hit => ({
+  geometry: { type: 'Point', coordinates: [lng, lat] },
+  properties: { id },
+})
+const lastData = (source: string) => recorded.sources[source]?.data.at(-1)
+/** The last opacity given to a layer's icons, if any. */
+const opacityOf = (layer: string) =>
+  recorded.paints.findLast((p) => p.layer === layer && p.name === 'icon-opacity')?.value
+const coordinatesOf = (source: string, id: string) => {
+  const data = lastData(source)
+  if (!data || !('features' in data) || !Array.isArray(data.features)) return null
+  const found = data.features.find((f: { properties: { id: string } }) => f.properties.id === id)
+  return found ? (found.geometry.coordinates as [number, number]) : null
+}
+const ids = (source: string) => {
+  const data = lastData(source)
+  return data && 'features' in data && Array.isArray(data.features)
+    ? data.features.map((f: { properties: { id: string } }) => f.properties.id)
+    : null
+}
+
+const sighting = (
+  id: string,
+  status: MapSightingGeo['status'],
+  lng = -3.71,
+  lat = 40.411,
+): MapSightingGeo => ({
+  id,
+  speciesId: 'candadin',
+  lat,
+  lng,
+  status,
+  verificationCount: status === 'approved' ? 3 : 0,
+  createdAt: '2026-10-09T10:00:00.000Z',
+})
+
+// Each map listens to the document; they are destroyed after every test so
+// one test's map does not answer another's events.
+const mounted: BarrioMapController[] = []
 
 function mount() {
-  const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0, mounts: [] as MarkerMount[] }
+  const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0 }
   const controller = createBarrioMap(document.createElement('div'), {
     onPick: (id) => calls.picked.push(id),
     onMapTap: () => calls.mapTaps++,
     onUserMove: () => calls.userMoves++,
-    onMarkers: (mounts) => (calls.mounts = mounts),
   })
+  mounted.push(controller)
   return { controller, calls }
+}
+
+/** The style has loaded and the pin images are in: the sighting layers exist. */
+async function mountReady() {
+  const mounted = mount()
+  emit('load')
+  await vi.waitFor(() => expect(recorded.sources['sightings']).toBeDefined())
+  return mounted
 }
 
 beforeEach(() => {
@@ -146,9 +273,40 @@ beforeEach(() => {
   recorded.easing = false
   recorded.reducedMotion = false
   recorded.boundsMinZoom = 0
-  recorded.meData.length = 0
-  recorded.meDot = null
+  recorded.sources = {}
+  recorded.layers.length = 0
+  recorded.filters = {}
+  recorded.visibility = {}
+  recorded.paints.length = 0
+  recorded.holdExpansion = false
+  recorded.failExpansion = false
+  recorded.answerExpansion.length = 0
+  recorded.brokenArt = false
+  recorded.motionListeners = 0
+  recorded.images.length = 0
+  recorded.hits = []
+  recorded.queries.length = 0
+  recorded.expansionZoom = 17
+  recorded.cursor.cursor = ''
+  recorded.frames.length = 0
+  recorded.prefersReducedMotion = false
   for (const type of Object.keys(recorded.handlers)) delete recorded.handlers[type]
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+    recorded.frames.push(callback),
+  )
+  vi.stubGlobal('cancelAnimationFrame', () => {
+    recorded.frames.length = 0
+  })
+  vi.stubGlobal('matchMedia', () => ({
+    matches: recorded.prefersReducedMotion,
+    addEventListener: () => recorded.motionListeners++,
+    removeEventListener: () => recorded.motionListeners--,
+  }))
+})
+
+afterEach(() => {
+  mounted.splice(0).forEach((controller) => controller.destroy())
+  vi.unstubAllGlobals()
 })
 
 describe('createBarrioMap', () => {
@@ -300,18 +458,6 @@ describe('createBarrioMap', () => {
     expect(stored()).toBeNull()
   })
 
-  it("draws the neighbour's position once the style has loaded, under the pins", () => {
-    const { controller } = mount()
-    controller.setMe({ lat: 40.4115, lng: -3.712, accuracyM: 12 })
-    expect(recorded.meDot).toBeNull()
-    emit('load')
-    expect(recorded.meDot?.style.zIndex).toBe('1')
-    expect(recorded.meData.at(-1)).toMatchObject({ type: 'Feature' })
-    controller.setMe(null)
-    expect(recorded.meDot).toBeNull()
-    expect(recorded.meData.at(-1)).toMatchObject({ type: 'FeatureCollection' })
-  })
-
   it('a gesture landing in the middle of a programmatic move does not store that move', () => {
     const { controller } = mount()
     controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
@@ -351,51 +497,6 @@ describe('createBarrioMap', () => {
     mount()
     expect(recorded.options[0]?.center).toBeUndefined()
     expect(recorded.options[0]?.bounds).toBeDefined()
-  })
-
-  it('reports pin elements and picks by id without tapping the map', () => {
-    const { controller, calls } = mount()
-    controller.setSightings([
-      { id: 'a', lat: 40.411, lng: -3.71 },
-      { id: 'b', lat: 40.412, lng: -3.711 },
-    ])
-    expect(calls.mounts.map((m) => m.id)).toEqual(['a', 'b'])
-    calls.mounts[1]?.el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    expect(calls.picked).toEqual(['b'])
-    expect(calls.mapTaps).toBe(0)
-    controller.setSightings([{ id: 'b', lat: 40.412, lng: -3.711 }])
-    expect(calls.mounts.map((m) => m.id)).toEqual(['b'])
-  })
-
-  it('draws the picked pin over its neighbours, also when it is added later', () => {
-    const { controller, calls } = mount()
-    controller.setSightings([
-      { id: 'a', lat: 40.411, lng: -3.71 },
-      { id: 'b', lat: 40.4111, lng: -3.71 },
-    ])
-    const order = () => calls.mounts.map((m) => m.el.style.zIndex)
-    expect(order()).toEqual(['2', '2'])
-    controller.setSelected('a')
-    expect(order()).toEqual(['3', '2'])
-    controller.setSelected('c')
-    controller.setSightings([
-      { id: 'a', lat: 40.411, lng: -3.71 },
-      { id: 'c', lat: 40.4112, lng: -3.71 },
-    ])
-    expect(order()).toEqual(['2', '3'])
-    controller.setSelected(null)
-    expect(order()).toEqual(['2', '2'])
-  })
-
-  it('tells a tap on the map from a pin, and a user move from a programmatic one', () => {
-    const { calls } = mount()
-    emit('click')
-    expect(calls.mapTaps).toBe(1)
-    emit('movestart')
-    expect(calls.userMoves).toBe(0)
-    emit('movestart', { originalEvent: new Event('touchstart') })
-    emit('wheel')
-    expect(calls.userMoves).toBe(2)
   })
 
   it('a recentre during a zoom-in keeps the zoom; after it has landed, it does not zoom', () => {
@@ -632,6 +733,546 @@ describe('createBarrioMap', () => {
     recorded.zoom = 18
     controller.follow({ lat: 40.411, lng: -3.71 }, 17)
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+  })
+  describe('sightings on the map (LCHP-35)', () => {
+    const three = [
+      sighting('a', 'approved', -3.71, 40.411),
+      sighting('b', 'pending', -3.711, 40.412),
+      sighting('c', 'approved', -3.712, 40.413),
+    ]
+
+    it('draws them from map sources, not page elements, once the pin images exist', async () => {
+      const { controller } = mount()
+      controller.setSightings(three)
+      expect(recorded.sources['sightings']).toBeUndefined()
+      emit('load')
+      await vi.waitFor(() => expect(ids('sightings')).toEqual(['a', 'b', 'c']))
+      expect(recorded.sources['sightings']?.spec).toMatchObject({
+        cluster: true,
+        clusterMaxZoom: 17,
+        clusterProperties: { pending: expect.anything() },
+      })
+      // the heat map counts every sighting; a validated one weighs more
+      expect(ids('sightings-heat')).toEqual(['a', 'b', 'c'])
+      expect(recorded.sources['sightings-heat']?.spec.cluster).toBeUndefined()
+      const heat = recorded.layers.find((layer) => layer.id === 'sighting-heat')
+      expect(JSON.stringify(heat?.paint?.['heatmap-weight'])).toBe(
+        '["case",["==",["get","status"],"approved"],1,0.4]',
+      )
+      expect(HEAT_WEIGHT.approved).toBeGreaterThan(HEAT_WEIGHT.pending)
+      expect(lastData('sightings')).toMatchObject({
+        features: [
+          {
+            geometry: { type: 'Point', coordinates: [-3.71, 40.411] },
+            properties: { id: 'a', species: 'candadin', status: 'approved' },
+          },
+          { properties: { id: 'b', status: 'pending' } },
+          { properties: { id: 'c' } },
+        ],
+      })
+      expect(document.querySelector('.maplibregl-marker')).toBeNull()
+    })
+
+    it('registers one image per creature and state before any pin layer', async () => {
+      await mountReady()
+      expect(recorded.images).toHaveLength(12)
+      expect(recorded.images.map((image) => image.name)).toContain('pin-keymon-pending')
+      expect(new Set(recorded.images.map((image) => image.pixelRatio)).size).toBe(1)
+    })
+
+    it('stacks the layers: the position under the pins, the picked pin on top', async () => {
+      await mountReady()
+      expect(recorded.layers.map((layer) => layer.id)).toEqual([
+        'me-accuracy',
+        'me-halo',
+        'me-dot',
+        'sighting-heat',
+        'sighting-clusters',
+        'sighting-cluster-count',
+        'sighting-points',
+        'sighting-pending',
+        'sighting-selected',
+      ])
+    })
+
+    it('draws the picked sighting on its own, so a cluster cannot hide it', async () => {
+      const { controller } = await mountReady()
+      controller.setSightings(three)
+      expect(ids('sighting-selected')).toEqual([])
+      controller.setSelected('b')
+      expect(ids('sighting-selected')).toEqual(['b'])
+      expect(JSON.stringify(recorded.filters['sighting-pending'])).toContain(
+        '["!=",["get","id"],"b"]',
+      )
+      expect(JSON.stringify(recorded.filters['sighting-points'])).toContain(
+        '["!=",["get","id"],"b"]',
+      )
+      controller.setSelected(null)
+      expect(ids('sighting-selected')).toEqual([])
+      expect(JSON.stringify(recorded.filters['sighting-pending'])).toContain(
+        '["!=",["get","id"],""]',
+      )
+    })
+
+    it('keeps the picked sighting drawn when the list is refreshed, and drops it when it is gone', async () => {
+      const { controller } = await mountReady()
+      controller.setSelected('c')
+      controller.setSightings(three)
+      expect(ids('sighting-selected')).toEqual(['c'])
+      controller.setSightings(three.slice(0, 2))
+      expect(ids('sighting-selected')).toEqual([])
+    })
+
+    it('a tap picks the nearest pin within reach, and only that', async () => {
+      const { calls } = await mountReady()
+      recorded.hits = [pinHit('far', -3.7102, 40.411), pinHit('near', -3.71001, 40.411)]
+      tap(-3.71, 40.411)
+      expect(calls.picked).toEqual(['near'])
+      expect(calls.mapTaps).toBe(0)
+      // a finger's reach around the tap: 14 px each way
+      const [[left, top], [right, bottom]] = recorded.queries.at(-1)?.box ?? [[], []]
+      expect([right - left, bottom - top]).toEqual([28, 28])
+      expect(recorded.queries.at(-1)?.layers).toEqual([
+        'sighting-selected',
+        'sighting-pending',
+        'sighting-points',
+        'sighting-clusters',
+      ])
+    })
+
+    it('a tap on nothing is a tap on the map', async () => {
+      const { calls } = await mountReady()
+      tap(-3.71, 40.411)
+      expect(calls.mapTaps).toBe(1)
+      expect(calls.picked).toEqual([])
+    })
+
+    it("a tap on a cluster zooms until its pins come apart, as the user's own move", async () => {
+      const { calls } = await mountReady()
+      recorded.hits = [
+        {
+          geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
+          properties: { cluster_id: 9 },
+        },
+      ]
+      tap(-3.711, 40.412)
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
+      expect(recorded.eases[0]).toMatchObject({ center: [-3.711, 40.412], zoom: 17 })
+      expect(calls.userMoves).toBe(1)
+      expect(calls.picked).toEqual([])
+      expect(calls.mapTaps).toBe(0)
+      emit('moveend')
+      expect(stored()).not.toBeNull()
+    })
+
+    it('a sheet resize while a cluster opens sends the move again, centre included', async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.hits = [
+        {
+          geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
+          properties: { cluster_id: 9 },
+        },
+      ]
+      tap(-3.711, 40.412)
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
+      controller.setBottomPadding(300)
+      expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 17 })
+      expect(stored()).toBeNull()
+    })
+
+    it('shows a pointer over what can be tapped', async () => {
+      await mountReady()
+      emit('mouseenter:sighting-points')
+      expect(recorded.cursor.cursor).toBe('pointer')
+      emit('mouseleave:sighting-points')
+      expect(recorded.cursor.cursor).toBe('')
+    })
+
+    it('the heat map replaces the pins, and taps then reach only the map', async () => {
+      const { controller, calls } = await mountReady()
+      controller.setSightings(three)
+      controller.setHeat(true)
+      expect(recorded.visibility['sighting-heat']).toBe('visible')
+      for (const id of [
+        'sighting-clusters',
+        'sighting-cluster-count',
+        'sighting-points',
+        'sighting-pending',
+        'sighting-selected',
+      ]) {
+        expect(recorded.visibility[id]).toBe('none')
+      }
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      const queries = recorded.queries.length
+      tap(-3.71, 40.411)
+      expect(recorded.queries).toHaveLength(queries)
+      expect(calls.mapTaps).toBe(1)
+      controller.setHeat(false)
+      expect(recorded.visibility['sighting-heat']).toBe('none')
+      expect(recorded.visibility['sighting-points']).toBe('visible')
+    })
+
+    it('a heat map asked for before the layers exist is applied when they do', async () => {
+      const { controller } = mount()
+      controller.setHeat(true)
+      emit('load')
+      await vi.waitFor(() => expect(recorded.visibility['sighting-heat']).toBe('visible'))
+    })
+
+    it("draws the neighbour's position as map layers once the style has loaded", async () => {
+      const { controller } = mount()
+      controller.setMe({ lat: 40.4115, lng: -3.712, accuracyM: 12 })
+      expect(recorded.sources['me-point']).toBeUndefined()
+      emit('load')
+      expect(lastData('me-point')).toMatchObject({ geometry: { coordinates: [-3.712, 40.4115] } })
+      expect(lastData('me')).toMatchObject({ type: 'Feature' })
+      controller.setMe(null)
+      expect(lastData('me-point')).toMatchObject({ type: 'FeatureCollection' })
+      expect(lastData('me')).toMatchObject({ type: 'FeatureCollection' })
+    })
+  })
+
+  describe('what can go wrong around the pins', () => {
+    const cluster = (id: number): Hit => ({
+      geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
+      properties: { cluster_id: id },
+    })
+
+    it('sightings on the same public coordinate are drawn apart, so each can be reached', async () => {
+      const { controller, calls } = await mountReady()
+      const twins = [sighting('m', 'approved'), sighting('n', 'approved'), sighting('o', 'pending')]
+      controller.setSightings(twins)
+      const spots = ['m', 'n', 'o'].map((id) => coordinatesOf('sightings', id)?.join(','))
+      expect(new Set(spots).size).toBe(3)
+      // the heat map still piles them on their true, shared coordinate
+      expect(coordinatesOf('sightings-heat', 'm')).toEqual([-3.71, 40.411])
+      expect(coordinatesOf('sightings-heat', 'n')).toEqual([-3.71, 40.411])
+
+      const [nLng, nLat] = coordinatesOf('sightings', 'n') ?? [0, 0]
+      const [mLng, mLat] = coordinatesOf('sightings', 'm') ?? [0, 0]
+      recorded.hits = [pinHit('m', mLng, mLat), pinHit('n', nLng, nLat)]
+      tap(nLng, nLat)
+      tap(mLng, mLat)
+      expect(calls.picked).toEqual(['n', 'm'])
+
+      controller.setSelected('n')
+      expect(coordinatesOf('sighting-selected', 'n')).toEqual([nLng, nLat])
+    })
+
+    it('a browser that cannot make the pin images still shows something to tap', async () => {
+      recorded.brokenArt = true
+      const { controller, calls } = await mountReady()
+      controller.setSightings([sighting('a', 'approved')])
+      expect(recorded.images).toHaveLength(0)
+      expect(recorded.layers.map((layer) => layer.id)).toContain('sighting-dots')
+      expect(ids('sightings')).toEqual(['a'])
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      tap(-3.71, 40.411)
+      expect(recorded.queries.at(-1)?.layers).toContain('sighting-dots')
+      expect(calls.picked).toEqual(['a'])
+      controller.setHeat(true)
+      expect(recorded.visibility['sighting-dots']).toBe('none')
+    })
+
+    it('draws no fallback dots when the images exist', async () => {
+      await mountReady()
+      expect(recorded.layers.map((layer) => layer.id)).not.toContain('sighting-dots')
+    })
+
+    it('a cluster that answers late does not override what the user did meanwhile', async () => {
+      const { controller, calls } = await mountReady()
+      recorded.holdExpansion = true
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      userDrag()
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(recorded.eases).toHaveLength(0)
+      expect(calls.userMoves).toBe(1)
+
+      tap(-3.711, 40.412)
+      controller.setHeat(true)
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(recorded.eases).toHaveLength(0)
+
+      controller.setHeat(false)
+      tap(-3.711, 40.412)
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
+    })
+
+    it('a later tap, a picked pin, a zoom button or fresh sightings also win over a late cluster', async () => {
+      const { controller, calls } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.holdExpansion = true
+      const late = async () => {
+        recorded.answerExpansion.splice(0).forEach((answer) => answer())
+        await Promise.resolve()
+        await Promise.resolve()
+      }
+      const before = () => recorded.eases.length
+
+      // another tap, on a pin
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      tap(-3.71, 40.411)
+      let eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+      expect(calls.picked).toEqual(['a'])
+
+      // a pin picked from the list
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      controller.goTo({ lat: 40.4125, lng: -3.7135 })
+      eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+      expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
+
+      // a zoom button
+      emit('moveend')
+      tap(-3.711, 40.412)
+      controller.zoomBy(1)
+      eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+      expect(recorded.eases.at(-1)?.center).toBeUndefined()
+
+      // the sightings were refreshed: the cluster may be another one now
+      emit('moveend')
+      tap(-3.711, 40.412)
+      controller.setSightings([sighting('a', 'approved')])
+      eases = before()
+      await late()
+      expect(recorded.eases).toHaveLength(eases)
+    })
+
+    it("the app's own re-sends do not cancel a cluster that is opening", async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.holdExpansion = true
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      controller.setBottomPadding(300)
+      controller.follow({ lat: 40.4111, lng: -3.71 })
+      recorded.answerExpansion.splice(0).forEach((answer) => answer())
+      await vi.waitFor(() =>
+        expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 17 }),
+      )
+    })
+
+    it('a cluster the map no longer knows is a lost tap, not an error', async () => {
+      const { calls } = await mountReady()
+      recorded.failExpansion = true
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(recorded.eases).toHaveLength(0)
+      expect(calls.userMoves).toBe(0)
+    })
+
+    it('goes to where a sighting is drawn, not to the point it shares', async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      controller.setSightings([sighting('m', 'approved'), sighting('n', 'approved')])
+      const [lng, lat] = coordinatesOf('sightings', 'n') ?? [0, 0]
+      expect([lng, lat]).not.toEqual([-3.71, 40.411])
+      controller.goTo({ id: 'n', lat: 40.411, lng: -3.71 })
+      expect(recorded.eases.at(-1)?.center).toEqual([lng, lat])
+      controller.goTo({ id: 'gone', lat: 40.411, lng: -3.71 })
+      expect(recorded.eases.at(-1)?.center).toEqual([-3.71, 40.411])
+    })
+
+    it('a zoom button pressed while a cluster opens keeps heading for the cluster', async () => {
+      const { controller } = await mountReady()
+      controller.setBottomPadding(80)
+      recorded.hits = [cluster(9)]
+      tap(-3.711, 40.412)
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
+      controller.zoomBy(1)
+      expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 18 })
+    })
+
+    it('a map destroyed while its images are being made adds nothing afterwards', async () => {
+      const { controller } = mount()
+      emit('load')
+      controller.destroy()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(recorded.sources['sightings']).toBeUndefined()
+      expect(recorded.images).toHaveLength(0)
+    })
+
+    it('a tap before the pins exist is a tap on the map', () => {
+      const { calls } = mount()
+      recorded.hits = [pinHit('a', -3.71, 40.411)]
+      tap(-3.71, 40.411)
+      expect(recorded.queries).toHaveLength(0)
+      expect(calls.mapTaps).toBe(1)
+    })
+
+    it('makes the images at a whole number of device pixels, three at most', async () => {
+      vi.stubGlobal('devicePixelRatio', 2.6)
+      await mountReady()
+      expect(new Set(recorded.images.map((image) => image.pixelRatio))).toEqual(new Set([3]))
+      recorded.images.length = 0
+      recorded.sources = {}
+      vi.stubGlobal('devicePixelRatio', 5)
+      await mountReady()
+      expect(new Set(recorded.images.map((image) => image.pixelRatio))).toEqual(new Set([3]))
+    })
+  })
+
+  describe('the pending blink', () => {
+    const pending = [sighting('p', 'pending'), sighting('a', 'approved')]
+    const frame = (now: number) => recorded.frames.at(-1)?.(now)
+
+    it("fades the pending pins on the page's clock, at most twenty times a second", async () => {
+      const { controller } = await mountReady()
+      controller.setSightings(pending)
+      expect(recorded.frames).toHaveLength(1)
+      recorded.paints.length = 0
+      frame(1400)
+      expect(opacityOf('sighting-pending')).toBeCloseTo(1)
+      frame(1420)
+      expect(recorded.paints).toHaveLength(1)
+      frame(2100)
+      expect(opacityOf('sighting-pending')).toBeCloseTo(0.25)
+      // validated pins never fade
+      expect(opacityOf('sighting-points')).toBeUndefined()
+    })
+
+    it('a picked pending pin keeps blinking, as its card says; a picked validated one stays solid', async () => {
+      const { controller } = await mountReady()
+      controller.setSightings(pending)
+      controller.setSelected('p')
+      frame(2100)
+      expect(opacityOf('sighting-selected')).toBeCloseTo(0.25)
+      controller.setSelected('a')
+      expect(opacityOf('sighting-selected')).toBe(1)
+      frame(2800)
+      frame(3500)
+      expect(opacityOf('sighting-selected')).toBe(1)
+      expect(opacityOf('sighting-pending')).toBeCloseTo(0.25)
+    })
+
+    it('does not run without pending sightings', async () => {
+      const { controller } = await mountReady()
+      controller.setSightings([sighting('a', 'approved')])
+      expect(recorded.frames).toHaveLength(0)
+    })
+
+    it('stops, fully visible, in heat mode, in a hidden tab, and when destroyed', async () => {
+      const { controller } = await mountReady()
+      controller.setSightings(pending)
+      frame(2100)
+      controller.setHeat(true)
+      expect(recorded.frames).toHaveLength(0)
+      expect(opacityOf('sighting-pending')).toBe(1)
+      expect(opacityOf('sighting-selected')).toBe(1)
+      controller.setHeat(false)
+      expect(recorded.frames).toHaveLength(1)
+
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(recorded.frames).toHaveLength(0)
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(recorded.frames).toHaveLength(1)
+
+      expect(recorded.motionListeners).toBe(1)
+      controller.destroy()
+      expect(recorded.frames).toHaveLength(0)
+      expect(recorded.motionListeners).toBe(0)
+      vi.restoreAllMocks()
+    })
+
+    it('never starts for someone who asked for less motion', async () => {
+      recorded.prefersReducedMotion = true
+      const { controller } = await mountReady()
+      controller.setSightings(pending)
+      expect(recorded.frames).toHaveLength(0)
+      expect(opacityOf('sighting-pending')).toBeUndefined()
+    })
+  })
+
+  describe('leftovers of the LCHP-34 review (LCHP-38)', () => {
+    it('a second press of a zoom button adds to where the first was heading', () => {
+      const { controller } = mount()
+      controller.setBottomPadding(80)
+      controller.zoomBy(1)
+      controller.zoomBy(1)
+      expect(recorded.eases.map((e) => e.zoom)).toEqual([16, 17])
+      emit('moveend')
+      controller.zoomBy(-1)
+      expect(recorded.eases.at(-1)?.zoom).toBe(16)
+    })
+
+    it("a step that the window's own resize moved the limit for still counts as arrived", () => {
+      const { controller } = mount()
+      controller.setBottomPadding(80)
+      recorded.boundsMinZoom = 14.4
+      controller.zoomBy(-1)
+      expect(recorded.eases.at(-1)?.zoom).toBe(14.4)
+      // the window grows on the way: the map can no longer go that far out
+      recorded.boundsMinZoom = 14.6
+      recorded.zoom = 14.6
+      interrupt()
+      expect(stored()).not.toBeNull()
+    })
+
+    it('a zoom-in to the position cut by a gesture leaves the next drag to be stored', () => {
+      const { controller } = mount()
+      controller.setBottomPadding(80)
+      controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
+      recorded.zoom = 15.6
+      interrupt()
+      expect(stored()).toBeNull()
+      userDrag()
+      expect(stored()).not.toBeNull()
+    })
+  })
+})
+
+describe('fanOut', () => {
+  const at = (id: string, lng = -3.71, lat = 40.411) => ({ id, lng, lat })
+  const metresApart = (a: { lng: number; lat: number }, b: { lng: number; lat: number }) =>
+    Math.hypot(
+      (a.lat - b.lat) * 111_320,
+      (a.lng - b.lng) * 111_320 * Math.cos((40.411 * Math.PI) / 180),
+    )
+
+  it('leaves a sighting alone on its coordinate where it is', () => {
+    const apart = [at('a'), at('b', -3.72), at('c', -3.71, 40.412)]
+    expect(fanOut(apart)).toEqual(apart)
+  })
+
+  it('sets sightings that share a coordinate on a ring around it, ten metres out', () => {
+    const [a, b, c] = fanOut([at('a'), at('b'), at('c')])
+    for (const spot of [a, b, c]) expect(metresApart(spot, at('x'))).toBeCloseTo(10, 1)
+    expect(metresApart(a, b)).toBeGreaterThan(9)
+    expect(metresApart(b, c)).toBeGreaterThan(9)
+    expect(metresApart(a, c)).toBeGreaterThan(9)
+  })
+
+  it('keeps each one on its spot whatever order they arrive in', () => {
+    const one = fanOut([at('a'), at('b'), at('c')])
+    const other = fanOut([at('c'), at('a'), at('b')])
+    for (const spot of one) expect(other.find((o) => o.id === spot.id)).toEqual(spot)
+  })
+
+  it('opens a second ring after six, and never puts two on one spot', () => {
+    const many = fanOut(Array.from({ length: 20 }, (_, i) => at(`s${String(i).padStart(2, '0')}`)))
+    const distances = many.map((spot) => Math.round(metresApart(spot, at('x'))))
+    expect(distances.filter((d) => d === 10)).toHaveLength(6)
+    expect(distances.filter((d) => d === 20)).toHaveLength(12)
+    expect(distances.filter((d) => d === 30)).toHaveLength(2)
+    expect(new Set(many.map((spot) => `${spot.lng},${spot.lat}`)).size).toBe(20)
   })
 })
 

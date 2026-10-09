@@ -61,6 +61,9 @@ beforeEach(() => {
 vi.mock('@/components/map/BarrioMap', () => ({
   BarrioMap: ({
     sightings,
+    selectedId,
+    heat,
+    focus,
     onPick,
     onMapTap,
     onUserMove,
@@ -69,6 +72,9 @@ vi.mock('@/components/map/BarrioMap', () => ({
     followRequest,
   }: {
     sightings: MapSightingGeo[]
+    selectedId: string | null
+    heat: boolean
+    focus: { id?: string; lat: number; lng: number } | null
     onPick: (id: string) => void
     onMapTap: () => void
     onUserMove: () => void
@@ -78,6 +84,9 @@ vi.mock('@/components/map/BarrioMap', () => ({
   }) => (
     <div
       data-testid="map"
+      data-heat={heat}
+      data-selected={selectedId ?? ''}
+      data-focus={focus ? `${focus.id} ${focus.lat},${focus.lng}` : ''}
       data-follow={follow}
       data-follow-request={followRequest}
       data-me={me ? `${me.lat},${me.lng}` : ''}
@@ -317,13 +326,43 @@ describe('map screen', () => {
     expect(screen.queryByText('0 Por verificar')).not.toBeInTheDocument()
   })
 
-  it('the heat-map toggle hides the markers', async () => {
+  it('the heat map takes over: no creature stays picked and the list gives way to it', async () => {
     const user = userEvent.setup()
     renderRoute('/mapa')
-    expect(await screen.findByRole('button', { name: 'pin s-approved' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+    const map = screen.getByTestId('map')
+    expect(map).toHaveAttribute('data-selected', 's-pending')
+    // the map is told which sighting to go to, so it can go to where it draws it
+    expect(map).toHaveAttribute('data-focus', 's-pending 40.4109,-3.7074')
+    expect(screen.getByText('La Latina · hace 35 min')).toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: 'Mapa de calor' }))
-    expect(screen.queryByRole('button', { name: 'pin s-approved' })).not.toBeInTheDocument()
-    expect(screen.getByText('Mapa de calor · próximamente')).toBeInTheDocument()
+    expect(map).toHaveAttribute('data-heat', 'true')
+    expect(map).toHaveAttribute('data-selected', '')
+    const sheet = within(screen.getByRole('region', { name: 'Avistamientos cerca de ti' }))
+    // the heat counts every sighting, pending ones included
+    expect(sheet.getByText('2 avistamientos')).toBeInTheDocument()
+    expect(
+      sheet.getByText('Dónde se concentran los avistamientos. Los validados pesan más.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /la lista$/ })).not.toBeInTheDocument()
+    expect(sheet.queryByText('La Latina · hace 35 min')).not.toBeInTheDocument()
+    expect(sheet.queryByRole('button', { name: /Verificar/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/próximamente/)).not.toBeInTheDocument()
+    // the map still has every sighting: the heat is drawn from them
+    expect(screen.getByRole('button', { name: 'pin s-approved' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Avistamientos' }))
+    expect(map).toHaveAttribute('data-heat', 'false')
+    expect(screen.getByRole('button', { name: 'Plegar la lista' })).toBeInTheDocument()
+    expect(sheet.getByText('La Latina · hace 35 min')).toBeInTheDocument()
+  })
+
+  it("the ring of a «Por verificar» chip starts its blink on the page's clock", async () => {
+    renderRoute('/mapa')
+    await screen.findByText('1 Por verificar')
+    const ring = document.querySelector('.chip-ring')
+    expect(ring).toHaveAttribute('style', expect.stringMatching(/animation-delay: -\d/))
   })
 
   describe('full-bleed layout (LCHP-34)', () => {

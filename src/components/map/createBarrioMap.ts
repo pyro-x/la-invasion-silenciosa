@@ -3,37 +3,51 @@
 // a small API, so React (BarrioMap.tsx) only pushes state in and the screen
 // never touches the map library.
 //
-// Sightings are still DOM markers here; LCHP-35 swaps them for a GeoJSON
-// source behind this same API.
+// Sightings are map data (LCHP-35): one clustered GeoJSON source drawn by
+// symbol layers, all of them again as a heat map, and the picked one on
+// its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
+import { blinkOpacity } from './blink'
+import {
+  PIN_SIZE,
+  PIN_SPECIES,
+  PIN_STATES,
+  pinName,
+  pinSvg,
+  rasterisePin,
+  type PinColors,
+  type PinState,
+} from './pinArt'
 import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+import type { MapSightingGeo } from '@/types/sighting'
 
 export type LngLat = { lat: number; lng: number }
 export type MePosition = LngLat & { accuracyM: number }
-export type MarkerMount = { id: string; el: HTMLElement }
 
 export type BarrioMapHandlers = {
   /** A sighting pin was tapped. */
   onPick: (id: string) => void
-  /** The map itself was tapped (not a pin). */
+  /** The map itself was tapped (not a pin, not a cluster). */
   onMapTap: () => void
   /** The user — not the app — started moving the map. */
   onUserMove: () => void
-  /** The pin elements changed; React portals render the sprites into them. */
-  onMarkers: (mounts: MarkerMount[]) => void
 }
 
 export type BarrioMapController = {
-  /** Reconciles the pins and reports their elements through onMarkers. */
-  setSightings: (sightings: readonly (LngLat & { id: string })[]) => void
-  /** The picked pin is drawn over its neighbours. */
+  setSightings: (sightings: readonly MapSightingGeo[]) => void
+  /** The picked pin is drawn over everything, also where the rest are clustered. */
   setSelected: (id: string | null) => void
+  /** Density of sightings instead of pins. */
+  setHeat: (on: boolean) => void
   setMe: (position: MePosition | null) => void
   /** Space covered by the bottom sheet: the map centres above it. */
   setBottomPadding: (px: number) => void
-  /** Eases to a point, at the zoom the map has. */
-  goTo: (target: LngLat) => void
+  /**
+   * Eases to a point, at the zoom the map has. With the id of a sighting, to
+   * where that sighting is drawn, which need not be its own coordinate.
+   */
+  goTo: (target: LngLat & { id?: string }) => void
   /**
    * Eases to the neighbour's position, carrying on a zoom still under way.
    * `minZoom` zooms in if the map would otherwise end further out.
@@ -43,13 +57,90 @@ export type BarrioMapController = {
   destroy: () => void
 }
 
+// The map repaints whole on each change of opacity; twenty a second is smooth
+// for a slow fade and a third of the work.
+const BLINK_STEP_MS = 50
+
 const VIEW_KEY = 'lis.map.view'
 // Height of the floating mode switch the opening frame stays below.
 const TOP_CHROME_PX = 64
-const ME_SOURCE = 'me'
+// How much a sighting counts in the heat map, by status.
+export const HEAT_WEIGHT = { approved: 1, pending: 0.4 }
+// A finger is not a cursor: a tap this close to a pin is a tap on it.
+const TAP_SLOP_PX = 14
+
+const ME_AREA = 'me'
+const ME_POINT = 'me-point'
+const SIGHTINGS = 'sightings'
+const HEAT = 'sightings-heat'
+const SELECTED = 'sighting-selected'
+// Plain dots, drawn only if a pin image could not be made.
+const DOTS = 'sighting-dots'
+const PIN_LAYERS = [
+  'sighting-clusters',
+  'sighting-cluster-count',
+  'sighting-points',
+  'sighting-pending',
+  SELECTED,
+]
+const TAP_LAYERS = [SELECTED, 'sighting-pending', 'sighting-points', 'sighting-clusters']
+
 // GeoJSON's types are not a direct dependency; take them from MapLibre.
 type GeoJsonData = Parameters<maplibregl.GeoJSONSource['setData']>[0]
 const EMPTY: GeoJsonData = { type: 'FeatureCollection', features: [] }
+
+const points = (sightings: readonly MapSightingGeo[]): GeoJsonData => ({
+  type: 'FeatureCollection',
+  features: sightings.map((s) => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
+    properties: { id: s.id, species: s.speciesId, status: s.status },
+  })),
+})
+
+// How far apart sightings that share a coordinate are drawn, in metres.
+const FAN_M = 10
+
+/**
+ * Where to draw each sighting. Public coordinates are snapped to a coarse
+ * grid (D-046), so several often share one exactly; drawn there they would
+ * be one pin that no zoom can take apart, and only the top one could be
+ * tapped. Those are set on rings around their shared point instead — six on
+ * the first, twelve on the next — in the order of their ids, so a refresh
+ * with the same sightings does not shuffle them (one more in the cell can
+ * move the others a slot). Only the drawing moves — for up to eighteen on a
+ * point, by less than the grid's own imprecision — and nothing finer than
+ * the public coordinate exists here.
+ */
+export function fanOut<T extends LngLat & { id: string }>(sightings: readonly T[]): T[] {
+  const cells = new Map<string, T[]>()
+  for (const sighting of sightings) {
+    const key = `${sighting.lng},${sighting.lat}`
+    cells.set(key, [...(cells.get(key) ?? []), sighting])
+  }
+  const spots = new Map<string, LngLat>()
+  for (const cell of cells.values()) {
+    if (cell.length === 1) continue
+    let ring = 1
+    let slot = 0
+    for (const sighting of [...cell].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      const slots = 6 * ring
+      const angle = (2 * Math.PI * slot) / slots
+      const metres = FAN_M * ring
+      spots.set(sighting.id, {
+        lat: sighting.lat + (metres * Math.cos(angle)) / 111_320,
+        lng:
+          sighting.lng +
+          (metres * Math.sin(angle)) / (111_320 * Math.cos((sighting.lat * Math.PI) / 180)),
+      })
+      if (++slot === slots) {
+        ring++
+        slot = 0
+      }
+    }
+  }
+  return sightings.map((sighting) => ({ ...sighting, ...spots.get(sighting.id) }))
+}
 
 type SavedView = { center: [number, number]; zoom: number }
 
@@ -116,49 +207,322 @@ export function createBarrioMap(
   })
   const stopAttributionFold = addAttribution(map, 'bottom-left')
 
-  const markers = new Map<string, maplibregl.Marker>()
-  let selectedId: string | null = null
-  // Pins overlap where sightings are close: the picked one must not end up
-  // under another.
-  const stack = (id: string, el: HTMLElement) => {
-    el.style.zIndex = id === selectedId ? '3' : '2'
+  const theme = getComputedStyle(container)
+  const themed = (name: string, fallback: string) => theme.getPropertyValue(name).trim() || fallback
+  const colors: PinColors = {
+    card: themed('--card', '#fffdf8'),
+    line: themed('--line', '#ddccaf'),
+    warn: themed('--warn', '#e07a16'),
+    accent: themed('--accent', '#a00000'),
   }
-  const meElement = document.createElement('div')
-  meElement.className = 'map-me-dot'
-  // Pins are what you tap: they stay above the user's own dot.
-  meElement.style.zIndex = '1'
-  const meMarker = new maplibregl.Marker({ element: meElement })
+  const onAccent = themed('--on-accent', '#fff5ea')
+  const meColor = themed('--accent2', '#105016')
+
+  let destroyed = false
+  let sightings: readonly MapSightingGeo[] = []
+  // The same sightings where they are drawn (see fanOut).
+  let drawn: readonly MapSightingGeo[] = []
+  let selectedId: string | null = null
+  let heat = false
   let me: MePosition | null = null
-  let loaded = false
+  // The style has loaded and the position's layers exist.
+  let styleReady = false
+  // The pin images are registered and the sighting layers exist.
+  let pinsReady = false
   // A restored view is the user's own framing; only a fresh map is fitted.
   let framed = saved !== null
 
+  const source = (id: string) => map.getSource<maplibregl.GeoJSONSource>(id)
+
   function drawMe() {
-    if (!loaded) return
-    const source = map.getSource<maplibregl.GeoJSONSource>(ME_SOURCE)
-    if (!me) {
-      meMarker.remove()
-      source?.setData(EMPTY)
-      return
-    }
-    meMarker.setLngLat([me.lng, me.lat]).addTo(map)
-    source?.setData({
-      type: 'Feature',
-      geometry: { type: 'Polygon', coordinates: [circlePolygon(me, me.accuracyM)] },
-      properties: {},
-    })
+    if (!styleReady) return
+    source(ME_AREA)?.setData(
+      me
+        ? {
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [circlePolygon(me, me.accuracyM)] },
+            properties: {},
+          }
+        : EMPTY,
+    )
+    source(ME_POINT)?.setData(
+      me
+        ? {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [me.lng, me.lat] },
+            properties: {},
+          }
+        : EMPTY,
+    )
   }
 
-  map.on('load', () => {
-    map.addSource(ME_SOURCE, { type: 'geojson', data: EMPTY })
+  // Pending pins fade in and out on the page's own clock, so anything else
+  // blinking by that clock — the ring in the «Por verificar» chips — is in
+  // step with them.
+  let blinkFrame: number | null = null
+  let lastBlink = 0
+  let pickedPending = false
+
+  // A pin drawn on its own is left out of the layer it would otherwise be in.
+  const unpicked = (status: MapSightingGeo['status']): maplibregl.FilterSpecification => [
+    'all',
+    ['!', ['has', 'point_count']],
+    ['==', ['get', 'status'], status],
+    ['!=', ['get', 'id'], selectedId ?? ''],
+  ]
+
+  function drawSelected() {
+    if (!pinsReady) return
+    const picked = drawn.find((s) => s.id === selectedId)
+    pickedPending = picked?.status === 'pending'
+    source(SELECTED)?.setData(points(picked ? [picked] : []))
+    map.setFilter('sighting-points', unpicked('approved'))
+    map.setFilter('sighting-pending', unpicked('pending'))
+    // A picked pending pin keeps blinking; any other stays solid.
+    if (!pickedPending || blinkFrame === null) map.setPaintProperty(SELECTED, 'icon-opacity', 1)
+  }
+
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+  const tick = (now: number) => {
+    blinkFrame = requestAnimationFrame(tick)
+    if (now - lastBlink < BLINK_STEP_MS) return
+    lastBlink = now
+    const opacity = blinkOpacity(now)
+    map.setPaintProperty('sighting-pending', 'icon-opacity', opacity)
+    if (pickedPending) map.setPaintProperty(SELECTED, 'icon-opacity', opacity)
+  }
+  function syncBlink() {
+    const wanted =
+      pinsReady &&
+      !destroyed &&
+      !heat &&
+      document.visibilityState === 'visible' &&
+      !reducedMotion?.matches &&
+      sightings.some((s) => s.status === 'pending')
+    if (wanted && blinkFrame === null) blinkFrame = requestAnimationFrame(tick)
+    if (!wanted && blinkFrame !== null) {
+      cancelAnimationFrame(blinkFrame)
+      blinkFrame = null
+      if (pinsReady && !destroyed) {
+        map.setPaintProperty('sighting-pending', 'icon-opacity', 1)
+        map.setPaintProperty(SELECTED, 'icon-opacity', 1)
+      }
+    }
+  }
+  document.addEventListener('visibilitychange', syncBlink)
+  reducedMotion?.addEventListener('change', syncBlink)
+
+  function drawSightings() {
+    if (!pinsReady) return
+    source(SIGHTINGS)?.setData(points(drawn))
+    // The heat map counts every sighting, at its true public coordinate:
+    // those on one spot should pile up there.
+    source(HEAT)?.setData(points(sightings))
+    drawSelected()
+    syncBlink()
+  }
+
+  const pinLayers = () => (artFailed ? [...PIN_LAYERS, DOTS] : PIN_LAYERS)
+  const tapLayers = () => (artFailed ? [...TAP_LAYERS, DOTS] : TAP_LAYERS)
+
+  function drawMode() {
+    if (!pinsReady) return
+    for (const id of pinLayers()) map.setLayoutProperty(id, 'visibility', heat ? 'none' : 'visible')
+    map.setLayoutProperty('sighting-heat', 'visibility', heat ? 'visible' : 'none')
+    syncBlink()
+  }
+
+  let artFailed = false
+  async function registerPins() {
+    // Pixel art is only crisp at whole multiples of its size.
+    const ratio = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)))
+    for (const species of PIN_SPECIES) {
+      for (const state of PIN_STATES) {
+        try {
+          const image = await rasterisePin(pinSvg(species, state, colors), PIN_SIZE * ratio)
+          if (destroyed) return
+          const name = pinName(species, state)
+          if (!map.hasImage(name)) map.addImage(name, image, { pixelRatio: ratio })
+        } catch {
+          // A browser that cannot turn the artwork into an image still gets
+          // a map with something to tap: see the dots layer.
+          artFailed = true
+        }
+      }
+    }
+  }
+
+  function addMeLayers() {
+    map.addSource(ME_AREA, { type: 'geojson', data: EMPTY })
+    map.addSource(ME_POINT, { type: 'geojson', data: EMPTY })
     map.addLayer({
       id: 'me-accuracy',
       type: 'fill',
-      source: ME_SOURCE,
-      paint: { 'fill-color': '#105016', 'fill-opacity': 0.14, 'fill-outline-color': '#105016' },
+      source: ME_AREA,
+      paint: { 'fill-color': meColor, 'fill-opacity': 0.14, 'fill-outline-color': meColor },
     })
-    loaded = true
+    map.addLayer({
+      id: 'me-halo',
+      type: 'circle',
+      source: ME_POINT,
+      paint: { 'circle-radius': 11, 'circle-color': meColor, 'circle-opacity': 0.3 },
+    })
+    map.addLayer({
+      id: 'me-dot',
+      type: 'circle',
+      source: ME_POINT,
+      paint: {
+        'circle-radius': 6,
+        'circle-color': meColor,
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#ffffff',
+      },
+    })
+  }
+
+  // Added after the position's layers, so pins are drawn over the user's own
+  // dot: on top of a pin it read as a badge on the creature.
+  function addSightingLayers() {
+    map.addSource(SIGHTINGS, {
+      type: 'geojson',
+      data: EMPTY,
+      cluster: true,
+      clusterRadius: 46,
+      clusterMaxZoom: 17,
+      clusterProperties: { pending: ['+', ['case', ['==', ['get', 'status'], 'pending'], 1, 0]] },
+    })
+    map.addSource(HEAT, { type: 'geojson', data: EMPTY })
+    map.addSource(SELECTED, { type: 'geojson', data: EMPTY })
+
+    map.addLayer({
+      id: 'sighting-heat',
+      type: 'heatmap',
+      source: HEAT,
+      layout: { visibility: 'none' },
+      paint: {
+        // What the barrio has confirmed weighs more than what one
+        // neighbour has reported (David, 2026-10-09).
+        'heatmap-weight': [
+          'case',
+          ['==', ['get', 'status'], 'approved'],
+          HEAT_WEIGHT.approved,
+          HEAT_WEIGHT.pending,
+        ],
+        'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 13, 0.7, 17, 1.5],
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 13, 20, 16, 44, 18, 80],
+        'heatmap-opacity': 0.9,
+        // The prototype's ramp (captura_04): yellow at the edges, deep red
+        // where sightings pile up.
+        'heatmap-color': [
+          'interpolate',
+          ['linear'],
+          ['heatmap-density'],
+          0,
+          'rgba(255, 214, 46, 0)',
+          0.22,
+          'rgba(255, 214, 46, 0.55)',
+          0.45,
+          'rgba(255, 150, 12, 0.76)',
+          0.7,
+          'rgba(232, 52, 22, 0.88)',
+          1,
+          'rgba(150, 12, 8, 0.94)',
+        ],
+      },
+    })
+    map.addLayer({
+      id: 'sighting-clusters',
+      type: 'circle',
+      source: SIGHTINGS,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': colors.accent,
+        'circle-radius': ['step', ['get', 'point_count'], 16, 10, 19, 50, 23],
+        'circle-stroke-width': 3,
+        // A cluster holding something to verify wears the pending colour.
+        'circle-stroke-color': ['case', ['>', ['get', 'pending'], 0], colors.warn, colors.card],
+      },
+    })
+    map.addLayer({
+      id: 'sighting-cluster-count',
+      type: 'symbol',
+      source: SIGHTINGS,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['to-string', ['get', 'point_count']],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': 13,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: { 'text-color': onAccent },
+    })
+    if (artFailed) {
+      map.addLayer({
+        id: DOTS,
+        type: 'circle',
+        source: SIGHTINGS,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-radius': 8,
+          'circle-color': [
+            'case',
+            ['==', ['get', 'status'], 'pending'],
+            colors.warn,
+            colors.accent,
+          ],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': colors.card,
+        },
+      })
+    }
+    const pin = (state: PinState): maplibregl.SymbolLayerSpecification['layout'] => ({
+      'icon-image': ['concat', 'pin-', ['get', 'species'], `-${state}`],
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+    })
+    map.addLayer({
+      id: 'sighting-points',
+      type: 'symbol',
+      source: SIGHTINGS,
+      filter: unpicked('approved'),
+      layout: pin('validated'),
+    })
+    map.addLayer({
+      id: 'sighting-pending',
+      type: 'symbol',
+      source: SIGHTINGS,
+      filter: unpicked('pending'),
+      layout: pin('pending'),
+      paint: { 'icon-opacity': 1, 'icon-opacity-transition': { duration: 0, delay: 0 } },
+    })
+    map.addLayer({
+      id: SELECTED,
+      type: 'symbol',
+      source: SELECTED,
+      layout: pin('selected'),
+      paint: { 'icon-opacity': 1, 'icon-opacity-transition': { duration: 0, delay: 0 } },
+    })
+
+    for (const id of tapLayers()) {
+      map.on('mouseenter', id, () => (map.getCanvas().style.cursor = 'pointer'))
+      map.on('mouseleave', id, () => (map.getCanvas().style.cursor = ''))
+    }
+  }
+
+  map.on('load', () => {
+    addMeLayers()
+    styleReady = true
     drawMe()
+    // The pin layers wait for their images: a symbol laid out before its
+    // image exists is left blank until the tile is laid out again.
+    void registerPins().then(() => {
+      if (destroyed) return
+      addSightingLayers()
+      pinsReady = true
+      drawSightings()
+      drawMode()
+    })
   })
 
   let bottomPx = 0
@@ -177,17 +541,25 @@ export function createBarrioMap(
   let flight: { center: [number, number]; zoom?: number } | null = null
   // True during a camera change that ends before it returns.
   let jumping = false
-  // The zoom a move under way is heading for, when following should carry
-  // it on: the zoom-in to the position, or a zoom-button step.
+  // The zoom a move under way is heading for, when it has one: the zoom-in
+  // to the position (which following carries on), or a step the user asked
+  // for with a button or by tapping a cluster.
   let carriedZoom: number | null = null
+  // Where such a step is also heading, when it moves the centre (a cluster).
+  let stepCenter: [number, number] | null = null
+  // Opening a cluster waits for the map's answer. Whatever is asked of the
+  // map meanwhile — another tap, a drag, a pin picked, a zoom button, a
+  // change of mode, fresh sightings — is newer, and wins. The app's own
+  // re-sends (a sheet resize, a position update) are not.
+  let intent = 0
 
-  const ease = (to: { center: [number, number]; zoom?: number }, carry = false) => {
+  const ease = (to: { center: [number, number]; zoom?: number }) => {
     // easeTo stops the previous ease itself, but only after `flight` is
     // set below: its moveend would then be taken for this one's.
     map.stop()
     userChoseView = false
     flight = to
-    carriedZoom = carry && to.zoom !== undefined ? to.zoom : null
+    carriedZoom = to.zoom ?? null
     map.easeTo({ ...to, padding: padding(), duration: 500 })
   }
   const jump = (change: () => void) => {
@@ -198,22 +570,23 @@ export function createBarrioMap(
     change()
     jumping = false
   }
+  // Where a zoom will really end: MapLibre keeps it inside the zoom limits
+  // and no further out than the pan limit lets this viewport go.
+  const reachable = (zoom: number) => map.transform.applyConstrain(map.getCenter(), zoom).zoom
 
-  // A zoom-button step: the camera move is the app's call, the choice is
-  // the user's.
-  const zoomStep = (wanted: number) => {
+  // A step the user asked for — a zoom button, a tap on a cluster: the
+  // camera move is the app's call, the choice is the user's.
+  const userStep = (wanted: number, center?: [number, number]) => {
     map.stop()
     userChoseView = true
-    // Where the step will really end, so that arriving can be told from
-    // being cut: within the zoom limits, and no further out than the pan
-    // limit lets this viewport go.
-    const within = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), wanted))
-    const zoom = map.transform.applyConstrain(map.getCenter(), within).zoom
+    const zoom = reachable(wanted)
     carriedZoom = zoom
-    map.easeTo({ zoom, duration: 250 })
+    stepCenter = center ?? null
+    map.easeTo({ ...(center ? { center } : {}), zoom, duration: center ? 450 : 250 })
   }
 
   const userMoved = () => {
+    intent++
     userChoseView = true
     handlers.onUserMove()
   }
@@ -222,10 +595,13 @@ export function createBarrioMap(
   })
   map.on('wheel', userMoved)
   map.on('moveend', () => {
-    // A zoom-button step that was stopped before it arrived — by the app or
-    // by the user's own hand — ends at a zoom nobody chose.
-    const cutStep = carriedZoom !== null && Math.abs(map.getZoom() - carriedZoom) > 0.001
+    // A step that was stopped before it arrived — by the app or by the
+    // user's own hand — ends at a zoom nobody chose. Arrival is judged
+    // against what is reachable now: the window may have changed size on
+    // the way.
+    const cutStep = carriedZoom !== null && Math.abs(map.getZoom() - reachable(carriedZoom)) > 0.001
     carriedZoom = null
+    stepCenter = null
     if (jumping) return
     if (flight) {
       flight = null
@@ -238,44 +614,76 @@ export function createBarrioMap(
     const center = map.getCenter()
     writeView({ center: [center.lng, center.lat], zoom: map.getZoom() })
   })
-  map.on('click', () => handlers.onMapTap())
+
+  map.on('click', (event) => {
+    const mine = ++intent
+    const { x, y } = event.point
+    const hits =
+      pinsReady && !heat
+        ? map.queryRenderedFeatures(
+            [
+              [x - TAP_SLOP_PX, y - TAP_SLOP_PX],
+              [x + TAP_SLOP_PX, y + TAP_SLOP_PX],
+            ],
+            { layers: tapLayers() },
+          )
+        : []
+    let nearest: { center: [number, number]; id: string; cluster: number } | null = null
+    let distance = Infinity
+    for (const hit of hits) {
+      if (hit.geometry.type !== 'Point') continue
+      const [lng, lat] = hit.geometry.coordinates
+      const at = map.project([lng, lat])
+      const d = Math.hypot(at.x - x, at.y - y)
+      if (d >= distance) continue
+      distance = d
+      nearest = {
+        center: [lng, lat],
+        id: String(hit.properties.id),
+        cluster: Number(hit.properties.cluster_id),
+      }
+    }
+    if (!nearest) {
+      handlers.onMapTap()
+      return
+    }
+    if (Number.isNaN(nearest.cluster)) {
+      handlers.onPick(nearest.id)
+      return
+    }
+    // A cluster opens: zoom until its pins come apart.
+    const { cluster, center } = nearest
+    void source(SIGHTINGS)
+      ?.getClusterExpansionZoom(cluster)
+      .then(
+        (zoom) => {
+          if (destroyed || mine !== intent) return
+          handlers.onUserMove()
+          userStep(zoom, center)
+        },
+        // The map no longer knows that cluster: the tap is lost, and the
+        // next one finds whatever is there now.
+        () => {},
+      )
+  })
 
   return {
-    setSightings(sightings) {
-      const seen = new Set<string>()
-      const mounts: MarkerMount[] = []
-      for (const sighting of sightings) {
-        seen.add(sighting.id)
-        let marker = markers.get(sighting.id)
-        if (marker) {
-          marker.setLngLat([sighting.lng, sighting.lat])
-        } else {
-          const el = document.createElement('div')
-          el.style.cursor = 'pointer'
-          stack(sighting.id, el)
-          el.addEventListener('click', (event) => {
-            event.stopPropagation()
-            handlers.onPick(sighting.id)
-          })
-          marker = new maplibregl.Marker({ element: el })
-            .setLngLat([sighting.lng, sighting.lat])
-            .addTo(map)
-          markers.set(sighting.id, marker)
-        }
-        mounts.push({ id: sighting.id, el: marker.getElement() })
-      }
-      for (const [id, marker] of markers) {
-        if (!seen.has(id)) {
-          marker.remove()
-          markers.delete(id)
-        }
-      }
-      handlers.onMarkers(mounts)
+    setSightings(next) {
+      intent++
+      sightings = next
+      drawn = fanOut(next)
+      drawSightings()
     },
 
     setSelected(id) {
       selectedId = id
-      for (const [markerId, marker] of markers) stack(markerId, marker.getElement())
+      drawSelected()
+    },
+
+    setHeat(on) {
+      intent++
+      heat = on
+      drawMode()
     },
 
     setMe(position) {
@@ -295,10 +703,11 @@ export function createBarrioMap(
       const opening = !framed && px > 0
       // setPadding stops whatever is moving, so a move under way is sent
       // again: picking a pin both starts an ease and resizes the sheet, and
-      // a zoom-button step would otherwise end part-way. The opening fit
-      // replaces either.
+      // a step the user asked for would otherwise end part-way. The opening
+      // fit replaces either.
       const step = flight ? null : carriedZoom
-      if (flight && !opening) ease(flight, carriedZoom !== null)
+      const center = stepCenter
+      if (flight && !opening) ease(flight)
       else jump(() => map.setPadding(padding()))
       if (opening) {
         // The opening frame is fitted once the sheet's height is known, so
@@ -313,12 +722,14 @@ export function createBarrioMap(
           }),
         )
       } else if (step !== null) {
-        zoomStep(step)
+        userStep(step, center ?? undefined)
       }
     },
 
     goTo(target) {
-      ease({ center: [target.lng, target.lat] })
+      intent++
+      const spot = drawn.find((s) => s.id === target.id) ?? target
+      ease({ center: [spot.lng, spot.lat] })
     },
 
     follow(target, minZoom) {
@@ -328,18 +739,28 @@ export function createBarrioMap(
       // carries a zoom on; a pin picked meanwhile keeps the zoom it finds.
       const heading = carriedZoom ?? map.getZoom()
       const zoom = minZoom !== undefined && heading < minZoom ? minZoom : (carriedZoom ?? undefined)
-      ease({ center: [target.lng, target.lat], ...(zoom !== undefined ? { zoom } : {}) }, true)
+      ease({ center: [target.lng, target.lat], ...(zoom !== undefined ? { zoom } : {}) })
     },
 
     zoomBy(delta) {
-      zoomStep(map.getZoom() + delta)
+      intent++
+      // A second press while a step is still under way adds to where that
+      // step was heading, not to where it had got to.
+      const stepping = !flight && carriedZoom !== null
+      const center = stepping ? stepCenter : null
+      userStep(
+        (stepping && carriedZoom !== null ? carriedZoom : map.getZoom()) + delta,
+        center ?? undefined,
+      )
     },
 
     destroy() {
+      destroyed = true
+      syncBlink()
+      document.removeEventListener('visibilitychange', syncBlink)
+      reducedMotion?.removeEventListener('change', syncBlink)
       stopAttributionFold()
-      meMarker.remove()
       map.remove()
-      markers.clear()
     },
   }
 }

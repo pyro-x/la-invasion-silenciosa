@@ -1085,7 +1085,7 @@ estilo propio «chispera» (LCHP-33, D-059; antes raster OSM teñido por CSS,
 D-045 — paleta «papel», elegida por David en el loop visual entre 4
 candidatas)
 ↓
-Los pending llevan anillo ámbar y parpadean (blinkdot); los validados no
+Los pending llevan anillo ámbar y parpadean (desde código, D-063); los validados no
 ↓
 NO se carga ninguna foto (verificado: 0 peticiones a Storage al cargar)
 ↓
@@ -1106,7 +1106,8 @@ un avistamiento sin foto muestra un aviso amable)
 ```
 
 La foto es evidencia bajo demanda, no contenido principal del mapa. El
-«Mapa de calor» queda como toggle con aviso «próximamente» (post-MVP).
+«Mapa de calor» es un modo real desde LCHP-35 (D-063; ver «Los
+avistamientos son datos del mapa», más abajo).
 
 ### Pantalla a mapa completo (LCHP-34 — enmienda 2026-10-08, D-061) `Decidido`
 
@@ -1254,10 +1255,79 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setSelected`,
-  `setMe`, `setBottomPadding`, `goTo`, `follow`, `zoomBy`, `destroy`), al estilo del
-  `mapview.js` de Alcorqueando. `BarrioMap.tsx` es un envoltorio fino. Los
-  pines siguen siendo marcadores DOM con sprites de React; LCHP-35 los
-  cambia por una fuente GeoJSON detrás de la misma API.
+  `setHeat`, `setMe`, `setBottomPadding`, `goTo`, `follow`, `zoomBy`,
+  `destroy`), al estilo del `mapview.js` de Alcorqueando. `BarrioMap.tsx` es
+  un envoltorio fino.
+
+### Los avistamientos son datos del mapa (LCHP-35, D-063) `Decidido`
+
+Los pines ya no son elementos de la página colocados encima del mapa: son
+datos que el propio mapa dibuja.
+
+* **Una fuente GeoJSON con agrupación** (`cluster: true`, radio 46 px,
+  hasta z17) y capas `symbol`. Cada pin es una imagen registrada en el
+  mapa, generada una vez por especie y estado (validado, pendiente,
+  elegido) a partir del **mismo arte SVG** que usa el resto de la app
+  (D-062): la baldosa de 34 px con su borde y el bicho dentro. No hay
+  ficheros de imagen nuevos.
+* **Agrupaciones:** donde los pines se pisan aparece un círculo con el
+  número; lleva aro naranja si dentro hay algo por verificar. Tocarlo
+  acerca el mapa hasta que se separan, y cuenta como un movimiento del
+  vecino (deja de seguir su posición; es una vista elegida). Si mientras
+  llega la respuesta del mapa el vecino hace otra cosa (arrastrar, cambiar
+  de modo, otro toque), gana lo último.
+* **Avistamientos en la misma coordenada:** la ubicación pública va a una
+  rejilla de ~55 m (D-046), así que es normal que varios compartan
+  exactamente el mismo punto. Dibujados ahí serían un pin que ningún zoom
+  separa y solo se podría tocar el de arriba. Se **dibujan en abanico**
+  alrededor del punto compartido (anillos de 10 m: seis en el primero,
+  doce en el siguiente), en orden de identificador para que no cambien de
+  sitio al refrescar con los mismos avistamientos (uno nuevo en la celda
+  puede correr un hueco a los demás). Al elegir uno, el mapa va a donde
+  está dibujado. Solo se mueve el dibujo — hasta dieciocho en un punto,
+  menos que la imprecisión de
+  la propia rejilla; no existe ni se revela ninguna coordenada más fina.
+  El mapa de calor usa el punto compartido real.
+* **El avistamiento elegido se dibuja desde su propia fuente, sin
+  agrupar y encima de todo**: elegido desde la lista con el mapa alejado,
+  nunca queda escondido dentro de una agrupación.
+* **Toque:** se busca en un cuadro de ±14 px alrededor del dedo y gana lo
+  más cercano; si no hay nada, es un toque en el mapa (cierra la ficha).
+* **Parpadeo de los pendientes:** como una capa del mapa no admite
+  animaciones CSS, la opacidad se cambia desde código siguiendo el reloj
+  de la página, unas veinte veces por segundo. El aro de los chips «Por
+  verificar» arranca su animación CSS en la misma fase, así que **pin y
+  chip parpadean a la vez**. El pin elegido, si está pendiente, sigue
+  parpadeando (su ficha lo dice). Se detiene con la pestaña oculta, en modo
+  calor, sin pendientes y con `prefers-reduced-motion`. Coste conocido:
+  mientras parpadea, el mapa se repinta entero esas veinte veces por
+  segundo aunque nadie lo mueva (una animación CSS no costaba nada);
+  no se ha medido en batería.
+* **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
+  (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
+  coordenada pública real. Los validados pesan más que los pendientes
+  (1 frente a 0,4): decisión de David, para que el mapa no salga vacío al
+  principio del piloto, cuando casi todo está por verificar, y lo
+  confirmado por el barrio siga destacando. En ese modo no
+  hay pines ni lista «Cerca de ti» ni avistamiento elegido: la hoja, sin
+  tirador, muestra «Mapa de calor · N avistamientos» y una línea, y un toque
+  en el mapa no elige nada. Entra en el MVP por decisión de David (el brief lo tenía como
+  post-MVP): con los avistamientos ya en una fuente, es una definición de
+  capa.
+* **Si el navegador no sabe convertir el arte en imagen**, el mapa no se
+  queda vacío: se dibujan puntos de color tocables en lugar de los pines,
+  y las agrupaciones y el mapa de calor siguen funcionando.
+* **La posición del vecino también es una capa** (punto y halo), añadida
+  antes que los pines para quedar debajo de ellos.
+* **Rendimiento medido** (app compilada, Chromium sin GPU, arrastre de
+  ~6 s): con 200 avistamientos, 18,5 fps a 390×780 @2x y 27,3 a 1100×800
+  — lo mismo que con un solo pin, es decir, el límite lo pone dibujar el
+  mapa vectorial por software. Con 200 marcadores DOM eran 17,1 y 25,3.
+* **Accesibilidad:** un pin dibujado por el mapa no es alcanzable con
+  teclado ni lector de pantalla. Fuera de alcance aquí por decisión de
+  David (es un juego visual); queda como pregunta en LCHP-40.
+* Se borra el mapa del prototipo que ya no usaba nadie: `StreetMap.tsx`,
+  `HeatCanvas.tsx`, `lalatina-geo.ts` y el tipo `MapSighting`.
 
 Capturas de referencia de esta pantalla (sustituyen a `captura_03`,
 `captura_29` y `captura_30` como base de comparación, D-058): se generan
@@ -1566,7 +1636,8 @@ Evidencia del spike (2026-07-06, capturas en el ticket LCHP-4):
   en Chromium *headless sin GPU* (peor caso; en un móvil real con GPU irá
   mejor). Para el piloto (~100 avistamientos) es suficiente; si el volumen
   crece, migrar los avistamientos `approved` a una capa `symbol` con
-  sprites (queda anotado en §22).
+  sprites (queda anotado en §22). **Hecho en LCHP-35** para todos los
+  avistamientos; ver §18.
 * Una sesión completa de prueba (carga + pan + zoom 15→17,5) consumió
   104 tiles ≈ 2 MB: el uso interactivo normal está lejísimos de cualquier
   umbral problemático.
@@ -1633,7 +1704,8 @@ Camino de migración decidido para LCHP-13:
 1. **La geometría del lienzo se retira con MapLibre.** No hace falta
    sustituirla: los tiles OSM ya pintan calles, plazas y edificios.
    `StreetMap.tsx` + `lalatina-geo.ts` viven solo mientras exista el mapa
-   del prototipo y se borran al completar la migración.
+   del prototipo y se borran al completar la migración (borrados en
+   LCHP-35; el original sigue en `docs/prototype/fuentes/assets/`).
 2. **Encuadre (implementado LCHP-13):** el bbox de arriba
    (`[[-3.7173, 40.4093], [-3.7068, 40.4138]]`) es el **`bounds` inicial** —
    el mapa abre encuadrado a La Latina. El **`maxBounds`** (límite de paneo)
@@ -1705,7 +1777,7 @@ Cambiar de proveedor = cambiar ese objeto.
 > DOM reposicionan por frame durante pan/zoom (~20–29 fps con 100
 > marcadores sin GPU); si el volumen de avistamientos crece mucho, la
 > evolución natural es una capa `symbol` con sprites para los `approved`,
-> independiente del cambio de proveedor de tiles.
+> independiente del cambio de proveedor de tiles. (Hecho en LCHP-35, §18.)
 
 ### Opción A — Mantener raster OSM temporalmente
 

@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { BarrioMap } from './BarrioMap'
-import type { BarrioMapController, BarrioMapHandlers } from './createBarrioMap'
+import type { BarrioMapController } from './createBarrioMap'
 import type { MapSightingGeo } from '@/types/sighting'
 
 const calls = vi.hoisted(() => ({ log: [] as string[] }))
@@ -8,15 +8,14 @@ const calls = vi.hoisted(() => ({ log: [] as string[] }))
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}))
 
 vi.mock('./createBarrioMap', () => ({
-  createBarrioMap: (_container: HTMLElement, handlers: BarrioMapHandlers): BarrioMapController => ({
-    setSightings: (sightings) => {
-      calls.log.push(`sightings ${sightings.map((s) => s.id).join(',')}`)
-      handlers.onMarkers(sightings.map((s) => ({ id: s.id, el: document.createElement('div') })))
-    },
+  createBarrioMap: (): BarrioMapController => ({
+    setSightings: (sightings) =>
+      calls.log.push(`sightings ${sightings.map((s) => s.id).join(',')}`),
     setSelected: (id) => calls.log.push(`selected ${id}`),
+    setHeat: (on) => calls.log.push(`heat ${on}`),
     setMe: (me) => calls.log.push(`me ${me ? me.lat : null}`),
     setBottomPadding: (px) => calls.log.push(`padding ${px}`),
-    goTo: (target) => calls.log.push(`goTo ${target.lat}`),
+    goTo: (target) => calls.log.push(`goTo ${target.id} ${target.lat}`),
     follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
     zoomBy: (delta) => calls.log.push(`zoomBy ${delta}`),
     destroy: () => calls.log.push('destroy'),
@@ -40,10 +39,10 @@ type Props = Parameters<typeof BarrioMap>[0]
 const base: Props = {
   sightings: SIGHTINGS,
   selectedId: null,
+  heat: false,
   onPick: () => {},
   onMapTap: () => {},
   onUserMove: () => {},
-  renderMarker: (s, selected) => <span>{`${s.id}${selected ? ' picked' : ''}`}</span>,
   me: null,
   follow: false,
   followRequest: 0,
@@ -57,20 +56,34 @@ beforeEach(() => {
 })
 
 describe('BarrioMap', () => {
-  it('pushes its props into the controller and renders the pins into its markers', () => {
+  it('pushes its props into the controller and draws no pin itself', () => {
     const view = render(<BarrioMap {...base} />)
-    expect(calls.log).toEqual(['sightings a', 'selected null', 'me null', 'padding 0'])
+    expect(calls.log).toEqual([
+      'sightings a',
+      'selected null',
+      'heat false',
+      'me null',
+      'padding 0',
+    ])
+    expect(view.container.querySelectorAll('svg, button')).toHaveLength(0)
     calls.log.length = 0
     view.rerender(
       <BarrioMap
         {...base}
         selectedId="a"
+        heat
         bottomPadding={280}
-        focus={{ lat: 40.411, lng: -3.71 }}
+        focus={{ id: 'a', lat: 40.411, lng: -3.71 }}
         zoomStep={{ delta: 1 }}
       />,
     )
-    expect(calls.log).toEqual(['selected a', 'padding 280', 'goTo 40.411', 'zoomBy 1'])
+    expect(calls.log).toEqual([
+      'selected a',
+      'heat true',
+      'padding 280',
+      'goTo a 40.411',
+      'zoomBy 1',
+    ])
     view.unmount()
     expect(calls.log.at(-1)).toBe('destroy')
   })

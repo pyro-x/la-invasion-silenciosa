@@ -72,6 +72,23 @@ explains how they are kept alive.
   PR body: fixed, ticketed (`tech-debt`), or explicitly dismissed with a
   reason. Findings that change a design decision also land in
   [`docs/DECISIONS.md`](./docs/DECISIONS.md).
+- **A review loop has a budget (D-064).** At the start of a ticket, decide
+  how many review rounds it deserves from its complexity and write the
+  number in the kickoff comment: none or one for docs and trivial changes,
+  two for a small, contained change, three or four for a substantial or
+  stateful one or anything in the security-critical zone. A round is the
+  reviewers examining one commit. When the budget is spent without a clean
+  verdict, stop: fix what is trivially cheap, and take the open findings to
+  David with a recommendation for each (fix, ticket, dismiss). He decides
+  whether to merge, extend the budget or stop. The point is to never loop
+  fix → re-review → new narrow finding without end.
+- **A PR that changes what the user sees shows it (D-064).** Put
+  screenshots in the PR body: before/after pairs, taken with the same
+  fixture data and viewport, of each screen the change touches ("before"
+  can be shot against the deployed `main`). Images live on the `pr-assets`
+  branch, never on `main`; link them by commit so the PR keeps showing
+  them. Fixture data only — the golden rule applies to screenshots too.
+  Changes nobody can see need none; say so in the PR.
 - Findings outside the current ticket's scope go to `FINDINGS.md` and get
   THEIR OWN ticket with the `tech-debt` label (max 2 weeks without a
   decision: schedule it or demote it to `post-mvp`).

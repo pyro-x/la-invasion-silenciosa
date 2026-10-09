@@ -28,3 +28,20 @@ while working on something else.
 **Risk:** low today (the service key lives only in Edge Function secrets), but it's invisible attack surface and an environment divergence that pgTAP cannot see (tests run locally).
 **Candidate fix:** a migration revoking service_role's leftover implicit privileges on public tables down to the 0006 baseline — needs care (verify nothing in Supabase's own tooling depends on them) → own tech-debt ticket.
 **RESOLVED same day (Codex adversarial review round 2, in migration 0006 itself):** GRANT being additive meant 0006's narrow grants constrained nothing on hosted; 0006 was revised to REVOKE ALL from service_role on the seven public tables before granting the least-privilege surface, closing the gap in the same migration. Ticket LCHP-25 (opened for a follow-up) canceled as superseded.
+
+## [LCHP-42] — Map: leftovers from the LCHP-35 review (cluster taps, fallback dots, crowded cells, blink cost)
+
+**Problem:** the third and last review round of LCHP-35 approved with low-severity items left open on purpose. None affects privacy.
+
+1. A tap on «Ir a mi posición» does not supersede a cluster that is still opening: the controller cannot tell a locate tap from a GPS update, so the cluster's late answer wins (a window of milliseconds).
+2. After a refresh that changes who shares a grid cell, the picked pin is redrawn at its new slot but the camera does not follow (about 10 m).
+3. If only some pin images fail to rasterise, the fallback dots are drawn under healthy pins too and show through a pending pin mid-blink; with a total failure the picked sighting is not marked and pending dots do not blink.
+4. From the nineteenth sighting on one public coordinate, the third ring lands nearer a neighbouring cell's point than its own.
+5. The blink's cost was never measured: while any pending pin exists the map repaints whole about twenty times a second, even idle.
+6. The chip ring computes its phase once, so toggling reduced motion while the screen is open leaves it out of step.
+7. One mutation still passes the suite (`intent++` put back into `userStep()`).
+8. Rasterising the pin SVGs was only verified in Chromium.
+
+**Context:** found by the cross-model review of LCHP-35 (three rounds, the budget set for it under D-064). The triage table is in that PR's description.
+**Proposal:** measure item 5 on a real phone first — it is the only one that could matter to every user; fix 1, 2 and 7 together in the controller; 3, 4, 6 and 8 as they come up. Decide by 2026-10-23: schedule it or demote it to `post-mvp`.
+
