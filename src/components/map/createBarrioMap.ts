@@ -192,9 +192,19 @@ export function createBarrioMap(
   handlers: BarrioMapHandlers,
 ): BarrioMapController {
   const saved = readView()
+  // SPIKE (never merged): the variant under test comes from ?modo=
+  //   antes — as on main · a — no map transitions, 20 changes/s
+  //   b — no map transitions, 10 changes/s · c — no map transitions, two states
+  const mode = new URLSearchParams(location.search).get('modo') ?? 'antes'
+  const still = mode !== 'antes'
+  const stepMs = mode === 'b' ? 100 : BLINK_STEP_MS
   const map = new maplibregl.Map({
     container,
-    style: tileProvider.style,
+    style:
+      still && typeof tileProvider.style !== 'string'
+        ? { ...tileProvider.style, transition: { duration: 0, delay: 0 } }
+        : tileProvider.style,
+    ...(still ? { fadeDuration: 0 } : {}),
     ...(saved
       ? { center: saved.center, zoom: saved.zoom }
       : { bounds: LA_LATINA_BOUNDS, fitBoundsOptions: { padding: 16 } }),
@@ -285,9 +295,9 @@ export function createBarrioMap(
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')
   const tick = (now: number) => {
     blinkFrame = requestAnimationFrame(tick)
-    if (now - lastBlink < BLINK_STEP_MS) return
+    if (now - lastBlink < stepMs) return
     lastBlink = now
-    const opacity = blinkOpacity(now)
+    const opacity = mode === 'c' ? (blinkOpacity(now) > 0.625 ? 1 : 0.25) : blinkOpacity(now)
     map.setPaintProperty('sighting-pending', fade(), opacity)
     if (pickedPending) map.setPaintProperty(SELECTED, fade(), opacity)
   }
@@ -333,8 +343,77 @@ export function createBarrioMap(
     pendingSeen = inSight('sighting-pending') || (pickedPending && inSight(SELECTED))
     syncBlink()
   }
+  let blinkEnabled = true
+  let paints = 0
+  let busyMs = 0
+  const paint = map._render.bind(map)
+  map._render = (stamp: number) => {
+    const started = performance.now()
+    const result = paint(stamp)
+    busyMs += performance.now() - started
+    paints++
+    return result
+  }
+  const meter = document.createElement('div')
+  meter.style.cssText =
+    'position:fixed;top:72px;left:8px;z-index:60;background:#fffdf8;border:2px solid #ddccaf;border-radius:10px;padding:8px 10px;font:12px/1.4 monospace;color:#2a1410;max-width:78vw'
+  const readout = document.createElement('div')
+  readout.textContent = 'midiendo…'
+  const button = (label: string, active: boolean, onClick: () => void) => {
+    const b = document.createElement('button')
+    b.style.cssText =
+      'margin:6px 6px 0 0;padding:8px 10px;border-radius:8px;border:2px solid #a00000;font:12px monospace;' +
+      (active ? 'background:#a00000;color:#fff5ea' : 'background:#fffdf8;color:#a00000')
+    b.textContent = label
+    b.onclick = onClick
+    return b
+  }
+  const toggle = button('Parpadeo: SÍ', true, () => {
+    blinkEnabled = !blinkEnabled
+    toggle.textContent = blinkEnabled ? 'Parpadeo: SÍ' : 'Parpadeo: NO'
+    syncBlink()
+  })
+  const modes = document.createElement('div')
+  for (const [id, label] of [
+    ['antes', 'Antes'],
+    ['a', 'A suave'],
+    ['b', 'B suave 10/s'],
+    ['c', 'C dos estados'],
+  ] as const) {
+    modes.append(
+      button(label, mode === id, () => {
+        location.search = `?modo=${id}`
+      }),
+    )
+  }
+  meter.append(readout, modes, toggle)
+  document.body.append(meter)
+  let frames = 0
+  const countFrame = () => {
+    frames++
+    if (!destroyed) requestAnimationFrame(countFrame)
+  }
+  requestAnimationFrame(countFrame)
+  const meterTimer = setInterval(() => {
+    const perSecond = paints / 3
+    const each = paints ? busyMs / paints : 0
+    readout.textContent =
+      perSecond.toFixed(1) +
+      ' pintados/s · ' +
+      each.toFixed(1) +
+      ' ms c/u · ' +
+      (busyMs / 30).toFixed(0) +
+      '% del hilo · ' +
+      (frames / 3).toFixed(0) +
+      ' fps'
+    paints = 0
+    busyMs = 0
+    frames = 0
+  }, 3000)
+
   function syncBlink() {
     const wanted =
+      blinkEnabled &&
       pinsReady &&
       !destroyed &&
       !heat &&
@@ -838,6 +917,8 @@ export function createBarrioMap(
 
     destroy() {
       destroyed = true
+      clearInterval(meterTimer)
+      meter.remove()
       if (lookTimer !== null) window.clearTimeout(lookTimer)
       syncBlink()
       document.removeEventListener('visibilitychange', syncBlink)
