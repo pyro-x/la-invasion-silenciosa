@@ -320,6 +320,14 @@ export function createBarrioMap(
   }
   meter.append(readout, toggle)
   document.body.append(meter)
+  // How many frames the page manages per second: the screen's rate when it
+  // has time to spare, fewer when drawing the map eats the frame.
+  let frames = 0
+  const countFrame = () => {
+    frames++
+    if (!destroyed) requestAnimationFrame(countFrame)
+  }
+  requestAnimationFrame(countFrame)
   const meterTimer = setInterval(() => {
     const perSecond = paints / 3
     const each = paints ? busyMs / paints : 0
@@ -329,9 +337,12 @@ export function createBarrioMap(
       each.toFixed(1) +
       ' ms c/u · ' +
       (busyMs / 30).toFixed(0) +
-      '% del hilo'
+      '% del hilo · ' +
+      (frames / 3).toFixed(0) +
+      ' fps'
     paints = 0
     busyMs = 0
+    frames = 0
   }, 3000)
 
   function syncBlink() {
