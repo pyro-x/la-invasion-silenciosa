@@ -3,7 +3,7 @@
 import { useNavigate } from 'react-router'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { markOnboardingSeen } from '@/lib/onboarding'
-import logoChispera from '@/assets/logo-chispera.png'
+import logoChispera from '@/assets/logo-chispera.svg'
 
 export function OnboardingPage() {
   const navigate = useNavigate()
