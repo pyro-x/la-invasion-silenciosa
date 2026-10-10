@@ -206,6 +206,9 @@ export function createBarrioMap(
     attributionControl: false,
     dragRotate: false,
     pitchWithRotate: false,
+    // A tilted map draws its pins smaller the further up they are; a page
+    // element is not, so a twin would stop matching its pin.
+    maxPitch: 0,
   })
   const stopAttributionFold = addAttribution(map, 'bottom-left')
 
@@ -289,6 +292,7 @@ export function createBarrioMap(
   // so everything blinks together.
   type Twin = { marker: maplibregl.Marker; source: string; id: string; lng: number; lat: number }
   const twins = new Map<string, Twin>()
+  let placed = ''
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')
 
   function dropTwins(keep: (twin: Twin) => boolean = () => false) {
@@ -304,11 +308,24 @@ export function createBarrioMap(
     const sighting = drawn.find((s) => s.id === twin.id)
     if (!sighting || sighting.status !== 'pending') return false
     if (sighting.lng !== twin.lng || sighting.lat !== twin.lat) return false
-    return twin.source === SELECTED ? twin.id === selectedId : twin.id !== selectedId
+    if (twin.source === SELECTED) return twin.id === selectedId
+    return twin.id !== selectedId && !overPicked(sighting)
+  }
+  // The map draws the picked pin over every other; a page element is over
+  // the whole map. A pin that touches the picked one goes without a twin.
+  const overPicked = (sighting: MapSightingGeo) => {
+    const picked = drawn.find((s) => s.id === selectedId)
+    if (!picked || picked.id === sighting.id) return false
+    const a = map.project([sighting.lng, sighting.lat])
+    const b = map.project([picked.lng, picked.lat])
+    return Math.abs(a.x - b.x) < PIN_SIZE && Math.abs(a.y - b.y) < PIN_SIZE
   }
   function twinOf(sighting: MapSightingGeo, picked: boolean) {
     const twin = document.createElement('div')
     twin.className = 'pin-twin'
+    // Decoration: the pin is the map's, and MapLibre would call this a button.
+    twin.setAttribute('role', 'presentation')
+    twin.setAttribute('aria-hidden', 'true')
     const face = artFailed ? document.createElement('span') : document.createElement('img')
     if (face instanceof HTMLImageElement) {
       face.alt = ''
@@ -362,7 +379,8 @@ export function createBarrioMap(
     if (!heat && !reducedMotion?.matches) {
       for (const feature of inSight('sighting-pending')) {
         const sighting = drawn.find((s) => s.id === feature.properties.id)
-        if (sighting) wanted.set(`${SIGHTINGS}:${sighting.id}`, { source: SIGHTINGS, sighting })
+        if (!sighting || overPicked(sighting)) continue
+        wanted.set(`${SIGHTINGS}:${sighting.id}`, { source: SIGHTINGS, sighting })
       }
       const picked = drawn.find((s) => s.id === selectedId)
       if (picked && pickedPending && inSight(SELECTED).length > 0) {
@@ -768,6 +786,12 @@ export function createBarrioMap(
       intent++
       sightings = next
       drawn = fanOut(next)
+      // Who is where decides the clusters. When that changes, a pin with a
+      // twin may be inside a badge once the map has drawn the new data: the
+      // twins wait for the look that follows.
+      const places = drawn.map((s) => `${s.id}@${s.lng},${s.lat}`).join(' ')
+      if (places !== placed) dropTwins()
+      placed = places
       drawSightings()
     },
 

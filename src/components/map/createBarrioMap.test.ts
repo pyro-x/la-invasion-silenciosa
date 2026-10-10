@@ -23,7 +23,12 @@ type Layer = {
   paint?: Record<string, object | number | string>
 }
 const typeOf = (id: string) => recorded.layers.find((layer) => layer.id === id)?.type
-type SourceSpec = { cluster?: boolean; clusterMaxZoom?: number; clusterProperties?: object }
+type SourceSpec = {
+  cluster?: boolean
+  clusterMaxZoom?: number
+  clusterProperties?: object
+  promoteId?: string
+}
 const recorded = vi.hoisted(() => ({
   options: [] as MapOptions[],
   handlers: {} as Record<string, MapHandler[]>,
@@ -1301,8 +1306,15 @@ describe('createBarrioMap', () => {
       expect(paintOf('sighting-pending')).toEqual({ 'icon-opacity': DIMMED })
       expect(paintOf('sighting-selected')).toEqual({ 'icon-opacity': DIMMED })
 
+      // the state that dims a pin is kept by feature id
+      expect(recorded.sources['sightings']?.spec.promoteId).toBe('id')
+      expect(recorded.sources['sighting-selected']?.spec.promoteId).toBe('id')
+
       const twin = recorded.markers[0]?.element
       expect(twin?.className).toBe('pin-twin')
+      // decoration: not the button MapLibre would make of a marker
+      expect(twin?.getAttribute('aria-hidden')).toBe('true')
+      expect(twin?.getAttribute('role')).toBe('presentation')
       const face = faceOf(0)
       expect(face?.tagName).toBe('IMG')
       expect(face?.getAttribute('src')).toContain('data:image/svg+xml')
@@ -1411,6 +1423,42 @@ describe('createBarrioMap', () => {
       controller.setSightings([sighting('p', 'approved'), sighting('a', 'approved', -3.712)])
       expect(twins()).toEqual([])
       expect(dimmed()).toEqual([])
+    })
+
+    it('a refresh that changes who is where takes the twins away until the map has drawn it', async () => {
+      const { controller } = await mountLooking()
+      // a neighbour arrives next to 'p': the map may draw the two as one badge
+      recorded.onScreen = {}
+      controller.setSightings([...pending, sighting('n', 'approved', -3.7101)])
+      expect(twins()).toEqual([])
+      expect(dimmed()).toEqual([])
+      emit('idle')
+      expect(twins()).toEqual([])
+    })
+
+    it('a pin touching the picked one has no twin: the picked pin stays on top', async () => {
+      const near = sighting('q', 'pending', -3.7102)
+      const { controller } = await mountReady()
+      controller.setSightings([...pending, near])
+      recorded.onScreen = { 'sighting-pending': ['p', 'q'] }
+      emit('idle')
+      expect(twins()).toHaveLength(2)
+
+      // 'a' is 200 px from 'p' and 180 px from 'q': nobody touches it
+      controller.setSelected('a')
+      expect(twins()).toHaveLength(2)
+
+      // 'p' picked: 'q', 20 px away, loses its twin at once and gets none back
+      recorded.onScreen = { 'sighting-pending': ['q'], 'sighting-selected': ['p'] }
+      controller.setSelected('p')
+      expect(dimmed()).toEqual([])
+      emit('idle')
+      expect(dimmed()).toEqual(['sighting-selected:p'])
+
+      recorded.onScreen = { 'sighting-pending': ['p', 'q'] }
+      controller.setSelected(null)
+      emit('idle')
+      expect(dimmed()).toEqual(['sightings:p', 'sightings:q'])
     })
 
     it('a refresh drops the twin of a pin that is drawn elsewhere now', async () => {

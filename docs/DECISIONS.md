@@ -600,7 +600,10 @@ Amends item 1 of D-063 ("pending pins blink from code") and the first item of Ad
 - **Only the pending pins the map has drawn in sight have a twin** (not inside a cluster badge, not off screen, not under the sheet): the look of Addendum 5, which now answers "which ones" and not "any". That is a handful of elements, not the one-per-sighting that D-063 left behind.
 - **In step by construction.** A twin starts its animation where the page's clock already is, exactly as the ring of the «Por verificar» chips does; nothing in code runs per frame.
 - **A zoom takes the twins away until the map has settled** (about half a second), so a pin joining or leaving a cluster badge mid-zoom does not leave a twin floating; meanwhile the pins are whole. A drag keeps them: the twins follow their pins (David on the Nord 4: "it follows perfectly").
-- **A refresh keeps the twin of a pin that did not change**, and drops at once the twin of one that was validated, removed, picked or drawn elsewhere.
+- **A refresh keeps the twins only while nobody moved**: if the same sightings are where they were, a twin stays (and goes at once if its pin was validated or picked). If a sighting arrived, left or is drawn elsewhere, the clusters may be different once the map has drawn the new data, so every twin goes and the next look brings back the ones that still apply (round 1: a pin that joined a badge through a refresh kept its twin over the badge for about 0.3 s).
+- **A pin that touches the picked one has no twin.** The map draws the picked pin over every other, but a page element is over the whole map, so the twin of a neighbour would cover it — and neighbours do touch: sightings fanned out on one coordinate are 10 m apart, about 22 px at zoom 18 under 40 px pins. Such a pin is drawn whole and still while its neighbour is picked (round 1).
+- **The map can no longer be tilted** (`maxPitch: 0`). Tilting was never a feature, only something a two-finger drag could do; a tilted map draws distant pins smaller and a page element is not, so a twin would stop matching its pin (round 1: 103 px against 108 at 60°).
+- **A twin is decoration for assistive technology** (`aria-hidden`, `role="presentation"`): MapLibre would otherwise announce each one as a button called "Map marker" (round 1). Pins themselves remain out of reach of the keyboard and screen readers, LCHP-40.
 - **The picked pending pin has its own twin**, with the selection ring. Heat mode and reduced motion have none, and the pins are whole.
 - **Dots (no pin images) blink the same way**, a dot over the dot.
 
@@ -612,4 +615,4 @@ Amends item 1 of D-063 ("pending pins blink from code") and the first item of Ad
 
 **Also learnt:** `Map.setPaintProperty` repaints the map on every call, also when the value is the one the layer has. The controller no longer calls it at all.
 
-Review budget for this ticket: two rounds.
+Review budget for this ticket: two rounds. Round 1: Codex asked for changes (the refresh and the picked pin, above), Opus approved with the tilt, the accessibility of the twins and two untested lines; all taken.

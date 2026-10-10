@@ -1307,10 +1307,13 @@ datos que el propio mapa dibuja.
   la hoja. El gemelo arranca su animación en la fase del reloj de la
   página, igual que el aro de los chips «Por verificar», así que **pin y
   chip parpadean a la vez**. El pin elegido, si está pendiente, tiene su
-  propio gemelo (su ficha lo dice). Durante un zoom los gemelos se quitan
-  y vuelven al asentarse el mapa; al arrastrar, siguen a sus pines. En
-  modo calor y con `prefers-reduced-motion` no hay gemelos y los pines se
-  ven enteros.
+  propio gemelo (su ficha lo dice). Durante un zoom, y cuando una recarga
+  cambia quién está dónde, los gemelos se quitan y vuelven al asentarse el
+  mapa; al arrastrar, siguen a sus pines. Un pin que toca al elegido no
+  tiene gemelo, para no taparlo. En modo calor y con
+  `prefers-reduced-motion` no hay gemelos y los pines se ven enteros. El
+  mapa no se puede inclinar (`maxPitch: 0`): inclinado, un gemelo dejaría
+  de coincidir con su pin.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
   (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
   coordenada pública real. Los validados pesan más que los pendientes
