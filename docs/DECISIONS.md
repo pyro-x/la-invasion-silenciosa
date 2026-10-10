@@ -590,3 +590,26 @@ The eight items the LCHP-35 review left open. Review budget for this ticket: two
 - **Tests:** the surviving mutation (`intent++` put back into `userStep()`) now fails the suite.
 - **Other browsers:** Firefox (Playwright build, headless) turns the SVG artwork into an image as Chromium does; the whole map could not be drawn there for lack of WebGL in that setup. WebKit could not be run on this machine (system libraries missing). On a real iPhone 12, Safari draws the pin images (David, 2026-10-10, with the spike build).
 
+### D-063 · Addendum 6 · 2026-10-10 · The blink leaves the map: a twin in the page over a pin drawn dim (LCHP-43)
+
+Amends item 1 of D-063 ("pending pins blink from code") and the first item of Addendum 5. The pins stay map layers; only their blink moves out of the map.
+
+**Why.** A map layer cannot be animated without the whole map being drawn again: the canvas is one picture. David measured the blink of D-063 on two phones, with pending pins in view and the map untouched: OnePlus Nord 4, 63 repaints a second and 41% of the main thread (33% in an earlier run); iPhone 12, 60 a second and 20%; nothing with the blink off. Smooth to look at, and a steady drain for as long as a pending pin is on screen.
+
+**What it is now.** The map draws a pending pin still, at a quarter of its opacity while it has a twin (a feature state, so a pin without a twin is whole). The twin is a page element over it — the same artwork, on a `maplibregl.Marker` that takes no taps — fading between whole and nothing with a CSS animation. Together they are the blink of before, whole to a quarter and back, and the map is not asked to draw anything: on the Nord 4 the same view reads 0 repaints a second and 0% (David, spike build); on the built app in headless Chromium, 0 map paints in every state checked.
+- **Only the pending pins the map has drawn in sight have a twin** (not inside a cluster badge, not off screen, not under the sheet): the look of Addendum 5, which now answers "which ones" and not "any". That is a handful of elements, not the one-per-sighting that D-063 left behind.
+- **In step by construction.** A twin starts its animation where the page's clock already is, exactly as the ring of the «Por verificar» chips does; nothing in code runs per frame.
+- **A zoom takes the twins away until the map has settled** (about half a second), so a pin joining or leaving a cluster badge mid-zoom does not leave a twin floating; meanwhile the pins are whole. A drag keeps them: the twins follow their pins (David on the Nord 4: "it follows perfectly").
+- **A refresh keeps the twin of a pin that did not change**, and drops at once the twin of one that was validated, removed, picked or drawn elsewhere.
+- **The picked pending pin has its own twin**, with the selection ring. Heat mode and reduced motion have none, and the pins are whole.
+- **Dots (no pin images) blink the same way**, a dot over the dot.
+
+**Alternatives.**
+- Staying in the map and making it cheaper. Two things in MapLibre each keep it drawing for 300 ms after any change of style: a transition of its sky and light it restarts every time, and the fade it gives symbols. With both switched off (`transition` in the style, `fadeDuration: 0`) one change of opacity costs two repaints and not about eighteen. Measured on the Nord 4 with ten changes a second: 18 repaints a second, 18% of the main thread — but each repaint took 9.9 ms against 6.5, because without the fade MapLibre places every label again on each frame, and labels stop fading in. Better than before, never zero. Not taken; the switches are left as they were.
+- A blink of two states (about three repaints a second with those switches): cheap, but a hard on/off, not the fade.
+- A second transparent canvas for the blinking pins (what deck.gl's overlay does): the street map would stay still, but it is a dependency or a second WebGL context for what a few page elements do.
+- All pending pins as page elements again: the cost D-063 removed.
+
+**Also learnt:** `Map.setPaintProperty` repaints the map on every call, also when the value is the one the layer has. The controller no longer calls it at all.
+
+Review budget for this ticket: two rounds.

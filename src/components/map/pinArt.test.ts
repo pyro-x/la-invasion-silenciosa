@@ -1,4 +1,4 @@
-import { blinkDelayMs, blinkOpacity, BLINK_MS } from './blink'
+import { blinkDelayMs, BLINK_MS } from './blink'
 import { PIN_SIZE, PIN_SPECIES, PIN_STATES, pinName, pinSvg } from './pinArt'
 
 const colors = { card: '#fffdf8', line: '#ddccaf', warn: '#e07a16', accent: '#a00000' }
@@ -40,13 +40,6 @@ describe('pinSvg', () => {
 })
 
 describe('the pending blink', () => {
-  it('goes from full to a quarter and back in one cycle', () => {
-    expect(blinkOpacity(0)).toBeCloseTo(1)
-    expect(blinkOpacity(BLINK_MS / 2)).toBeCloseTo(0.25)
-    expect(blinkOpacity(BLINK_MS)).toBeCloseTo(1)
-    expect(blinkOpacity(BLINK_MS * 7.5)).toBeCloseTo(0.25)
-  })
-
   it('starts a CSS blink where the clock already is', () => {
     expect(blinkDelayMs(0)).toBe(-0)
     expect(blinkDelayMs(BLINK_MS + 300)).toBe(-300)

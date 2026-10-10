@@ -1085,7 +1085,7 @@ estilo propio «chispera» (LCHP-33, D-059; antes raster OSM teñido por CSS,
 D-045 — paleta «papel», elegida por David en el loop visual entre 4
 candidatas)
 ↓
-Los pending llevan anillo ámbar y parpadean (desde código, D-063); los validados no
+Los pending llevan anillo ámbar y parpadean (D-063, Addendum 6); los validados no
 ↓
 NO se carga ninguna foto (verificado: 0 peticiones a Storage al cargar)
 ↓
@@ -1293,23 +1293,24 @@ datos que el propio mapa dibuja.
   nunca queda escondido dentro de una agrupación.
 * **Toque:** se busca en un cuadro de ±14 px alrededor del dedo y gana lo
   más cercano; si no hay nada, es un toque en el mapa (cierra la ficha).
-* **Parpadeo de los pendientes:** como una capa del mapa no admite
-  animaciones CSS, la opacidad se cambia desde código siguiendo el reloj
-  de la página, unas veinte veces por segundo. El aro de los chips «Por
-  verificar» arranca su animación CSS en la misma fase, así que **pin y
-  chip parpadean a la vez**. El pin elegido, si está pendiente, sigue
-  parpadeando (su ficha lo dice). Se detiene con la pestaña oculta, en modo
-  calor, con `prefers-reduced-motion` y **cuando no hay ningún pin
-  pendiente a la vista** (ninguno en la parte del mapa que la hoja no
-  tapa, o todos dentro de una agrupación): se lo pregunta al propio mapa
-  poco después de cada movimiento, cambio de datos, de selección o de
-  altura de la hoja, y vuelve cuando reaparece uno. Coste conocido:
-  mientras parpadea, el mapa se repinta entero en cada fotograma aunque
-  nadie lo mueva (tras cada cambio MapLibre sigue dibujando 300 ms, y el
-  siguiente cambio llega antes; una animación CSS no costaba nada).
-  Medido sin GPU, diez segundos sin tocar el mapa: sin pendientes a la
-  vista, ningún repintado; con uno, el hilo principal ocupado todo el
-  tiempo. Falta la medida en un teléfono real.
+* **Parpadeo de los pendientes:** no lo dibuja el mapa. Una capa del mapa
+  no se puede animar sin repintar el mapa entero en cada fotograma (medido
+  en teléfonos: entre un quinto y dos quintos del hilo principal mientras
+  hubiera un pendiente a la vista). El mapa dibuja el pin pendiente quieto
+  y atenuado, y encima va un **gemelo en la página** — la misma imagen, en
+  un `maplibregl.Marker` que no recibe toques — que aparece y desaparece
+  con una animación CSS. Juntos se ven como el parpadeo de siempre y el
+  mapa no repinta nada. Solo tienen gemelo **los pendientes que el mapa
+  tiene dibujados a la vista** (no los que están dentro de una agrupación,
+  fuera de pantalla o bajo la hoja): se lo pregunta al propio mapa poco
+  después de cada movimiento, cambio de datos, de selección o de altura de
+  la hoja. El gemelo arranca su animación en la fase del reloj de la
+  página, igual que el aro de los chips «Por verificar», así que **pin y
+  chip parpadean a la vez**. El pin elegido, si está pendiente, tiene su
+  propio gemelo (su ficha lo dice). Durante un zoom los gemelos se quitan
+  y vuelven al asentarse el mapa; al arrastrar, siguen a sus pines. En
+  modo calor y con `prefers-reduced-motion` no hay gemelos y los pines se
+  ven enteros.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
   (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
   coordenada pública real. Los validados pesan más que los pendientes

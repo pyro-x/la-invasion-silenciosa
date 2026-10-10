@@ -366,6 +366,24 @@ body {
     opacity: 0.25;
   }
 }
+/* The twin of a pending pin, over a map that draws the pin itself at 0.25:
+   together they read as `blinkdot`. */
+@keyframes blinktwin {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+.pin-twin {
+  pointer-events: none;
+}
+.pin-twin > * {
+  display: block;
+  animation: blinktwin 1.4s ease-in-out infinite;
+}
 @keyframes slidein {
   from {
     transform: translateY(14px);
