@@ -1306,7 +1306,9 @@ datos que el propio mapa dibuja.
   después de cada movimiento, cambio de datos, de selección o de altura de
   la hoja. El gemelo arranca su animación en la fase del reloj de la
   página, igual que el aro de los chips «Por verificar», así que **pin y
-  chip parpadean a la vez**. El pin elegido, si está pendiente, tiene su
+  chip parpadean a la vez**. Un gemelo solo llega cuando el parpadeo está
+  en su punto más brillante: hasta entonces el pin se ve entero, y así
+  pasa de entero al fundido sin un salto. El pin elegido, si está pendiente, tiene su
   propio gemelo (su ficha lo dice). Durante un zoom o un giro, y cuando una recarga
   cambia quién está dónde, los gemelos se quitan y vuelven al asentarse el
   mapa; al arrastrar, siguen a sus pines. Un pin que toca al elegido no
