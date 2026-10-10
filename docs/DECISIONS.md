@@ -604,7 +604,7 @@ Amends item 1 of D-063 ("pending pins blink from code") and the first item of Ad
 - **A pin that touches the picked one has no twin.** The map draws the picked pin over every other, but a page element is over the whole map, so the twin of a neighbour would cover it. It happens where the picked pin is drawn alone among pins the map clusters, next to an unclustered pending one, and just at zoom 18, where sightings fanned out on one coordinate are 44 px apart and their 40 px boxes still touch. Such a pin is drawn whole and still while its neighbour is picked (round 1).
 - **The map can no longer be tilted** (`maxPitch: 0`). Tilting was never a feature, only something a two-finger drag could do; a tilted map draws distant pins smaller and a page element is not, so a twin would stop matching its pin (round 1: 103 px against 108 at 60°).
 - **A twin is decoration for assistive technology** (`aria-hidden`, `role="presentation"`): MapLibre would otherwise announce each one as a button called "Map marker" (round 1). Pins themselves remain out of reach of the keyboard and screen readers, LCHP-40.
-- **The picked pending pin has its own twin**, with the selection ring. Heat mode and reduced motion have none, and the pins are whole.
+- **The picked pending pin has its own twin**, with the selection ring. Heat mode has no pins and no twins; under reduced motion there are no twins and the pins are whole.
 - **Dots (no pin images) blink the same way**, a dot over the dot.
 
 **Alternatives.**

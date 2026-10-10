@@ -1310,8 +1310,8 @@ datos que el propio mapa dibuja.
   propio gemelo (su ficha lo dice). Durante un zoom o un giro, y cuando una recarga
   cambia quién está dónde, los gemelos se quitan y vuelven al asentarse el
   mapa; al arrastrar, siguen a sus pines. Un pin que toca al elegido no
-  tiene gemelo, para no taparlo. En modo calor y con
-  `prefers-reduced-motion` no hay gemelos y los pines se ven enteros. El
+  tiene gemelo, para no taparlo. En modo calor no hay pines ni gemelos;
+  con `prefers-reduced-motion` no hay gemelos y los pines se ven enteros. El
   mapa no se puede inclinar (`maxPitch: 0`): inclinado, un gemelo dejaría
   de coincidir con su pin.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo

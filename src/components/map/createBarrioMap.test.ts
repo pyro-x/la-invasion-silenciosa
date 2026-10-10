@@ -1297,6 +1297,9 @@ describe('createBarrioMap', () => {
       emit('idle')
       return mounted
     }
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
 
     it('is a twin of the pin in the page, over a pin the map draws dim and still', async () => {
       vi.spyOn(performance, 'now').mockReturnValue(2100)
@@ -1324,7 +1327,6 @@ describe('createBarrioMap', () => {
       // and the map itself is never asked to animate anything
       expect(recorded.paints).toHaveLength(0)
       expect(recorded.frames).toHaveLength(0)
-      vi.restoreAllMocks()
     })
 
     it('only for the pending pins the map has drawn in sight', async () => {
