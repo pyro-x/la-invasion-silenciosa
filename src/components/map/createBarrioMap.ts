@@ -403,8 +403,10 @@ export function createBarrioMap(
   }
   reducedMotion?.addEventListener('change', lookForPending)
   // A pin joining or leaving a cluster badge mid-zoom would leave its twin
-  // floating: they come back once the map has settled.
+  // floating, and a turn of the map can bring one over the picked pin: they
+  // come back once the map has settled.
   map.on('zoomstart', () => dropTwins())
+  map.on('rotatestart', () => dropTwins())
 
   function drawSightings() {
     if (!pinsReady) return
@@ -789,7 +791,10 @@ export function createBarrioMap(
       // Who is where decides the clusters. When that changes, a pin with a
       // twin may be inside a badge once the map has drawn the new data: the
       // twins wait for the look that follows.
-      const places = drawn.map((s) => `${s.id}@${s.lng},${s.lat}`).join(' ')
+      const places = drawn
+        .map((s) => `${s.id}@${s.lng},${s.lat}`)
+        .sort()
+        .join(' ')
       if (places !== placed) dropTwins()
       placed = places
       drawSightings()

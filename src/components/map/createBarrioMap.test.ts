@@ -1401,19 +1401,29 @@ describe('createBarrioMap', () => {
       expect(twins()).toEqual([])
     })
 
-    it('a zoom takes the twins away until the map has settled', async () => {
+    it.each(['zoomstart', 'rotatestart'])(
+      'a %s takes the twins away until the map has settled',
+      async (gesture) => {
+        await mountLooking()
+        emit(gesture)
+        expect(twins()).toEqual([])
+        expect(dimmed()).toEqual([])
+        emit('idle')
+        expect(twins()).toEqual([P])
+      },
+    )
+
+    it('the map cannot be tilted: a twin would stop matching its pin', async () => {
       await mountLooking()
-      emit('zoomstart')
-      expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
-      emit('idle')
-      expect(twins()).toEqual([P])
+      expect(recorded.options[0]).toMatchObject({ maxPitch: 0 })
     })
 
-    it('a refresh keeps the twin of a pin that did not change', async () => {
+    it('a refresh keeps the twin of a pin that did not change, whatever the order', async () => {
       const { controller } = await mountLooking()
       const [twin] = recorded.markers
       controller.setSightings([...pending])
+      expect(recorded.markers).toEqual([twin])
+      controller.setSightings([...pending].reverse())
       expect(recorded.markers).toEqual([twin])
     })
 
@@ -1459,6 +1469,18 @@ describe('createBarrioMap', () => {
       controller.setSelected(null)
       emit('idle')
       expect(dimmed()).toEqual(['sightings:p', 'sightings:q'])
+    })
+
+    it('touching is in either direction, and a pin a whole pin away does not touch', async () => {
+      const above = { ...sighting('u', 'pending'), lat: 40.4112 }
+      const beside = sighting('w', 'pending', -3.7105)
+      const { controller } = await mountReady()
+      controller.setSightings([...pending, above, beside])
+      recorded.onScreen = { 'sighting-pending': ['u', 'w'], 'sighting-selected': ['p'] }
+      controller.setSelected('p')
+      emit('idle')
+      // 'u' is 20 px above 'p'; 'w' is 50 px to its side
+      expect(dimmed()).toEqual(['sighting-selected:p', 'sightings:w'])
     })
 
     it('a refresh drops the twin of a pin that is drawn elsewhere now', async () => {
