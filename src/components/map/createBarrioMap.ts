@@ -510,7 +510,7 @@ export function createBarrioMap(
     map.addSource(SIGHTINGS, {
       type: 'geojson',
       data: EMPTY,
-      // Feature ids, for the state that dims a pin under its blinking twin.
+      // Feature ids, for the state that leaves a pin undrawn under its twin.
       promoteId: 'id',
       cluster: true,
       clusterRadius: 46,

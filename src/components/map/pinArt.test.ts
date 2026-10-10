@@ -56,6 +56,9 @@ describe('the pending blink', () => {
       const opacities = arrivalOpacities(now)
       expect(opacities.at(0)).toBeCloseTo(1)
       expect(opacities.at(-1)).toBeCloseTo(blinkOpacity(now + ARRIVAL_MS))
+      // a quarter of the way it has let go of little: it eases out, like the blink
+      const blink = blinkOpacity(now + ARRIVAL_MS / 4)
+      expect(opacities.at(3)).toBeCloseTo(blink + (1 - blink) * 0.871, 2)
       const steps = opacities.slice(1).map((opacity, i) => Math.abs(opacity - (opacities[i] ?? 0)))
       expect(Math.max(...steps)).toBeLessThan(0.15)
     }

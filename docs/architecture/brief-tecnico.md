@@ -1306,9 +1306,10 @@ datos que el propio mapa dibuja.
   después de cada movimiento, cambio de datos, de selección o de altura de
   la hoja. El gemelo arranca su animación en la fase del reloj de la
   página, igual que el aro de los chips «Por verificar», así que **pin y
-  chip parpadean a la vez**. Un gemelo llega entero y en menos de medio
-  segundo baja hasta el punto del ciclo en el que esté el parpadeo, y solo
-  entonces empieza a parpadear: sin espera y sin salto.
+  chip parpadean a la vez** (el aro puede ir unas milésimas por detrás).
+  Un gemelo llega entero y en menos de medio segundo se acerca al punto
+  del ciclo en el que esté el parpadeo, y solo entonces empieza a
+  parpadear: sin espera y sin salto.
   El pin elegido, si está pendiente, tiene su
   propio gemelo (su ficha lo dice). Durante un zoom o un giro, y cuando una recarga
   cambia quién está dónde, los gemelos se quitan y vuelven al asentarse el

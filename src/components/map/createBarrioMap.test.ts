@@ -1052,7 +1052,7 @@ describe('createBarrioMap', () => {
       tap(-3.71, 40.411)
       expect(calls.picked).toEqual(['a'])
 
-      // a pending one blinks: a dot over the dot, which the map draws dim
+      // a pending one blinks: a dot in place of the dot, which the map leaves undrawn
       emit('idle')
       expect(twins()).toEqual([[-3.712, 40.411]])
       expect(faceOf(0)?.tagName).toBe('SPAN')
@@ -1314,9 +1314,10 @@ describe('createBarrioMap', () => {
       expect(paintOf('sighting-pending')).toEqual({ 'icon-opacity': UNDER_TWIN })
       expect(paintOf('sighting-selected')).toEqual({ 'icon-opacity': UNDER_TWIN })
 
-      // the state that dims a pin is kept by feature id
+      // the state that leaves a pin undrawn is kept by feature id, and it is this one
       expect(recorded.sources['sightings']?.spec.promoteId).toBe('id')
       expect(recorded.sources['sighting-selected']?.spec.promoteId).toBe('id')
+      expect(recorded.states['sightings:p']).toEqual({ twin: true })
 
       const twin = recorded.markers[0]?.element
       expect(twin?.className).toBe('pin-twin')
