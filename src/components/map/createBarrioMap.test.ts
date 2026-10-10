@@ -1052,7 +1052,6 @@ describe('createBarrioMap', () => {
       expect(calls.picked).toEqual(['a'])
 
       // a pending one blinks: a dot over the dot, which the map draws dim
-      vi.spyOn(performance, 'now').mockReturnValue(2810)
       emit('idle')
       expect(twins()).toEqual([[-3.712, 40.411]])
       expect(faceOf(0)?.tagName).toBe('SPAN')
@@ -1299,11 +1298,9 @@ describe('createBarrioMap', () => {
       emit('idle')
       return mounted
     }
-    // The page's clock, ten milliseconds into a blink: at its brightest,
-    // when a twin may arrive.
-    const clockAt = (ms: number) => vi.spyOn(performance, 'now').mockReturnValue(ms)
+    // The page's clock, half a blink in.
     beforeEach(() => {
-      clockAt(2810)
+      vi.spyOn(performance, 'now').mockReturnValue(2100)
     })
     afterEach(() => {
       vi.restoreAllMocks()
@@ -1329,49 +1326,26 @@ describe('createBarrioMap', () => {
       expect(face?.tagName).toBe('IMG')
       expect(face?.getAttribute('src')).toContain('data:image/svg+xml')
       // started where the page's clock already is: the chips' ring is there too
-      expect(face?.getAttribute('style')).toContain('animation-delay: -10ms')
+      expect(face?.getAttribute('style')).toContain('animation-delay: -700ms')
 
       // and the map itself is never asked to animate anything
       expect(recorded.paints).toHaveLength(0)
       expect(recorded.frames).toHaveLength(0)
     })
 
-    it('arrives when the blink is at its brightest, so the pin does not drop to mid-fade at once', async () => {
-      const { controller } = await mountReady()
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      controller.setSightings(pending)
-      // half a blink in: the pin stays whole, without a twin
-      clockAt(2100)
-      emit('idle')
-      emit('idle')
-      expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
-      vi.advanceTimersByTime(699)
-      expect(twins()).toEqual([])
+    it('arrives whole and eases into the blink: a cover over the twin that fades and goes', async () => {
+      await mountLooking()
+      const twin = recorded.markers[0]?.element
+      const [face, arrival] = twin ? [...twin.children] : []
+      expect(twin?.children).toHaveLength(2)
+      expect(arrival?.className).toBe('pin-twin-arrival')
+      expect(arrival?.getAttribute('src')).toBe(face?.getAttribute('src'))
+      // the cover is not on the blink's clock
+      expect(arrival?.getAttribute('style') ?? '').not.toContain('animation-delay')
 
-      // the clock comes round; a timer that fires a little late still counts
-      clockAt(2880)
-      vi.advanceTimersByTime(1)
-      expect(twins()).toEqual([P])
-      expect(dimmed()).toEqual(['sightings:p'])
-      vi.useRealTimers()
-    })
-
-    it('does not arrive on a map that is moving, nor on one that is gone', async () => {
-      const { controller } = await mountReady()
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      controller.setSightings(pending)
-      clockAt(2100)
-      emit('idle')
-      recorded.moving = true
-      vi.advanceTimersByTime(700)
-      expect(twins()).toEqual([])
-
-      recorded.moving = false
-      emit('idle')
-      controller.destroy()
-      expect(vi.getTimerCount()).toBe(0)
-      vi.useRealTimers()
+      arrival?.dispatchEvent(new Event('animationend'))
+      expect(twin?.children).toHaveLength(1)
+      expect(twin?.firstElementChild).toBe(face)
     })
 
     it('only for the pending pins the map has drawn in sight', async () => {

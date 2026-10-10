@@ -384,6 +384,18 @@ body {
   display: block;
   animation: blinktwin 1.4s ease-in-out infinite;
 }
+/* Whole when the twin arrives, then gone: the pin eases into the blink. */
+@keyframes twinarrive {
+  to {
+    opacity: 0;
+  }
+}
+.pin-twin > .pin-twin-arrival {
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: twinarrive 0.45s ease-in-out forwards;
+}
 @keyframes slidein {
   from {
     transform: translateY(14px);

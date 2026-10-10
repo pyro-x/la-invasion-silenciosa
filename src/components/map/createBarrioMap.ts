@@ -8,7 +8,7 @@
 // its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
-import { BLINK_MS, blinkDelayMs } from './blink'
+import { blinkDelayMs } from './blink'
 import {
   PIN_SIZE,
   PIN_SPECIES,
@@ -337,7 +337,17 @@ export function createBarrioMap(
       face.style.cssText = `display:block;box-sizing:border-box;width:${2 * (radius + stroke)}px;height:${2 * (radius + stroke)}px;border-radius:50%;background:${color};border:${stroke}px solid ${ring}`
     }
     face.style.animationDelay = `${blinkDelayMs(performance.now())}ms`
-    twin.append(face)
+    // A pin is whole until its twin arrives, and the blink is wherever the
+    // clock has it: the pin would drop to that at once, a flicker before the
+    // slow blink. A second face, whole, covers the first and fades away, so
+    // the pin eases from whole into the blink.
+    const arrival = face.cloneNode()
+    if (arrival instanceof HTMLElement) {
+      arrival.style.animationDelay = ''
+      arrival.className = 'pin-twin-arrival'
+      arrival.addEventListener('animationend', () => arrival.remove())
+    }
+    twin.append(face, arrival)
     return twin
   }
 
@@ -375,15 +385,6 @@ export function createBarrioMap(
     if (!pinsReady || destroyed) return
     if (lookTimer !== null) window.clearTimeout(lookTimer)
     lookTimer = null
-    matchTwins(false)
-  }
-  // A pin is whole until its twin arrives, and the blink is wherever the
-  // clock has it: arriving mid-fade, the pin would drop to that at once, a
-  // flicker before the slow blink. So a twin arrives when the blink is at
-  // its brightest, and the pin goes from whole into the fade.
-  const BRIGHTEST_MS = 50
-  let brightestTimer: number | null = null
-  function matchTwins(atBrightest: boolean) {
     const wanted = new Map<string, { source: string; sighting: MapSightingGeo }>()
     if (!heat && !reducedMotion?.matches) {
       for (const feature of inSight('sighting-pending')) {
@@ -397,15 +398,6 @@ export function createBarrioMap(
       }
     }
     dropTwins((twin) => wanted.has(`${twin.source}:${twin.id}`) && stillDrawn(twin))
-    if (![...wanted.keys()].some((key) => !twins.has(key))) return
-    const into = performance.now() % BLINK_MS
-    if (!atBrightest && into > BRIGHTEST_MS) {
-      brightestTimer ??= window.setTimeout(() => {
-        brightestTimer = null
-        if (pinsReady && !destroyed && !map.isMoving()) matchTwins(true)
-      }, BLINK_MS - into)
-      return
-    }
     for (const [key, { source: from, sighting }] of wanted) {
       if (twins.has(key)) continue
       const { id, lng, lat } = sighting
@@ -909,7 +901,6 @@ export function createBarrioMap(
     destroy() {
       destroyed = true
       if (lookTimer !== null) window.clearTimeout(lookTimer)
-      if (brightestTimer !== null) window.clearTimeout(brightestTimer)
       dropTwins()
       reducedMotion?.removeEventListener('change', lookForPending)
       stopAttributionFold()
