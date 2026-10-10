@@ -5,6 +5,7 @@ import {
   HEAT_WEIGHT,
   type BarrioMapController,
 } from './createBarrioMap'
+import { ARRIVAL_MS, blinkOpacity } from './blink'
 import type { MapSightingGeo } from '@/types/sighting'
 
 type MapEvent = { originalEvent?: Event; point?: { x: number; y: number } }
@@ -269,10 +270,10 @@ const pinHit = (id: string, lng: number, lat: number): Hit => ({
 const lastData = (source: string) => recorded.sources[source]?.data.at(-1)
 /** The last opacity given to a layer's icons, if any. */
 const paintOf = (id: string) => recorded.layers.find((layer) => layer.id === id)?.paint ?? {}
-// Drawn at a quarter under a blinking twin, whole otherwise.
-const DIMMED = ['case', ['boolean', ['feature-state', 'twin'], false], 0.25, 1]
+// Not drawn under a blinking twin, whole otherwise.
+const UNDER_TWIN = ['case', ['boolean', ['feature-state', 'twin'], false], 0, 1]
 const twins = () => recorded.markers.map((marker) => marker.at)
-const dimmed = () => Object.keys(recorded.states).sort()
+const undrawn = () => Object.keys(recorded.states).sort()
 const faceOf = (index: number) => recorded.markers[index]?.element.firstElementChild
 const coordinatesOf = (source: string, id: string) => {
   const data = lastData(source)
@@ -1058,8 +1059,8 @@ describe('createBarrioMap', () => {
       expect(faceOf(0)?.getAttribute('style')).toContain('border-radius: 50%')
       for (const layer of ['sighting-pending', 'sighting-selected']) {
         expect(paintOf(layer)).toMatchObject({
-          'circle-opacity': DIMMED,
-          'circle-stroke-opacity': DIMMED,
+          'circle-opacity': UNDER_TWIN,
+          'circle-stroke-opacity': UNDER_TWIN,
         })
       }
 
@@ -1068,7 +1069,7 @@ describe('createBarrioMap', () => {
       expect(ids('sighting-selected')).toEqual(['p'])
       recorded.onScreen = { 'sighting-selected': ['p'] }
       emit('idle')
-      expect(dimmed()).toEqual(['sighting-selected:p'])
+      expect(undrawn()).toEqual(['sighting-selected:p'])
       expect(faceOf(0)?.getAttribute('style')).toContain('width: 28px')
 
       controller.setHeat(true)
@@ -1306,12 +1307,12 @@ describe('createBarrioMap', () => {
       vi.restoreAllMocks()
     })
 
-    it('is a twin of the pin in the page, over a pin the map draws dim and still', async () => {
+    it('is a twin of the pin in the page, in place of a pin the map leaves undrawn', async () => {
       await mountLooking()
       expect(twins()).toEqual([P])
-      expect(dimmed()).toEqual(['sightings:p'])
-      expect(paintOf('sighting-pending')).toEqual({ 'icon-opacity': DIMMED })
-      expect(paintOf('sighting-selected')).toEqual({ 'icon-opacity': DIMMED })
+      expect(undrawn()).toEqual(['sightings:p'])
+      expect(paintOf('sighting-pending')).toEqual({ 'icon-opacity': UNDER_TWIN })
+      expect(paintOf('sighting-selected')).toEqual({ 'icon-opacity': UNDER_TWIN })
 
       // the state that dims a pin is kept by feature id
       expect(recorded.sources['sightings']?.spec.promoteId).toBe('id')
@@ -1325,7 +1326,9 @@ describe('createBarrioMap', () => {
       const face = faceOf(0)
       expect(face?.tagName).toBe('IMG')
       expect(face?.getAttribute('src')).toContain('data:image/svg+xml')
-      // started where the page's clock already is: the chips' ring is there too
+      // where a browser cannot ease it in, it blinks at once — from where the
+      // page's clock already is: the chips' ring is there too
+      expect(face?.className).toBe('is-blinking')
       expect(face?.getAttribute('style')).toContain('animation-delay: -700ms')
 
       // and the map itself is never asked to animate anything
@@ -1333,26 +1336,47 @@ describe('createBarrioMap', () => {
       expect(recorded.frames).toHaveLength(0)
     })
 
-    it('arrives whole and eases into the blink: a cover over the twin that fades and goes', async () => {
+    it('arrives whole, eases to where the blink is, and only then blinks: one element throughout', async () => {
+      const arrival = { onfinish: () => {}, cancelled: 0, cancel: () => arrival.cancelled++ }
+      const played: { frames: Keyframe[]; options: KeyframeAnimationOptions }[] = []
+      Object.defineProperty(HTMLElement.prototype, 'animate', {
+        configurable: true,
+        value(frames: Keyframe[], options: KeyframeAnimationOptions) {
+          played.push({ frames, options })
+          return arrival
+        },
+      })
       await mountLooking()
-      const twin = recorded.markers[0]?.element
-      const [face, arrival] = twin ? [...twin.children] : []
-      expect(twin?.children).toHaveLength(2)
-      expect(arrival?.className).toBe('pin-twin-arrival')
-      expect(arrival?.getAttribute('src')).toBe(face?.getAttribute('src'))
-      // the cover is not on the blink's clock
-      expect(arrival?.getAttribute('style') ?? '').not.toContain('animation-delay')
+      Reflect.deleteProperty(HTMLElement.prototype, 'animate')
 
-      arrival?.dispatchEvent(new Event('animationend'))
-      expect(twin?.children).toHaveLength(1)
-      expect(twin?.firstElementChild).toBe(face)
+      // never two faces: nothing is stacked over the pin
+      expect(recorded.markers[0]?.element.children).toHaveLength(1)
+      expect(played).toHaveLength(1)
+      expect(played[0]?.options).toEqual({ duration: ARRIVAL_MS, fill: 'forwards' })
+      const opacities = played[0]?.frames.map((frame) => Number(frame.opacity)) ?? []
+      expect(opacities.at(0)).toBeCloseTo(1)
+      // the clock is half a blink in: it ends where the blink is by then
+      expect(opacities.at(-1)).toBeCloseTo(blinkOpacity(2100 + ARRIVAL_MS))
+
+      // not blinking yet: a late first frame shows a whole pin, not the blink's value
+      const face = faceOf(0)
+      expect(face?.className).toBe('')
+
+      // arrived: the blink takes over where the clock is, and the arrival lets go a frame later
+      vi.spyOn(performance, 'now').mockReturnValue(2100 + ARRIVAL_MS)
+      arrival.onfinish()
+      expect(face?.className).toBe('is-blinking')
+      expect(face?.getAttribute('style')).toContain('animation-delay: -1150ms')
+      expect(arrival.cancelled).toBe(0)
+      recorded.frames.at(-1)?.(0)
+      expect(arrival.cancelled).toBe(1)
     })
 
     it('only for the pending pins the map has drawn in sight', async () => {
       recorded.onScreen = {}
       const { controller } = await mountLooking()
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
 
       // in sight is the part of the map above the sheet
       controller.setBottomPadding(300)
@@ -1373,13 +1397,13 @@ describe('createBarrioMap', () => {
       userDrag()
       emit('idle')
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
 
       recorded.onScreen = { 'sighting-pending': ['p'] }
       userDrag()
       emit('idle')
       expect(twins()).toEqual([P])
-      expect(dimmed()).toEqual(['sightings:p'])
+      expect(undrawn()).toEqual(['sightings:p'])
     })
 
     it('does not touch the map again while nothing changes', async () => {
@@ -1400,18 +1424,18 @@ describe('createBarrioMap', () => {
       recorded.onScreen = { 'sighting-selected': ['p'] }
       controller.setSelected('p')
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
       emit('idle')
       expect(twins()).toEqual([P])
-      expect(dimmed()).toEqual(['sighting-selected:p'])
+      expect(undrawn()).toEqual(['sighting-selected:p'])
       expect(faceOf(0)?.getAttribute('src')).not.toBe(plain)
 
       recorded.onScreen = { 'sighting-pending': ['p'] }
       controller.setSelected(null)
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
       emit('idle')
-      expect(dimmed()).toEqual(['sightings:p'])
+      expect(undrawn()).toEqual(['sightings:p'])
     })
 
     it('a picked pin that is not pending has none', async () => {
@@ -1428,7 +1452,7 @@ describe('createBarrioMap', () => {
         await mountLooking()
         emit(gesture)
         expect(twins()).toEqual([])
-        expect(dimmed()).toEqual([])
+        expect(undrawn()).toEqual([])
         emit('idle')
         expect(twins()).toEqual([P])
       },
@@ -1453,7 +1477,7 @@ describe('createBarrioMap', () => {
       recorded.onScreen = {}
       controller.setSightings([sighting('p', 'approved'), sighting('a', 'approved', -3.712)])
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
     })
 
     it('a refresh that changes who is where takes the twins away until the map has drawn it', async () => {
@@ -1462,7 +1486,7 @@ describe('createBarrioMap', () => {
       recorded.onScreen = {}
       controller.setSightings([...pending, sighting('n', 'approved', -3.7101)])
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
       emit('idle')
       expect(twins()).toEqual([])
     })
@@ -1482,14 +1506,14 @@ describe('createBarrioMap', () => {
       // 'p' picked: 'q', 20 px away, loses its twin at once and gets none back
       recorded.onScreen = { 'sighting-pending': ['q'], 'sighting-selected': ['p'] }
       controller.setSelected('p')
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
       emit('idle')
-      expect(dimmed()).toEqual(['sighting-selected:p'])
+      expect(undrawn()).toEqual(['sighting-selected:p'])
 
       recorded.onScreen = { 'sighting-pending': ['p', 'q'] }
       controller.setSelected(null)
       emit('idle')
-      expect(dimmed()).toEqual(['sightings:p', 'sightings:q'])
+      expect(undrawn()).toEqual(['sightings:p', 'sightings:q'])
     })
 
     it('touching is in either direction, and a pin a whole pin away does not touch', async () => {
@@ -1501,7 +1525,7 @@ describe('createBarrioMap', () => {
       controller.setSelected('p')
       emit('idle')
       // 'u' is 20 px above 'p'; 'w' is 50 px to its side
-      expect(dimmed()).toEqual(['sighting-selected:p', 'sightings:w'])
+      expect(undrawn()).toEqual(['sighting-selected:p', 'sightings:w'])
     })
 
     it('a refresh drops the twin of a pin that is drawn elsewhere now', async () => {
@@ -1519,7 +1543,7 @@ describe('createBarrioMap', () => {
       const { controller } = await mountLooking()
       controller.setHeat(true)
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
       emit('idle')
       expect(twins()).toEqual([])
       controller.setHeat(false)
@@ -1531,7 +1555,7 @@ describe('createBarrioMap', () => {
       recorded.prefersReducedMotion = true
       await mountLooking()
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
 
       // switched off, and on again, while the map is open
       recorded.prefersReducedMotion = false
@@ -1540,7 +1564,7 @@ describe('createBarrioMap', () => {
       recorded.prefersReducedMotion = true
       recorded.motionListeners.forEach((changed) => changed())
       expect(twins()).toEqual([])
-      expect(dimmed()).toEqual([])
+      expect(undrawn()).toEqual([])
     })
 
     it('takes its twins and its listener with it', async () => {

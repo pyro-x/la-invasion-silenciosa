@@ -8,7 +8,7 @@
 // its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
-import { blinkDelayMs } from './blink'
+import { ARRIVAL_MS, arrivalOpacities, blinkDelayMs } from './blink'
 import {
   PIN_SIZE,
   PIN_SPECIES,
@@ -57,11 +57,12 @@ export type BarrioMapController = {
   destroy: () => void
 }
 
-// A pin with a blinking twin over it (see the blink) is drawn dim.
-const DIMMED: maplibregl.ExpressionSpecification = [
+// A pin with a blinking twin over it (see the blink) is not drawn: it is
+// still there to be tapped.
+const UNDER_TWIN: maplibregl.ExpressionSpecification = [
   'case',
   ['boolean', ['feature-state', 'twin'], false],
-  0.25,
+  0,
   1,
 ]
 
@@ -285,9 +286,10 @@ export function createBarrioMap(
 
   // The blink is not drawn by the map. A layer cannot be animated without
   // the whole map being drawn again on every frame — a third of a phone's
-  // main thread, measured — so the map draws a pending pin dim and still,
-  // and a twin of it in the page fades over it with CSS, which costs the map
-  // nothing. Only the pending pins in sight have one: a handful. The twins
+  // main thread, measured — so the blinking is done by a twin of the pin
+  // in the page, with CSS, which costs the map nothing; the map leaves the
+  // pin undrawn while it has one, so the two are never seen at once. Only
+  // the pending pins in sight have a twin: a handful. The twins
   // follow the page's clock, as the ring in the «Por verificar» chips does,
   // so everything blinks together.
   type Twin = { marker: maplibregl.Marker; source: string; id: string; lng: number; lat: number }
@@ -336,19 +338,31 @@ export function createBarrioMap(
       const { radius, stroke, color, ring } = dotOf(picked ? 'selected' : 'pending')
       face.style.cssText = `display:block;box-sizing:border-box;width:${2 * (radius + stroke)}px;height:${2 * (radius + stroke)}px;border-radius:50%;background:${color};border:${stroke}px solid ${ring}`
     }
-    face.style.animationDelay = `${blinkDelayMs(performance.now())}ms`
-    // A pin is whole until its twin arrives, and the blink is wherever the
-    // clock has it: the pin would drop to that at once, a flicker before the
-    // slow blink. A second face, whole, covers the first and fades away, so
-    // the pin eases from whole into the blink.
-    const arrival = face.cloneNode()
-    if (arrival instanceof HTMLElement) {
-      arrival.style.animationDelay = ''
-      arrival.className = 'pin-twin-arrival'
-      arrival.addEventListener('animationend', () => arrival.remove())
+    twin.append(face)
+    const blink = () => {
+      face.style.animationDelay = `${blinkDelayMs(performance.now())}ms`
+      face.classList.add('is-blinking')
     }
-    twin.append(face, arrival)
-    return twin
+    // A pin is whole until its twin takes its place, and the blink is
+    // wherever the clock has it: the pin would drop to that at once, a
+    // flicker before the slow blink. So the twin arrives whole, eases to
+    // where the blink will be, and only then starts blinking: whatever frame
+    // the browser starts on, there is nothing underneath but a whole pin.
+    const arrive = () => {
+      if (!face.animate) {
+        blink()
+        return
+      }
+      const arrival = face.animate(
+        arrivalOpacities(performance.now()).map((opacity) => ({ opacity })),
+        { duration: ARRIVAL_MS, fill: 'forwards' },
+      )
+      arrival.onfinish = () => {
+        blink()
+        requestAnimationFrame(() => arrival.cancel())
+      }
+    }
+    return { twin, arrive }
   }
 
   // Which pending pins are in sight is only known once the map has drawn
@@ -401,12 +415,11 @@ export function createBarrioMap(
     for (const [key, { source: from, sighting }] of wanted) {
       if (twins.has(key)) continue
       const { id, lng, lat } = sighting
-      const marker = new maplibregl.Marker({
-        element: twinOf(sighting, from === SELECTED),
-        subpixelPositioning: true,
-      })
+      const { twin, arrive } = twinOf(sighting, from === SELECTED)
+      const marker = new maplibregl.Marker({ element: twin, subpixelPositioning: true })
         .setLngLat([lng, lat])
         .addTo(map)
+      arrive()
       map.setFeatureState({ source: from, id }, { twin: true })
       twins.set(key, { marker, source: from, id, lng, lat })
     }
@@ -582,8 +595,8 @@ export function createBarrioMap(
         'circle-color': color,
         'circle-stroke-width': stroke,
         'circle-stroke-color': ring,
-        'circle-opacity': DIMMED,
-        'circle-stroke-opacity': DIMMED,
+        'circle-opacity': UNDER_TWIN,
+        'circle-stroke-opacity': UNDER_TWIN,
       }
     }
     const drawnAs = [
@@ -607,7 +620,7 @@ export function createBarrioMap(
           source: from,
           ...which,
           layout: pin(state),
-          paint: { 'icon-opacity': DIMMED },
+          paint: { 'icon-opacity': UNDER_TWIN },
         })
       }
     }

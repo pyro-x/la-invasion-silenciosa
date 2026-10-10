@@ -366,35 +366,15 @@ body {
     opacity: 0.25;
   }
 }
-/* The twin of a pending pin, over a map that draws the pin itself at 0.25:
-   together they read as `blinkdot`. */
-@keyframes blinktwin {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-}
+/* The twin of a pending pin: the map does not draw the pin while it has one. */
 .pin-twin {
   pointer-events: none;
 }
 .pin-twin > * {
   display: block;
-  animation: blinktwin 1.4s ease-in-out infinite;
 }
-/* Whole when the twin arrives, then gone: the pin eases into the blink. */
-@keyframes twinarrive {
-  to {
-    opacity: 0;
-  }
-}
-.pin-twin > .pin-twin-arrival {
-  position: absolute;
-  top: 0;
-  left: 0;
-  animation: twinarrive 0.45s ease-in-out forwards;
+.pin-twin > .is-blinking {
+  animation: blinkdot 1.4s ease-in-out infinite;
 }
 @keyframes slidein {
   from {

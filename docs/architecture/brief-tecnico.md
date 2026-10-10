@@ -1296,19 +1296,20 @@ datos que el propio mapa dibuja.
 * **Parpadeo de los pendientes:** no lo dibuja el mapa. Una capa del mapa
   no se puede animar sin repintar el mapa entero en cada fotograma (medido
   en teléfonos: entre un quinto y dos quintos del hilo principal mientras
-  hubiera un pendiente a la vista). El mapa dibuja el pin pendiente quieto
-  y atenuado, y encima va un **gemelo en la página** — la misma imagen, en
-  un `maplibregl.Marker` que no recibe toques — que aparece y desaparece
-  con una animación CSS. Juntos se ven como el parpadeo de siempre y el
-  mapa no repinta nada. Solo tienen gemelo **los pendientes que el mapa
+  hubiera un pendiente a la vista). Parpadea un **gemelo en la página** — la misma
+  imagen, en un `maplibregl.Marker` que no recibe toques — con la misma
+  animación CSS que el aro de los chips. Mientras un pin tiene gemelo el
+  mapa no lo dibuja (sigue ahí para tocarlo), así que nunca se ven los dos
+  a la vez, y el mapa no repinta nada. Solo tienen gemelo **los pendientes que el mapa
   tiene dibujados a la vista** (no los que están dentro de una agrupación,
   fuera de pantalla o bajo la hoja): se lo pregunta al propio mapa poco
   después de cada movimiento, cambio de datos, de selección o de altura de
   la hoja. El gemelo arranca su animación en la fase del reloj de la
   página, igual que el aro de los chips «Por verificar», así que **pin y
-  chip parpadean a la vez**. Un gemelo llega entero y se funde con el
-  parpadeo en menos de medio segundo (una segunda cara, opaca, que se
-  desvanece), para que el pin no salte de golpe al punto del ciclo. El pin elegido, si está pendiente, tiene su
+  chip parpadean a la vez**. Un gemelo llega entero y en menos de medio
+  segundo baja hasta el punto del ciclo en el que esté el parpadeo, y solo
+  entonces empieza a parpadear: sin espera y sin salto.
+  El pin elegido, si está pendiente, tiene su
   propio gemelo (su ficha lo dice). Durante un zoom o un giro, y cuando una recarga
   cambia quién está dónde, los gemelos se quitan y vuelven al asentarse el
   mapa; al arrastrar, siguen a sus pines. Un pin que toca al elegido no
