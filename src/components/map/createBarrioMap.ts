@@ -8,7 +8,7 @@
 // its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
-import { blinkOpacity } from './blink'
+import { BLINK_MS, blinkDelayMs, blinkOpacity } from './blink'
 import {
   PIN_SIZE,
   PIN_SPECIES,
@@ -195,6 +195,8 @@ export function createBarrioMap(
   // SPIKE (never merged): the variant under test comes from ?modo=
   //   antes — as on main · a — no map transitions, 20 changes/s
   //   b — no map transitions, 10 changes/s · c — no map transitions, two states
+  //   d — no map transitions; the map draws pending pins dim and still, and a
+  //       page element over each one in sight fades with CSS
   const mode = new URLSearchParams(location.search).get('modo') ?? 'antes'
   const still = mode !== 'antes'
   const stepMs = mode === 'b' ? 100 : BLINK_STEP_MS
@@ -213,6 +215,7 @@ export function createBarrioMap(
     dragRotate: false,
     pitchWithRotate: false,
   })
+  Object.assign(window, { __map: map })
   const stopAttributionFold = addAttribution(map, 'bottom-left')
 
   const theme = getComputedStyle(container)
@@ -267,6 +270,13 @@ export function createBarrioMap(
   // Pending pins fade in and out on the page's own clock, so anything else
   // blinking by that clock — the ring in the «Por verificar» chips — is in
   // step with them.
+  // MapLibre repaints on every call, also when the value is the one it has.
+  const lastOpacity = new Map<string, number>()
+  const setOpacity = (layer: string, value: number) => {
+    if (lastOpacity.get(layer) === value) return
+    lastOpacity.set(layer, value)
+    map.setPaintProperty(layer, fade(), value)
+  }
   let blinkFrame: number | null = null
   let lastBlink = 0
   let bottomPx = 0
@@ -288,7 +298,7 @@ export function createBarrioMap(
     map.setFilter('sighting-points', unpicked('approved'))
     map.setFilter('sighting-pending', unpicked('pending'))
     // A picked pending pin keeps blinking; any other stays solid.
-    if (!pickedPending || blinkFrame === null) map.setPaintProperty(SELECTED, fade(), 1)
+    if (!pickedPending || blinkFrame === null) setOpacity(SELECTED, 1)
     focusOnPicked()
   }
 
@@ -298,8 +308,8 @@ export function createBarrioMap(
     if (now - lastBlink < stepMs) return
     lastBlink = now
     const opacity = mode === 'c' ? (blinkOpacity(now) > 0.625 ? 1 : 0.25) : blinkOpacity(now)
-    map.setPaintProperty('sighting-pending', fade(), opacity)
-    if (pickedPending) map.setPaintProperty(SELECTED, fade(), opacity)
+    setOpacity('sighting-pending', opacity)
+    if (pickedPending) setOpacity(SELECTED, opacity)
   }
   // Fading pins nobody can see would still repaint the whole map on every
   // frame: after each change the map keeps drawing for the 300 ms it gives
@@ -379,6 +389,7 @@ export function createBarrioMap(
     ['a', 'A suave'],
     ['b', 'B suave 10/s'],
     ['c', 'C dos estados'],
+    ['d', 'D en página'],
   ] as const) {
     modes.append(
       button(label, mode === id, () => {
@@ -411,7 +422,94 @@ export function createBarrioMap(
     frames = 0
   }, 3000)
 
+  // Mode d: the blink happens in the page, not in the map.
+  const overlays = new Map<string, { marker: maplibregl.Marker; stated: boolean }>()
+  if (mode === 'd' && !document.getElementById('lis-blink-over')) {
+    const css = document.createElement('style')
+    css.id = 'lis-blink-over'
+    css.textContent = '@keyframes lis-blink-over{0%,100%{opacity:1}50%{opacity:0}}'
+    document.head.append(css)
+  }
+  function dropOverlay(key: string) {
+    const overlay = overlays.get(key)
+    if (!overlay) return
+    overlay.marker.remove()
+    if (overlay.stated && pinsReady && !destroyed) {
+      map.removeFeatureState({ source: SIGHTINGS, id: key })
+    }
+    overlays.delete(key)
+  }
+  function clearOverlays() {
+    for (const key of [...overlays.keys()]) dropOverlay(key)
+    if (pinsReady && !destroyed) setOpacity(SELECTED, 1)
+  }
+  function drawOverlays() {
+    const wanted =
+      blinkEnabled &&
+      pinsReady &&
+      !destroyed &&
+      !heat &&
+      !artFailed &&
+      document.visibilityState === 'visible' &&
+      !reducedMotion?.matches
+    if (!wanted) {
+      clearOverlays()
+      return
+    }
+    const { clientWidth, clientHeight } = map.getCanvas()
+    const shown: [maplibregl.PointLike, maplibregl.PointLike] = [
+      [0, 0],
+      [clientWidth, Math.max(0, clientHeight - bottomPx)],
+    ]
+    const next = new Map<string, { sighting: MapSightingGeo; state: PinState }>()
+    for (const feature of map.queryRenderedFeatures(shown, { layers: ['sighting-pending'] })) {
+      const sighting = drawn.find((d) => d.id === feature.properties.id)
+      if (sighting) next.set(sighting.id, { sighting, state: 'pending' })
+    }
+    const picked = drawn.find((d) => d.id === selectedId)
+    const pickedOver =
+      pickedPending &&
+      picked !== undefined &&
+      map.queryRenderedFeatures(shown, { layers: [SELECTED] }).length > 0
+    if (pickedOver) next.set(`${picked.id}:picked`, { sighting: picked, state: 'selected' })
+    setOpacity(SELECTED, pickedOver ? 0.25 : 1)
+
+    for (const key of [...overlays.keys()]) if (!next.has(key)) dropOverlay(key)
+    for (const [key, { sighting, state }] of next) {
+      const existing = overlays.get(key)
+      if (existing) {
+        // Moving a marker wakes the map up: only when it really moved.
+        const at = existing.marker.getLngLat()
+        if (at.lng !== sighting.lng || at.lat !== sighting.lat) {
+          existing.marker.setLngLat([sighting.lng, sighting.lat])
+        }
+        continue
+      }
+      const pin = document.createElement('img')
+      pin.width = PIN_SIZE
+      pin.height = PIN_SIZE
+      pin.alt = ''
+      pin.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(pinSvg(sighting.speciesId, state, colors))}`
+      pin.style.cssText = `pointer-events:none;animation:lis-blink-over ${BLINK_MS}ms ease-in-out infinite;animation-delay:${blinkDelayMs(performance.now())}ms`
+      const marker = new maplibregl.Marker({ element: pin, subpixelPositioning: true })
+        .setLngLat([sighting.lng, sighting.lat])
+        .addTo(map)
+      const stated = state === 'pending'
+      if (stated) map.setFeatureState({ source: SIGHTINGS, id: key }, { over: true })
+      overlays.set(key, { marker, stated })
+    }
+  }
+  // A pin joining or leaving a cluster badge mid-zoom would leave its page
+  // twin floating: they come back once the map has settled.
+  map.on('zoomstart', () => {
+    if (mode === 'd') clearOverlays()
+  })
+
   function syncBlink() {
+    if (mode === 'd') {
+      drawOverlays()
+      return
+    }
     const wanted =
       blinkEnabled &&
       pinsReady &&
@@ -425,8 +523,8 @@ export function createBarrioMap(
       cancelAnimationFrame(blinkFrame)
       blinkFrame = null
       if (pinsReady && !destroyed) {
-        map.setPaintProperty('sighting-pending', fade(), 1)
-        map.setPaintProperty(SELECTED, fade(), 1)
+        setOpacity('sighting-pending', 1)
+        setOpacity(SELECTED, 1)
       }
     }
   }
@@ -509,6 +607,7 @@ export function createBarrioMap(
     map.addSource(SIGHTINGS, {
       type: 'geojson',
       data: EMPTY,
+      promoteId: 'id',
       cluster: true,
       clusterRadius: 46,
       clusterMaxZoom: 17,
@@ -615,7 +714,13 @@ export function createBarrioMap(
           source: SIGHTINGS,
           filter,
           layout: pin(state),
-          paint: { 'icon-opacity': 1, 'icon-opacity-transition': still },
+          paint: {
+            'icon-opacity':
+              mode === 'd' && state === 'pending'
+                ? ['case', ['boolean', ['feature-state', 'over'], false], 0.25, 1]
+                : 1,
+            'icon-opacity-transition': still,
+          },
         })
       }
     }
@@ -916,6 +1021,8 @@ export function createBarrioMap(
     },
 
     destroy() {
+      for (const overlay of overlays.values()) overlay.marker.remove()
+      overlays.clear()
       destroyed = true
       clearInterval(meterTimer)
       meter.remove()
