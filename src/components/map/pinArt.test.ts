@@ -1,4 +1,4 @@
-import { blinkDelayMs, blinkOpacity, BLINK_MS } from './blink'
+import { ARRIVAL_MS, arrivalOpacities, blinkDelayMs, blinkOpacity, BLINK_MS } from './blink'
 import { PIN_SIZE, PIN_SPECIES, PIN_STATES, pinName, pinSvg } from './pinArt'
 
 const colors = { card: '#fffdf8', line: '#ddccaf', warn: '#e07a16', accent: '#a00000' }
@@ -40,11 +40,28 @@ describe('pinSvg', () => {
 })
 
 describe('the pending blink', () => {
-  it('goes from full to a quarter and back in one cycle', () => {
+  it('is at the opacity the CSS animation draws: whole, a quarter at half a cycle, eased between', () => {
     expect(blinkOpacity(0)).toBeCloseTo(1)
     expect(blinkOpacity(BLINK_MS / 2)).toBeCloseTo(0.25)
-    expect(blinkOpacity(BLINK_MS)).toBeCloseTo(1)
     expect(blinkOpacity(BLINK_MS * 7.5)).toBeCloseTo(0.25)
+    // half way down and half way up: ease-in-out is symmetric
+    expect(blinkOpacity(BLINK_MS / 4)).toBeCloseTo(0.625)
+    expect(blinkOpacity((BLINK_MS * 3) / 4)).toBeCloseTo(0.625)
+    // slow at the ends: an eighth of the cycle in, it has barely moved
+    expect(blinkOpacity(BLINK_MS / 16)).toBeGreaterThan(0.97)
+  })
+
+  it('a twin arrives whole and ends on the blink, with no jump on the way', () => {
+    for (const now of [0, 350, 700, 1050, 1399]) {
+      const opacities = arrivalOpacities(now)
+      expect(opacities.at(0)).toBeCloseTo(1)
+      expect(opacities.at(-1)).toBeCloseTo(blinkOpacity(now + ARRIVAL_MS))
+      // a quarter of the way it has let go of little: it eases out, like the blink
+      const blink = blinkOpacity(now + ARRIVAL_MS / 4)
+      expect(opacities.at(3)).toBeCloseTo(blink + (1 - blink) * 0.871, 2)
+      const steps = opacities.slice(1).map((opacity, i) => Math.abs(opacity - (opacities[i] ?? 0)))
+      expect(Math.max(...steps)).toBeLessThan(0.15)
+    }
   })
 
   it('starts a CSS blink where the clock already is', () => {
