@@ -8,7 +8,7 @@
 // its own so a cluster can never hide it.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
-import { blinkOpacity } from './blink'
+import { ARRIVAL_MS, arrivalOpacities, blinkDelayMs } from './blink'
 import {
   PIN_SIZE,
   PIN_SPECIES,
@@ -57,9 +57,14 @@ export type BarrioMapController = {
   destroy: () => void
 }
 
-// Twenty changes of opacity a second are smooth for a slow fade. They do not
-// make the map repaint only twenty times: see the blink.
-const BLINK_STEP_MS = 50
+// A pin with a blinking twin over it (see the blink) is not drawn: it is
+// still there to be tapped.
+const UNDER_TWIN: maplibregl.ExpressionSpecification = [
+  'case',
+  ['boolean', ['feature-state', 'twin'], false],
+  0,
+  1,
+]
 
 const VIEW_KEY = 'lis.map.view'
 // Height of the floating mode switch the opening frame stays below.
@@ -202,6 +207,9 @@ export function createBarrioMap(
     attributionControl: false,
     dragRotate: false,
     pitchWithRotate: false,
+    // A tilted map draws its pins smaller the further up they are; a page
+    // element is not, so a twin would stop matching its pin.
+    maxPitch: 0,
   })
   const stopAttributionFold = addAttribution(map, 'bottom-left')
 
@@ -254,11 +262,6 @@ export function createBarrioMap(
     )
   }
 
-  // Pending pins fade in and out on the page's own clock, so anything else
-  // blinking by that clock — the ring in the «Por verificar» chips — is in
-  // step with them.
-  let blinkFrame: number | null = null
-  let lastBlink = 0
   let bottomPx = 0
   let pickedPending = false
 
@@ -277,33 +280,99 @@ export function createBarrioMap(
     source(SELECTED)?.setData(points(picked ? [picked] : []))
     map.setFilter('sighting-points', unpicked('approved'))
     map.setFilter('sighting-pending', unpicked('pending'))
-    // A picked pending pin keeps blinking; any other stays solid.
-    if (!pickedPending || blinkFrame === null) map.setPaintProperty(SELECTED, fade(), 1)
+    dropTwins(stillDrawn)
     focusOnPicked()
   }
 
+  // The blink is not drawn by the map. A layer cannot be animated without
+  // the whole map being drawn again on every frame — a third of a phone's
+  // main thread, measured — so the blinking is done by a twin of the pin
+  // in the page, with CSS, which costs the map nothing; the map leaves the
+  // pin undrawn while it has one, so the two are never seen at once. Only
+  // the pending pins in sight have a twin: a handful. The twins
+  // follow the page's clock, as the ring in the «Por verificar» chips does,
+  // so everything blinks together.
+  type Twin = { marker: maplibregl.Marker; source: string; id: string; lng: number; lat: number }
+  const twins = new Map<string, Twin>()
+  let placed = ''
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-  const tick = (now: number) => {
-    blinkFrame = requestAnimationFrame(tick)
-    if (now - lastBlink < BLINK_STEP_MS) return
-    lastBlink = now
-    const opacity = blinkOpacity(now)
-    map.setPaintProperty('sighting-pending', fade(), opacity)
-    if (pickedPending) map.setPaintProperty(SELECTED, fade(), opacity)
+
+  function dropTwins(keep: (twin: Twin) => boolean = () => false) {
+    for (const [key, twin] of twins) {
+      if (keep(twin)) continue
+      twin.marker.remove()
+      if (pinsReady && !destroyed) map.removeFeatureState({ source: twin.source, id: twin.id })
+      twins.delete(key)
+    }
   }
-  // Fading pins nobody can see would still repaint the whole map on every
-  // frame: after each change the map keeps drawing for the 300 ms it gives
-  // its symbols to settle, and the next change comes sooner. Whether a
-  // pending pin is on screen is only known once the map has drawn, so it is
-  // assumed after anything that can change it and checked a moment later —
-  // by a timer, since a blinking map never reports idle and one waiting for
-  // street tiles does not either. The wait lets the map place the pins of
-  // the new view first.
+  // Whether the pin a twin covers is still drawn where the twin is.
+  const stillDrawn = (twin: Twin) => {
+    const sighting = drawn.find((s) => s.id === twin.id)
+    if (!sighting || sighting.status !== 'pending') return false
+    if (sighting.lng !== twin.lng || sighting.lat !== twin.lat) return false
+    if (twin.source === SELECTED) return twin.id === selectedId
+    return twin.id !== selectedId && !overPicked(sighting)
+  }
+  // The map draws the picked pin over every other; a page element is over
+  // the whole map. A pin that touches the picked one goes without a twin.
+  const overPicked = (sighting: MapSightingGeo) => {
+    const picked = drawn.find((s) => s.id === selectedId)
+    if (!picked || picked.id === sighting.id) return false
+    const a = map.project([sighting.lng, sighting.lat])
+    const b = map.project([picked.lng, picked.lat])
+    return Math.abs(a.x - b.x) < PIN_SIZE && Math.abs(a.y - b.y) < PIN_SIZE
+  }
+  function twinOf(sighting: MapSightingGeo, picked: boolean) {
+    const twin = document.createElement('div')
+    twin.className = 'pin-twin'
+    // Decoration: the pin is the map's, and MapLibre would call this a button.
+    twin.setAttribute('role', 'presentation')
+    twin.setAttribute('aria-hidden', 'true')
+    const face = artFailed ? document.createElement('span') : document.createElement('img')
+    if (face instanceof HTMLImageElement) {
+      face.alt = ''
+      face.width = PIN_SIZE
+      face.height = PIN_SIZE
+      face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(pinSvg(sighting.speciesId, picked ? 'selected' : 'pending', colors))}`
+    } else {
+      const { radius, stroke, color, ring } = dotOf(picked ? 'selected' : 'pending')
+      face.style.cssText = `display:block;box-sizing:border-box;width:${2 * (radius + stroke)}px;height:${2 * (radius + stroke)}px;border-radius:50%;background:${color};border:${stroke}px solid ${ring}`
+    }
+    twin.append(face)
+    const blink = () => {
+      face.style.animationDelay = `${blinkDelayMs(performance.now())}ms`
+      face.classList.add('is-blinking')
+    }
+    // A pin is whole until its twin takes its place, and the blink is
+    // wherever the clock has it: the pin would drop to that at once, a
+    // flicker before the slow blink. So the twin arrives whole, eases to
+    // where the blink will be, and only then starts blinking: whatever frame
+    // the browser starts on, there is nothing underneath but a whole pin.
+    const arrive = () => {
+      if (!face.animate) {
+        blink()
+        return
+      }
+      const arrival = face.animate(
+        arrivalOpacities(performance.now()).map((opacity) => ({ opacity })),
+        { duration: ARRIVAL_MS, fill: 'forwards' },
+      )
+      arrival.onfinish = () => {
+        blink()
+        requestAnimationFrame(() => arrival.cancel())
+      }
+    }
+    return { twin, arrive }
+  }
+
+  // Which pending pins are in sight is only known once the map has drawn
+  // them, so the map is asked a moment after anything that can change the
+  // answer — by a timer, since a map waiting for street tiles never reports
+  // idle. The wait lets the map place the pins of the new view first.
   const PLACED_MS = 400
-  let pendingSeen = false
   let lookTimer: number | null = null
-  // On a slow device the first look can still read the previous view's pins,
-  // and a wrong "yes" would keep the blink going unseen: it looks twice.
+  // On a slow device the first look can still read the previous view's pins:
+  // it looks twice.
   const lookSoon = (again = true) => {
     if (lookTimer !== null) window.clearTimeout(lookTimer)
     lookTimer = window.setTimeout(() => {
@@ -324,35 +393,43 @@ export function createBarrioMap(
       [0, 0],
       [clientWidth, Math.max(0, clientHeight - bottomPx)],
     ]
-    return map.queryRenderedFeatures(shown, { layers: [layer] }).length > 0
+    return map.queryRenderedFeatures(shown, { layers: [layer] })
   }
   function lookForPending() {
-    if (!pinsReady || heat) return
+    if (!pinsReady || destroyed) return
     if (lookTimer !== null) window.clearTimeout(lookTimer)
     lookTimer = null
-    pendingSeen = inSight('sighting-pending') || (pickedPending && inSight(SELECTED))
-    syncBlink()
-  }
-  function syncBlink() {
-    const wanted =
-      pinsReady &&
-      !destroyed &&
-      !heat &&
-      document.visibilityState === 'visible' &&
-      !reducedMotion?.matches &&
-      pendingSeen
-    if (wanted && blinkFrame === null) blinkFrame = requestAnimationFrame(tick)
-    if (!wanted && blinkFrame !== null) {
-      cancelAnimationFrame(blinkFrame)
-      blinkFrame = null
-      if (pinsReady && !destroyed) {
-        map.setPaintProperty('sighting-pending', fade(), 1)
-        map.setPaintProperty(SELECTED, fade(), 1)
+    const wanted = new Map<string, { source: string; sighting: MapSightingGeo }>()
+    if (!heat && !reducedMotion?.matches) {
+      for (const feature of inSight('sighting-pending')) {
+        const sighting = drawn.find((s) => s.id === feature.properties.id)
+        if (!sighting || overPicked(sighting)) continue
+        wanted.set(`${SIGHTINGS}:${sighting.id}`, { source: SIGHTINGS, sighting })
+      }
+      const picked = drawn.find((s) => s.id === selectedId)
+      if (picked && pickedPending && inSight(SELECTED).length > 0) {
+        wanted.set(`${SELECTED}:${picked.id}`, { source: SELECTED, sighting: picked })
       }
     }
+    dropTwins((twin) => wanted.has(`${twin.source}:${twin.id}`) && stillDrawn(twin))
+    for (const [key, { source: from, sighting }] of wanted) {
+      if (twins.has(key)) continue
+      const { id, lng, lat } = sighting
+      const { twin, arrive } = twinOf(sighting, from === SELECTED)
+      const marker = new maplibregl.Marker({ element: twin, subpixelPositioning: true })
+        .setLngLat([lng, lat])
+        .addTo(map)
+      arrive()
+      map.setFeatureState({ source: from, id }, { twin: true })
+      twins.set(key, { marker, source: from, id, lng, lat })
+    }
   }
-  document.addEventListener('visibilitychange', syncBlink)
-  reducedMotion?.addEventListener('change', syncBlink)
+  reducedMotion?.addEventListener('change', lookForPending)
+  // A pin joining or leaving a cluster badge mid-zoom would leave its twin
+  // floating, and a turn of the map can bring one over the picked pin: they
+  // come back once the map has settled.
+  map.on('zoomstart', () => dropTwins())
+  map.on('rotatestart', () => dropTwins())
 
   function drawSightings() {
     if (!pinsReady) return
@@ -361,24 +438,27 @@ export function createBarrioMap(
     // those on one spot should pile up there.
     source(HEAT)?.setData(points(sightings))
     drawSelected()
-    pendingSeen = sightings.some((s) => s.status === 'pending')
     lookSoon()
-    syncBlink()
   }
 
   function drawMode() {
     if (!pinsReady) return
     for (const id of PIN_LAYERS) map.setLayoutProperty(id, 'visibility', heat ? 'none' : 'visible')
     map.setLayoutProperty('sighting-heat', 'visibility', heat ? 'visible' : 'none')
-    if (!heat) lookSoon()
-    syncBlink()
+    if (heat) dropTwins()
+    else lookSoon()
   }
 
   // A browser that cannot turn the artwork into images gets the same three
   // layers as plain dots: everything else — taps, selection, the blink, the
   // heat map — works on them unchanged.
   let artFailed = false
-  const fade = () => (artFailed ? 'circle-opacity' : 'icon-opacity')
+  const dotOf = (state: PinState) => ({
+    radius: state === 'selected' ? 10 : 8,
+    stroke: state === 'selected' ? 4 : 2,
+    color: state === 'selected' ? colors.card : state === 'pending' ? colors.warn : colors.accent,
+    ring: state === 'selected' ? colors.accent : colors.card,
+  })
   async function registerPins() {
     // Pixel art is only crisp at whole multiples of its size.
     const ratio = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)))
@@ -430,13 +510,15 @@ export function createBarrioMap(
     map.addSource(SIGHTINGS, {
       type: 'geojson',
       data: EMPTY,
+      // Feature ids, for the state that leaves a pin undrawn under its twin.
+      promoteId: 'id',
       cluster: true,
       clusterRadius: 46,
       clusterMaxZoom: 17,
       clusterProperties: { pending: ['+', ['case', ['==', ['get', 'status'], 'pending'], 1, 0]] },
     })
     map.addSource(HEAT, { type: 'geojson', data: EMPTY })
-    map.addSource(SELECTED, { type: 'geojson', data: EMPTY })
+    map.addSource(SELECTED, { type: 'geojson', data: EMPTY, promoteId: 'id' })
 
     map.addLayer({
       id: 'sighting-heat',
@@ -501,60 +583,46 @@ export function createBarrioMap(
       },
       paint: { 'text-color': onAccent },
     })
-    const still = { duration: 0, delay: 0 }
     const pin = (state: PinState): maplibregl.SymbolLayerSpecification['layout'] => ({
       'icon-image': ['concat', 'pin-', ['get', 'species'], `-${state}`],
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
     })
-    const dot = (color: string, ring: string, picked = false) => ({
-      'circle-radius': picked ? 10 : 8,
-      'circle-color': color,
-      'circle-stroke-width': picked ? 4 : 2,
-      'circle-stroke-color': ring,
-      'circle-opacity': 1,
-      'circle-opacity-transition': still,
-    })
+    const dot = (state: PinState): maplibregl.CircleLayerSpecification['paint'] => {
+      const { radius, stroke, color, ring } = dotOf(state)
+      return {
+        'circle-radius': radius,
+        'circle-color': color,
+        'circle-stroke-width': stroke,
+        'circle-stroke-color': ring,
+        'circle-opacity': UNDER_TWIN,
+        'circle-stroke-opacity': UNDER_TWIN,
+      }
+    }
     const drawnAs = [
-      { id: 'sighting-points', state: 'validated', filter: unpicked('approved') },
-      { id: 'sighting-pending', state: 'pending', filter: unpicked('pending') },
+      {
+        id: 'sighting-points',
+        source: SIGHTINGS,
+        state: 'validated',
+        filter: unpicked('approved'),
+      },
+      { id: 'sighting-pending', source: SIGHTINGS, state: 'pending', filter: unpicked('pending') },
+      { id: SELECTED, source: SELECTED, state: 'selected', filter: undefined },
     ] as const
-    for (const { id, state, filter } of drawnAs) {
+    for (const { id, source: from, state, filter } of drawnAs) {
+      const which = filter ? { filter } : {}
       if (artFailed) {
-        const color = state === 'pending' ? colors.warn : colors.accent
-        map.addLayer({
-          id,
-          type: 'circle',
-          source: SIGHTINGS,
-          filter,
-          paint: dot(color, colors.card),
-        })
+        map.addLayer({ id, type: 'circle', source: from, ...which, paint: dot(state) })
       } else {
         map.addLayer({
           id,
           type: 'symbol',
-          source: SIGHTINGS,
-          filter,
+          source: from,
+          ...which,
           layout: pin(state),
-          paint: { 'icon-opacity': 1, 'icon-opacity-transition': still },
+          paint: { 'icon-opacity': UNDER_TWIN },
         })
       }
-    }
-    if (artFailed) {
-      map.addLayer({
-        id: SELECTED,
-        type: 'circle',
-        source: SELECTED,
-        paint: dot(colors.card, colors.accent, true),
-      })
-    } else {
-      map.addLayer({
-        id: SELECTED,
-        type: 'symbol',
-        source: SELECTED,
-        layout: pin('selected'),
-        paint: { 'icon-opacity': 1, 'icon-opacity-transition': still },
-      })
     }
 
     for (const id of TAP_LAYERS) {
@@ -563,9 +631,7 @@ export function createBarrioMap(
     }
   }
 
-  map.on('idle', () => {
-    if (lookTimer !== null || blinkFrame === null) lookForPending()
-  })
+  map.on('idle', lookForPending)
 
   map.on('load', () => {
     addMeLayers()
@@ -745,6 +811,15 @@ export function createBarrioMap(
       intent++
       sightings = next
       drawn = fanOut(next)
+      // Who is where decides the clusters. When that changes, a pin with a
+      // twin may be inside a badge once the map has drawn the new data: the
+      // twins wait for the look that follows.
+      const places = drawn
+        .map((s) => `${s.id}@${s.lng},${s.lat}`)
+        .sort()
+        .join(' ')
+      if (places !== placed) dropTwins()
+      placed = places
       drawSightings()
     },
 
@@ -839,9 +914,8 @@ export function createBarrioMap(
     destroy() {
       destroyed = true
       if (lookTimer !== null) window.clearTimeout(lookTimer)
-      syncBlink()
-      document.removeEventListener('visibilitychange', syncBlink)
-      reducedMotion?.removeEventListener('change', syncBlink)
+      dropTwins()
+      reducedMotion?.removeEventListener('change', lookForPending)
       stopAttributionFold()
       map.remove()
     },

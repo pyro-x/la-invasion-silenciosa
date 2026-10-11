@@ -366,6 +366,16 @@ body {
     opacity: 0.25;
   }
 }
+/* The twin of a pending pin: the map does not draw the pin while it has one. */
+.pin-twin {
+  pointer-events: none;
+}
+.pin-twin > * {
+  display: block;
+}
+.pin-twin > .is-blinking {
+  animation: blinkdot 1.4s ease-in-out infinite;
+}
 @keyframes slidein {
   from {
     transform: translateY(14px);

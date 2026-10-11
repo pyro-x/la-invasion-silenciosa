@@ -46,3 +46,9 @@ while working on something else.
 **Proposal:** measure item 5 on a real phone first — it is the only one that could matter to every user; fix 1, 2 and 7 together in the controller; 3, 4, 6 and 8 as they come up. Decide by 2026-10-23: schedule it or demote it to `post-mvp`.
 **RESOLVED 2026-10-09 (LCHP-42, D-063 Addendum 5):** 1, 2, 3, 6 and 7 fixed. 5: measured without a GPU, and the blink now rests while no pending pin is drawn on screen; its cost with one in view, measured by David on two phones (a third and a fifth of the main thread), is LCHP-43. 4: left as it is, with the reason recorded. 8: Firefox converts the artwork; Safari on a real iPhone 12 draws the pins.
 
+## [LCHP-44] — Map: MapLibre threw from `queryRenderedFeatures` under a burst of operations
+
+**Problem:** MapLibre 5.24 threw once from `queryRenderedFeatures`: `Out of bounds. Index requested n=0 can't be >= this._numberToString.length 0`, in `loadMatchingFeature`. It came from a reviewer's own whole-viewport query, 2 s after a stress run of 200 controller operations fired 0–60 ms apart (refreshes, picks, zooms, turns of the map, heat mode, resizes) had ended. The app does not produce that kind of input. Not checked: whether the error persists once it has happened, and whether the controller's own queries can hit it. Neither is guarded: the look that decides which pending pins blink (`inSight` in `createBarrioMap.ts`) and the tap handler, which predates LCHP-43.
+
+**Context:** found by the Opus seat in round 3 of the LCHP-43 review (PR #47), with its probe harness against the real controller on a stub map style. Outside that PR's scope.
+**Proposal:** try to reproduce it against the real controller. If input the app can produce reaches it, make a throw from either query a missed look or a lost tap instead of an uncaught error, and report it upstream if it is MapLibre's; if not, close with the reason. Decide by 2026-10-25: schedule it or demote it to `post-mvp`.
