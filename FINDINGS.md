@@ -59,3 +59,9 @@ while working on something else.
 
 **Context:** David could not open the LCHP-43 preview to check it before merging. Outside any ticket's scope.
 **Proposal:** the next time it happens, run the outside probes while it is failing, on consumer networks, and note the provider. If it is the match-day block, neighbours on the affected providers cannot open the app on weekend afternoons and evenings; the ways out (a custom domain, another host for the static site, or accepting it) touch the locked stack and possibly the free tier, so they are David's decision. Decide by 2026-10-25: schedule it or demote it to `post-mvp`.
+
+## [LCHP-48] — Product spec §6 «Mapa» still describes a legend and a pin card with street and author
+
+**Problem:** `reglas-y-especificacion.md`, screen «2 · Mapa», says the map has a «leyenda de las 5 criaturas» and that a pin opens a card with «criatura, calle, autor, estado». The brief §18 records that there is no legend (D-061), and D-046 that the map shows neither author nor street. The app follows the decisions; the product spec is stale.
+**Context:** found during LCHP-47 while updating the four-species enumerations. That ticket changed the count in the sentence (4 → 5) and left the rest.
+**Proposal:** rewrite the «2 · Mapa» bullets to match brief §18 and D-046. Docs-only PR.

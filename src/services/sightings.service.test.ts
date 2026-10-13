@@ -14,6 +14,8 @@ import { ensureSession } from '@/lib/session'
 const SPECIES_ROWS = [
   { id: 'uuid-candadin', slug: 'candadin' },
   { id: 'uuid-turistox', slug: 'turistox' },
+  // active in the database, but this build has no artwork for it
+  { id: 'uuid-newer', slug: 'gentrificator' },
 ]
 
 const VIEW_ROWS = [
@@ -44,6 +46,15 @@ const VIEW_ROWS = [
     status: 'approved',
     verification_count: 1,
     created_at: '2026-07-06T09:00:00Z',
+  },
+  {
+    id: 's4',
+    species_id: 'uuid-newer',
+    lat_public: 40.412,
+    lng_public: -3.709,
+    status: 'approved',
+    verification_count: 2,
+    created_at: '2026-07-06T08:00:00Z',
   },
 ]
 
@@ -98,7 +109,7 @@ beforeEach(() => {
 describe('sightings service · public view → map model', () => {
   it('resolves species_id to slug and drops unresolvable rows', async () => {
     const result = await listMapSightings()
-    expect(result).toHaveLength(2) // s3 (unknown species) dropped
+    expect(result.map((s) => s.id)).toEqual(['s1', 's2']) // s3 (no such species) and s4 (no artwork) dropped
     expect(result[0]).toEqual({
       id: 's1',
       speciesId: 'candadin',

@@ -461,6 +461,18 @@ describe('map screen', () => {
       expect(rings()).toBe(1)
     })
 
+    it('says what a Localín is in one line, as the species list does', async () => {
+      const user = userEvent.setup()
+      listMapSightingsMock.mockResolvedValue([{ ...FIXTURES[1], speciesId: 'localin' }])
+      renderRoute('/mapa')
+      const sheet = within(await screen.findByRole('region', { name: 'Avistamientos cerca de ti' }))
+      await user.click(await screen.findByRole('button', { name: 'pin s-pending' }))
+      expect(
+        sheet.getByText('Antiguo comercio de barrio convertido en alojamiento turístico.'),
+      ).toBeInTheDocument()
+      expect(sheet.queryByText(/ahora hay maletas/)).not.toBeInTheDocument()
+    })
+
     it('picking the same creature again from the list still scrolls up to its card', async () => {
       const user = userEvent.setup()
       renderRoute('/mapa')

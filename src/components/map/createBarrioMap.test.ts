@@ -904,7 +904,7 @@ describe('createBarrioMap', () => {
 
     it('registers one image per creature and state before any pin layer', async () => {
       await mountReady()
-      expect(recorded.images).toHaveLength(12)
+      expect(recorded.images).toHaveLength(15)
       expect(recorded.images.map((image) => image.name)).toContain('pin-keymon-pending')
       expect(new Set(recorded.images.map((image) => image.pixelRatio)).size).toBe(1)
     })

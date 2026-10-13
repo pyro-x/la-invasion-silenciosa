@@ -88,12 +88,13 @@ Notes:
 
 ## Seeds: two kinds, deliberately
 
-- **Reference data the product needs everywhere** (the 4 species,
-  `app_config.validation_threshold`) lives in a **migration** (0002,
-  idempotent `ON CONFLICT` upserts) — so hosted gets it too.
+- **Reference data the product needs everywhere** (the species,
+  `app_config.validation_threshold`) lives in **migrations** (0002 for
+  the first four species, 0008 for Localín; idempotent `ON CONFLICT`
+  upserts) — so hosted gets it too. A new species is a new migration,
+  never an edit to an applied one.
 - **`supabase/seed.sql`** is local-only convenience (runs on `db reset`,
-  never on hosted). We currently keep test/dev data out of it; it may
-  gain fake sightings for local development later.
+  never on hosted): fake sightings for the dev map.
 
 ## Local vs hosted: when to use which
 
