@@ -1,4 +1,5 @@
 // Typed fake service (D-007): prototype profile, levels and badges (data.jsx).
+import { getDemoAlias } from '@/lib/demoAlias'
 import type { Badge, Level, Profile } from '@/types/profile'
 
 export const LEVELS: Level[] = [
@@ -13,8 +14,7 @@ export function levelForPoints(points: number): Level {
   )
 }
 
-const PROFILE: Profile = {
-  alias: 'pyroxine',
+const PROFILE: Omit<Profile, 'alias'> = {
   points: 45,
   weekRank: 6,
   color: '#e23b3b',
@@ -34,7 +34,7 @@ const BADGES: Badge[] = [
 ]
 
 export async function getProfile(): Promise<Profile> {
-  return PROFILE
+  return { ...PROFILE, alias: getDemoAlias() }
 }
 
 export async function getBadges(): Promise<Badge[]> {
