@@ -23,8 +23,8 @@ export function EquipmentGate({ arming, onArm, onSkip }: Props) {
           ¡Prepara tu equipo!
         </h2>
         <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-dim)' }}>
-          Para cazar necesitas la <strong>cámara</strong>. Tu <strong>ubicación</strong> es
-          opcional: sitúa el pin por ti (si no, lo colocas a mano).
+          Para cazar necesitas la <strong>cámara</strong> y tu <strong>ubicación</strong>: una
+          criatura solo se registra estando junto a ella.
         </p>
       </div>
 

@@ -10,6 +10,7 @@ import {
   type LngLat,
   type MePosition,
 } from './createBarrioMap'
+import { isVague } from '@/lib/proximity'
 import type { MapSightingGeo } from '@/types/sighting'
 
 /**
@@ -20,6 +21,13 @@ export type MapFocus = LngLat & { id?: string }
 
 // Close enough to read street names around the user's position.
 const FOLLOW_MIN_ZOOM = 17
+// A vague position does not deserve a street-level zoom.
+const VAGUE_ZOOM = 15
+// GPS noise of a few decimetres is not worth a map move.
+const NOISE_M = 0.7
+// How long the map is left alone after the neighbour's hand before it may
+// go back to following by itself.
+export const RESUME_IDLE_MS = 10_000
 
 type Props = {
   sightings: MapSightingGeo[]
@@ -30,8 +38,16 @@ type Props = {
   onMapTap: () => void
   onUserMove: () => void
   me: MePosition | null
+  /** Metres the neighbour can act within: drawn as a ring around `me`. */
+  rangeM: number | null
   /** Keep the map centred on `me` as fixes arrive. */
   follow: boolean
+  /**
+   * Following may come back by itself: once the map has been left alone for
+   * a while and the neighbour has walked out of what it shows.
+   */
+  mayResumeFollow: boolean
+  onResumeFollow: () => void
   /** Counts the taps on «Ir a mi posición»: each one zooms in again. */
   followRequest: number
   bottomPadding: number
@@ -48,7 +64,10 @@ export function BarrioMap({
   onMapTap,
   onUserMove,
   me,
+  rangeM,
   follow,
+  mayResumeFollow,
+  onResumeFollow,
   followRequest,
   bottomPadding,
   focus,
@@ -58,10 +77,16 @@ export function BarrioMap({
   // Effects run in order, so by the time the ones below fire the controller
   // exists; StrictMode's remount re-runs them all against the new one.
   const controller = useRef<BarrioMapController | null>(null)
-  const handlers = useRef({ onPick, onMapTap, onUserMove })
+  const handlers = useRef({ onPick, onMapTap, onUserMove, onResumeFollow })
+  // Which tap on «Ir a mi posición» the map has already zoomed in for, and
+  // whether it still owes that tap the street-level zoom.
+  const zoomedFor = useRef<number | null>(null)
+  const streetOwed = useRef(false)
+  // When the neighbour last moved the map or changed what is picked.
+  const touchedAt = useRef(0)
 
   useEffect(() => {
-    handlers.current = { onPick, onMapTap, onUserMove }
+    handlers.current = { onPick, onMapTap, onUserMove, onResumeFollow }
   })
 
   useEffect(() => {
@@ -69,12 +94,23 @@ export function BarrioMap({
     const created = createBarrioMap(containerRef.current, {
       onPick: (id) => handlers.current.onPick(id),
       onMapTap: () => handlers.current.onMapTap(),
-      onUserMove: () => handlers.current.onUserMove(),
+      onUserMove: () => {
+        touchedAt.current = Date.now()
+        handlers.current.onUserMove()
+      },
+      // The wait before following returns counts from the hand leaving the
+      // map, not from it landing: a drag can last longer than the wait.
+      onUserSettled: () => {
+        touchedAt.current = Date.now()
+      },
     })
     controller.current = created
     return () => {
       created.destroy()
       controller.current = null
+      // The next controller owes the zoom-in again (StrictMode's remount).
+      zoomedFor.current = null
+      streetOwed.current = false
     }
   }, [])
 
@@ -83,6 +119,7 @@ export function BarrioMap({
   }, [sightings])
 
   useEffect(() => {
+    touchedAt.current = Date.now()
     controller.current?.setSelected(selectedId)
   }, [selectedId])
 
@@ -91,8 +128,8 @@ export function BarrioMap({
   }, [heat])
 
   useEffect(() => {
-    controller.current?.setMe(me)
-  }, [me])
+    controller.current?.setMe(me, rangeM)
+  }, [me, rangeM])
 
   useEffect(() => {
     controller.current?.setBottomPadding(bottomPadding)
@@ -104,18 +141,53 @@ export function BarrioMap({
 
   // Zooming in is part of asking for the position, not of staying on it:
   // later fixes only recentre, so a neighbour who zooms out is not pulled
-  // back in every few seconds.
-  const zoomedFor = useRef<number | null>(null)
+  // back in every few seconds. The street-level zoom waits for a fix that
+  // deserves it: a vague one only gets as close as the barrio.
+  // A neighbour who took the map before the zoom-in happened has spent it:
+  // following that returns by itself only recentres.
   useEffect(() => {
-    if (!follow || !me) return
-    const asked = zoomedFor.current !== followRequest
-    zoomedFor.current = followRequest
-    controller.current?.follow(me, asked ? FOLLOW_MIN_ZOOM : undefined)
+    const map = controller.current
+    if (!me || !map) return
+    if (!follow) {
+      zoomedFor.current = followRequest
+      streetOwed.current = false
+      return
+    }
+    const vague = isVague(me)
+    if (zoomedFor.current !== followRequest) {
+      zoomedFor.current = followRequest
+      streetOwed.current = vague
+      map.follow(me, vague ? VAGUE_ZOOM : FOLLOW_MIN_ZOOM)
+      return
+    }
+    if (streetOwed.current && !vague) {
+      streetOwed.current = false
+      map.follow(me, FOLLOW_MIN_ZOOM)
+      return
+    }
+    if (map.metresFromCentre(me) < NOISE_M) return
+    map.follow(me)
   }, [follow, me, followRequest])
 
+  // Before the effect below: a press on a zoom button is a touch.
   useEffect(() => {
-    if (zoomStep) controller.current?.zoomBy(zoomStep.delta)
+    if (!zoomStep) return
+    touchedAt.current = Date.now()
+    controller.current?.zoomBy(zoomStep.delta)
   }, [zoomStep])
+
+  // Alcorqueando's rule: a neighbour who dragged the map to look around and
+  // then walked on gets the map back without asking for it. Judged when a
+  // position arrives, as there: the watch brings one at least every 20 s.
+  useEffect(() => {
+    const map = controller.current
+    if (follow || !mayResumeFollow || !me || !map || rangeM === null) return
+    // A drag or a pinch can last longer than the wait: never under a hand.
+    if (map.isMoving()) return
+    if (Date.now() - touchedAt.current < RESUME_IDLE_MS) return
+    if (map.metresFromCentre(me) <= rangeM) return
+    handlers.current.onResumeFollow()
+  }, [follow, mayResumeFollow, me, rangeM])
 
   return <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 }

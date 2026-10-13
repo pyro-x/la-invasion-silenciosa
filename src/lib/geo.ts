@@ -23,15 +23,15 @@ export function isWithinLaLatina(lat: number, lng: number): boolean {
 }
 
 export type GeoFix =
-  | { kind: 'ok'; lat: number; lng: number; accuracyM: number }
+  | { kind: 'ok'; lat: number; lng: number; accuracyM: number; /** When it was read. */ at: number }
   | { kind: 'denied' }
   | { kind: 'unavailable' }
 
 /**
  * One-shot position fix. Must be called from a user gesture (LCHP-5/LCHP-14
  * decision: the native permission prompt fires on tap, never on load).
- * Never rejects — denial and absence are ordinary outcomes with a manual-pin
- * fallback, not exceptions.
+ * Never rejects — denial and absence are ordinary outcomes the caller
+ * explains, not exceptions.
  */
 export function getGeoFix(): Promise<GeoFix> {
   return new Promise((resolve) => {
@@ -46,6 +46,7 @@ export function getGeoFix(): Promise<GeoFix> {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracyM: position.coords.accuracy,
+          at: Date.now(),
         }),
       // code 1 = PERMISSION_DENIED (the constant itself may be absent in
       // non-browser test environments).

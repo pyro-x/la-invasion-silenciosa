@@ -1111,7 +1111,8 @@ Ficha de detalle: especie · estado · antigüedad ·
 (verificado: exactamente 1 petición a Storage, solo tras pedirla;
 un avistamiento sin foto muestra un aviso amable)
 ↓
-«Verificar» → «próximamente» (la transacción real es LCHP-15)
+«Verificar» → modal de verificación (implementado en LCHP-15, §20;
+desde LCHP-49 solo estando cerca de la criatura)
 ```
 
 La foto es evidencia bajo demanda, no contenido principal del mapa. El
@@ -1203,7 +1204,11 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   camino). El encuadre inicial usa la primera altura medida de la hoja y
   no se repite si la lista crece después; en móvil vertical el encuadre lo
   limita el ancho, así que no se nota.
-* **«Ir a mi posición»** (`src/lib/geoWatch.ts`, portado de Alcorqueando):
+* **«Ir a mi posición»** (`src/lib/geoWatch.ts`, portado de Alcorqueando)
+  — *enmendado por LCHP-49: desde entonces el mapa sigue al vecino por
+  defecto y los avisos no esperan a un toque; ver «Se juega donde estás»
+  más abajo. Lo que sigue describe el mecanismo, que no cambia, y marca en
+  su sitio las dos frases que sí cambian*:
   el permiso nativo se pide **solo al tocar el botón, nunca al cargar**
   (D-052). Con posición: punto verde + círculo de precisión, y el mapa la
   sigue hasta que el vecino arrastra el mapa, hace zoom con los dedos o la
@@ -1225,22 +1230,26 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   gesto del vecino — no guarda su zoom intermedio (el gesto guarda luego
   lo suyo). En una
   visita posterior **el punto reaparece** sin preguntar solo si el
-  navegador confirma que el permiso sigue concedido; el mapa **no** se
-  recentra solo (seguir exige tocar el botón). Al volver de segundo plano
+  navegador confirma que el permiso sigue concedido. Hasta LCHP-49 el mapa
+  no se recentraba solo (seguir exigía tocar el botón); desde entonces esa
+  primera posición también lleva el mapa hasta el vecino. Al volver de segundo plano
   la observación se reanuda **solo si el navegador afirma que el permiso
   sigue concedido**. Si va a preguntar de nuevo (un permiso «solo esta
   vez» caducado) o no sabe decirlo (sin API de permisos; Safari, que
   responde «preguntar» a casi todo), se pausa en vez de arriesgar el aviso
-  nativo sin toque, y la hoja dice «Toca «Ir a mi posición» para volver a
-  ver dónde estás.» En el iPhone de David (2026-10-09) el punto seguía
+  nativo sin toque, y la hoja dice «Para seguir jugando, el mapa tiene que
+  volver a saber dónde estás.» con el botón **Usar mi ubicación** (texto de
+  LCHP-49; antes remitía al botón «Ir a mi posición»). En el iPhone de David (2026-10-09) el punto seguía
   ahí al cambiar de app y volver; no se anotó la versión de iOS ni si la
   observación se reanudó o nunca llegó a pausarse, así que no está medido
   cuántas veces ocurre la pausa en otros iPhone. Al salir de la pantalla se deja
   de observar y se olvida la posición (también en memoria). Los avisos
   (denegado → cómo permitirlo, texto por plataforma; sin señal; **fuera de
   La Latina no se muestra ni se sigue la posición**) se ven en la cabecera
-  de la hoja, plegada o no, y **solo tras tocar el botón**: una
-  observación reanudada al llegar no saluda con un aviso.
+  de la hoja, plegada o no. Hasta LCHP-49 solo tras tocar el botón; desde
+  entonces **sin esperar a un toque**, también con una observación
+  reanudada al llegar, porque dicen por qué no se puede jugar (ver «Se
+  juega donde estás»).
 * **Privacidad de la posición del vecino:** no se envía a nuestros
   servidores ni se guarda. La vista recordada (abajo) solo registra
   movimientos hechos por el vecino, nunca los de la app, y **no registra
@@ -1360,6 +1369,171 @@ Capturas de referencia de esta pantalla (sustituyen a `captura_03`,
 `captura_29` y `captura_30` como base de comparación, D-058): se generan
 con el loop visual sobre la app compilada y se adjuntan al PR.
 
+### Se juega donde estás (LCHP-49 — enmienda 2026-10-13, D-069) `Decidido`
+
+Decisión de David (2026-10-13): el juego se juega en la calle, como
+Alcorqueando. Enmienda D-061 (seguir solo tras un toque) y D-052 (GPS
+opcional, pin a mano en cualquier punto del barrio).
+
+**Las reglas viven en un solo sitio**, `src/lib/proximity.ts`
+(`PLAY_RULES`), y parten de las de Alcorqueando (`RULES` en su
+`config.js`):
+
+| Regla | Valor | Origen |
+|---|---|---|
+| Distancia máxima entre el vecino y el pin al capturar | 50 m | `maxDistance` |
+| Distancia máxima a un avistamiento pendiente para verificarlo | 85 m | 50 m + los ~35 m que la rejilla pública puede desplazar un pin |
+| Error de GPS a partir del cual la posición no sirve | 150 m | `blockAccuracy` |
+| Error de GPS a partir del cual la insignia avisa | 30 m | `warnAccuracy` |
+| Edad a partir de la cual la posición se muestra como antigua | 2 min | `renderDock()` |
+
+Son valores de partida: se ajustan tras caminar el barrio (las calles de
+La Latina son estrechas y el GPS allí es peor que en una acera abierta).
+
+**Todo se comprueba en el navegador**, igual que en Alcorqueando (su
+worker es un proxy y no mide nada). No hay migración ni cambio en RLS, en
+el `INSERT` de `verifications` (D-038) ni en la Edge Function: un cliente
+modificado puede saltarse la regla, y un GPS falseado también pasaría una
+comprobación en servidor. Si el piloto muestra abuso, la comprobación en
+servidor es un ticket propio y entra en la zona crítica.
+
+**Las distancias se miden contra la coordenada pública** del avistamiento,
+la única que tiene el navegador (D-046). Medir contra la exacta en
+servidor convertiría «¿puedo verificar desde aquí?» en una forma de
+localizar el punto exacto caminando alrededor, que es lo que la rejilla
+evita; por eso el radio de verificación incluye el margen de la rejilla.
+En la lista se redondean a decenas de metros: es lo que la rejilla
+permite afirmar.
+
+**La posición del vecino no sale del móvil.** Se usa para dibujar, ordenar
+y decidir qué se puede hacer; no se envía ni se guarda (sigue valiendo lo
+dicho arriba sobre la vista recordada). La única coordenada que llega al
+servidor es la del pin de captura, como antes.
+
+**El mapa sigue al vecino por defecto.** `MapPage` arranca con el
+seguimiento activo: la primera posición lleva el mapa hasta él a z17,
+venga de un toque o de una observación reanudada al llegar (antes, al
+reanudar solo aparecía el punto). El permiso nativo **sigue sin pedirse al
+cargar** (D-052 en esto no cambia; iOS solo muestra la pregunta con
+fiabilidad tras un gesto). Se resuelve como en Alcorqueando, con la
+cabecera de la hoja haciendo de panel (`locatePanel`):
+
+* sin posición: «Para jugar, el mapa tiene que saber dónde estás.» +
+  **Usar mi ubicación** (ese toque es el gesto que arranca la observación);
+* buscando: «Buscando tu posición… Si el navegador pregunta, pulsa
+  «Permitir».»;
+* denegado, sin señal o pausado al volver de segundo plano: el texto de
+  cada caso + **Reintentar** / **Usar mi ubicación**;
+* posición poco precisa: «Tu ubicación es poco precisa (± 180 m).» + cómo
+  arreglarlo por plataforma (`precisionGuidance`);
+* fuera de La Latina: «Estás fuera de La Latina: puedes mirar el mapa,
+  pero para cazar o verificar hay que estar en el barrio.»
+
+Los avisos ya no esperan a un toque (antes una observación reanudada no
+saludaba con ninguno): ahora dicen por qué no se puede jugar. Todos se
+pueden cerrar, para quien solo quiere mirar.
+
+Lo demás del seguimiento, portado de `followMe()` y del manejador `onGeo`
+de Alcorqueando, vive en `BarrioMap.tsx`:
+
+* un movimiento menor de 0,7 m es ruido del GPS y no mueve el mapa;
+* una posición poco precisa solo acerca hasta z15; el zoom de calle (z17)
+  queda pendiente y lo da la primera posición buena. Mientras sigan
+  llegando posiciones poco precisas solo la primera acerca: las demás
+  recentran, como cualquier posición posterior;
+* **el seguimiento vuelve solo** cuando el mapa lleva 10 s sin tocarse y
+  el vecino está a más del radio del centro del mapa. A diferencia de
+  Alcorqueando, **nunca mientras haya una criatura elegida**: una ficha
+  que se está leyendo no se va de la pantalla (era la objeción de D-061 al
+  seguimiento por defecto). Elegir o cerrar una ficha y pulsar +/− cuentan
+  como tocar el mapa, y **los 10 s se cuentan desde que la mano lo suelta**,
+  no desde que lo coge. «Fuera de lo que muestra» es una distancia, no lo
+  que cabe en pantalla: más del radio (85 m) entre el vecino y el centro
+  del mapa, con el zoom que sea. Volver a seguir no vuelve a acercar el
+  zoom, tampoco si el vecino movió el mapa antes de la primera posición.
+
+**Lo que se dibuja:** alrededor del punto del vecino, un anillo a trazos
+con el radio de verificación (capa `me-range`, bajo el halo del punto), y
+en la cabecera de la lista la insignia de precisión (`PrecisionBadge`):
+«± 12 m», en color de aviso por encima de 30 m, y «Posición de hace 3 min»
+cuando la posición tiene dos minutos o más. El mismo componente se usa en
+el paso de ubicación de la captura.
+
+**La lista «Cerca de ti»** se ordena por distancia cuando hay una posición
+utilizable, y cada fila la muestra («a 80 m · hace 35 min»); los empates a
+la misma decena quedan del más reciente al más antiguo, así el ruido del
+GPS no baraja la lista. Sin posición (o con una poco precisa) queda del
+más reciente al más antiguo, sin distancias, y la cabecera dice «En el
+barrio».
+
+**Verificar exige estar allí.** Tocar una fila o un pin sigue llevando el
+mapa hasta él. El botón «Verificar» de la fila (la segunda puerta de
+LCHP-15) solo existe en las filas dentro del radio; el de la ficha se ve
+siempre en un pendiente, deshabilitado fuera del radio y con el motivo
+debajo: «Está a 400 m de ti. Acércate a menos de 85 m para verificar.»,
+«Tu ubicación es poco precisa (± 180 m) para verificar.» o «Activa tu
+ubicación para verificar: hay que estar junto a la criatura.» «Ver
+evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
+
+**Lo que cerró la revisión (ronda 1, D-069 Addendum 1):**
+
+* La ventana de verificación abierta **deja de permitir confirmar** si el
+  vecino sale del radio, o su posición deja de servir, con ella abierta:
+  «Confirmar» se deshabilita y la ventana dice por qué. No se cierra sola
+  (una posición que baila en el borde la haría aparecer y desaparecer).
+* **Fuera de La Latina no se juega aunque la criatura esté al lado:** un
+  vecino justo fuera del marco no verifica una criatura del borde
+  («Estás fuera de La Latina: desde ahí no se puede verificar.») ni
+  registra una con el pin dentro.
+* **El encuadre inicial ya no puede dejar el mapa en el barrio** si la
+  primera posición llegó antes de conocerse la altura de la hoja: tras
+  encuadrar, el mapa vuelve a donde lo había mandado el seguimiento. Sigue
+  descartándose cualquier otro movimiento anterior al encuadre.
+* La posición que cachea la puerta del equipo **conserva la hora en que se
+  leyó**: si pasan minutos entre la puerta y el paso de ubicación, la
+  insignia dice «Posición de hace N min». Una posición antigua avisa, no
+  bloquea (igual que en Alcorqueando).
+* El seguimiento **no vuelve solo mientras el mapa se mueve**: un arrastre
+  o un pellizco que dure más de 10 s no se interrumpe.
+* El regreso del seguimiento se evalúa **cuando llega una posición**, como
+  en Alcorqueando, no con un temporizador: la observación trae una al menos
+  cada 20 s.
+
+**Ronda 2 (D-069 Addendum 2):**
+
+* Los 10 s de espera se contaban desde el inicio del gesto: al soltar un
+  arrastre largo el mapa volvía al instante. Ahora cuentan desde que
+  termina (el controlador avisa con `onUserSettled`), y los botones +/−
+  también cuentan.
+* Un aviso cerrado sigue cerrado mientras sea el mismo aviso con otros
+  números («poco precisa (± 180 m)» → «(± 172 m)»).
+* La posición leída en el paso de ubicación se guarda en la página: salir
+  del paso y volver ya no juzga contra la posición más antigua de la
+  puerta del equipo.
+* Un pin apenas fuera del radio ya no lee «a 50 m de ti. El máximo son
+  50 m»: la distancia que se muestra al rechazar se redondea hacia arriba.
+* Un cúmulo abierto, o un pin elegido, antes de medirse la hoja ya no lo
+  deshace el encuadre inicial.
+
+**Decidido y anotado, no cambiado:**
+
+* **Una posición antigua avisa, no bloquea**, tampoco al verificar
+  (**confirmado por David, 2026-10-13**). Si la
+  observación deja de recibir posiciones (solo errores de tiempo agotado),
+  o al volver de segundo plano con una de hasta diez minutos, «Verificar»
+  sigue disponible con la última conocida y la insignia dice su edad. Es
+  lo que hace Alcorqueando; si el paseo muestra que hace falta, bloquear
+  por encima de `stalePositionMs` es un cambio de una línea.
+* **Una verificación guardada dice ahora algo más:** que quien la hizo
+  estaba a unos 85 m de esa coordenada pública a esa hora. La posición
+  sigue sin enviarse, pero esa deducción es nueva para quien verifica (el
+  autor de un avistamiento ya la tenía). Se queda en `verifications`, que
+  no es pública.
+
+**No verificado:** GPS real en las calles de La Latina, ni el aviso de
+permiso en iPhone y Android con este flujo. Queda para el paseo de David
+con la preview.
+
 ## 19. Flujo de captura
 
 ### Implementado (LCHP-14 + LCHP-28 — enmienda 2026-07-06) `Decidido`
@@ -1389,7 +1563,13 @@ debajo del pin (D-052); si la puerta cacheó un fix GPS, abre ya
 centrado en ti. «Usar mi ubicación» dispara getCurrentPosition EN EL
 TAP; si code=1 / no disponible → guía POR PLATAFORMA (iOS: Ajustes →
 Privacidad y seguridad → Localización → Sitios web de Safari; resto:
-el candado del navegador) y el pin manual sigue funcionando.
+el candado del navegador).
+Desde LCHP-49 (D-069) hace falta posición: el pin se puede ajustar a mano
+solo a menos de 50 m del vecino («Ese punto está a 120 m de ti. El máximo
+son 50 m.»); sin posición, o con una peor que ± 150 m, no se continúa.
+Sigue siendo una posición puntual (getGeoFix); la observación continua
+llega con LCHP-36. Lo enviado no cambia: el centro del mapa, con la
+precisión del GPS solo si el vecino no movió el pin.
 Un pin fuera de La Latina bloquea el paso (espejo del bbox servidor)
 ↓
 Revisa y envía → POST /create-sighting (multipart: foto limpia +
@@ -1423,7 +1603,12 @@ Avistamiento pending (ya visible en el mapa con marcador de aviso)
 ↓
 Otro vecino lo confirma desde el modal de verificación
 (dos puertas: la tarjeta del pin y la lista «Cerca de ti»;
- la foto se carga al abrir el modal — la evidencia ES lo que se juzga)
+ la foto se carga al abrir el modal — la evidencia ES lo que se juzga;
+ desde LCHP-49 las dos puertas solo se abren a menos de 85 m de la
+ criatura. Es una puerta de la app, comprobada en el navegador, NO una
+ garantía de presencia: la política del INSERT y el trigger no miden
+ distancia, y un cliente modificado puede saltársela — decisión D-069,
+ §18 «Se juega donde estás»)
 ↓
 ├─ vecino REGISTRADO: la confirmación cuenta
 │  (al alcanzar validation_threshold — 1 en el piloto)

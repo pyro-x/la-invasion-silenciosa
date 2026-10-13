@@ -3,6 +3,10 @@
 // sheet carries the sighting detail and the «Cerca de ti» list, and the map
 // centres itself in the part the sheet leaves free.
 //
+// The game is played where the neighbour stands (LCHP-49, D-069): the map
+// follows their position from the first fix, the pending list is ordered by
+// how far each creature is, and «Verificar» needs them to be there.
+//
 // The map draws the sightings itself: validated ones as the species sprite,
 // pending ones blinking with an amber ring, clusters where they overlap, or
 // a heat map of all of them. The detail shows species · status · age ·
@@ -24,6 +28,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
 import { blinkDelayMs } from '@/components/map/blink'
 import { MapSheet } from '@/components/map/MapSheet'
+import { PrecisionBadge } from '@/components/map/PrecisionBadge'
 import type { MapFocus } from '@/components/map/BarrioMap'
 import { CreatureSprite } from '@/components/pixel/CreatureSprite'
 import { VerifyModal } from '@/components/sightings/VerifyModal'
@@ -37,7 +42,16 @@ import {
   useGeoWatch,
   type GeoWatchState,
 } from '@/lib/geoWatch'
-import { locationSettingsGuidance } from '@/lib/permissions'
+import { locationSettingsGuidance, precisionGuidance } from '@/lib/permissions'
+import {
+  distanceMeters,
+  formatMeters,
+  isVague,
+  PLAY_RULES,
+  presenceAt,
+  roundedDistance,
+  type Presence,
+} from '@/lib/proximity'
 import { getEvidenceUrl, type EvidenceResult } from '@/services/evidence.service'
 import { listMapSightings } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
@@ -91,17 +105,80 @@ const VERIFY_TOASTS: Record<VerifyOutcome['kind'], string> = {
   error: 'No se pudo enviar, inténtalo de nuevo',
 }
 
-// What to tell the neighbour about «dónde estoy», if anything. The map is a
-// barrio game: a position outside La Latina is shown no map to follow.
-function locateNotice(geo: GeoWatchState, outsideBarrio: boolean): string | null {
-  if (geo.kind === 'denied') return locationSettingsGuidance()
-  if (geo.kind === 'unavailable' || geo.kind === 'timeout') {
-    return 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.'
+// What the sheet says about the neighbour's position, and the one thing to
+// do about it (Alcorqueando's dock: ask, searching, error, imprecise). The
+// native prompt is never raised on arrival (D-052): without a position the
+// sheet asks, and the tap on its button is the gesture the browser wants.
+/** `kind` names the notice whatever its numbers say: closing «poco precisa»
+ * at ± 180 m keeps it closed at ± 172 m. */
+type LocatePanel = { kind: string; text: string; action: string | null }
+
+function locatePanel(geo: GeoWatchState, outsideBarrio: boolean): LocatePanel | null {
+  switch (geo.kind) {
+    case 'idle':
+      return {
+        kind: 'ask',
+        text: 'Para jugar, el mapa tiene que saber dónde estás.',
+        action: 'Usar mi ubicación',
+      }
+    case 'paused':
+      return {
+        kind: 'paused',
+        text: 'Para seguir jugando, el mapa tiene que volver a saber dónde estás.',
+        action: 'Usar mi ubicación',
+      }
+    case 'searching':
+      return {
+        kind: 'searching',
+        text: 'Buscando tu posición… Si el navegador pregunta, pulsa «Permitir».',
+        action: null,
+      }
+    case 'denied':
+      return { kind: 'denied', text: locationSettingsGuidance(), action: 'Reintentar' }
+    case 'unavailable':
+    case 'timeout':
+      return {
+        kind: 'no-signal',
+        text: 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.',
+        action: 'Reintentar',
+      }
+    case 'unsupported':
+      return { kind: 'unsupported', text: 'Este navegador no ofrece tu ubicación.', action: null }
+    case 'ok':
+      // The map is a barrio game: a position outside La Latina is shown no
+      // map to follow, and nothing there can be captured or verified.
+      if (outsideBarrio) {
+        return {
+          kind: 'outside',
+          text: 'Estás fuera de La Latina: puedes mirar el mapa, pero para cazar o verificar hay que estar en el barrio.',
+          action: null,
+        }
+      }
+      if (isVague(geo.position)) {
+        return {
+          kind: 'vague',
+          text: `Tu ubicación es poco precisa (± ${formatMeters(geo.position.accuracyM)}). ${precisionGuidance()}`,
+          action: 'Reintentar',
+        }
+      }
+      return null
   }
-  if (geo.kind === 'unsupported') return 'Este navegador no ofrece tu ubicación.'
-  if (geo.kind === 'paused') return 'Toca «Ir a mi posición» para volver a ver dónde estás.'
-  if (outsideBarrio) return 'Estás fuera de La Latina: el mapa se queda en el barrio.'
-  return null
+}
+
+const OUTSIDE_BLOCK = 'Estás fuera de La Latina: desde ahí no se puede verificar.'
+
+// Why «Verificar» is not offered, in the neighbour's terms.
+function verifyBlock(presence: Presence): string | null {
+  switch (presence.kind) {
+    case 'near':
+      return null
+    case 'far':
+      return `Está a ${formatMeters(roundedDistance(presence.distanceM))} de ti. Acércate a menos de ${formatMeters(PLAY_RULES.verifyRadiusM)} para verificar.`
+    case 'vague':
+      return `Tu ubicación es poco precisa (± ${formatMeters(presence.accuracyM)}) para verificar.`
+    case 'unknown':
+      return 'Activa tu ubicación para verificar: hay que estar junto a la criatura.'
+  }
 }
 
 export function MapPage() {
@@ -121,10 +198,9 @@ export function MapPage() {
   const [sheetHeight, setSheetHeight] = useState(0)
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [zoomStep, setZoomStep] = useState<{ delta: number } | null>(null)
-  const [following, setFollowing] = useState(false)
-  // Notices answer a tap. A watch resumed on arrival feeds the same state,
-  // and must not greet the neighbour with «Estás fuera de La Latina».
-  const [askedWhere, setAskedWhere] = useState(false)
+  // On from the start: the first fix takes the map to the neighbour, with
+  // or without a tap (a watch resumed on arrival is followed too).
+  const [following, setFollowing] = useState(true)
   const [pickCount, setPickCount] = useState(0)
   const [locateCount, setLocateCount] = useState(0)
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null)
@@ -212,7 +288,6 @@ export function MapPage() {
   // The native permission prompt fires here and only here: on this tap.
   const locate = () => {
     setDismissedNotice(null)
-    setAskedWhere(true)
     setLocateCount((count) => count + 1)
     setFollowing(true)
     startGeoWatch()
@@ -223,13 +298,32 @@ export function MapPage() {
     const found = species.find((c) => c.id === id)
     return found?.shortDescription ?? found?.description ?? ''
   }
-  const pending = sightings.filter((s) => s.status === 'pending')
   const selS = sightings.find((s) => s.id === sel)
 
   const me = geo.kind === 'ok' ? geo.position : null
   const outsideBarrio = me !== null && !isWithinLaLatina(me.lat, me.lng)
-  const notice = askedWhere ? locateNotice(geo, outsideBarrio) : null
+  const panel = locatePanel(geo, outsideBarrio)
+  const notice = panel?.kind ?? null
   const follow = following && me !== null && !outsideBarrio
+
+  // A position good enough to measure from. Distances go to the public
+  // coordinate of each sighting, the only one the browser has (D-046).
+  const here = me !== null && !isVague(me) ? me : null
+  // Outside La Latina nobody verifies, however close to a creature at the
+  // barrio's edge: there the neighbour is a spectator.
+  const blockOf = (s: MapSightingGeo) =>
+    outsideBarrio ? OUTSIDE_BLOCK : verifyBlock(presenceAt(me, s, PLAY_RULES.verifyRadiusM))
+  const pending = sightings
+    .filter((s) => s.status === 'pending')
+    .map((s) => ({
+      sighting: s,
+      distanceM: here ? roundedDistance(distanceMeters(here, s)) : null,
+      near: blockOf(s) === null,
+    }))
+  // Nearest first; the sort is stable, so creatures the same tens of metres
+  // away stay newest first and GPS jitter does not shuffle the list.
+  if (here) pending.sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
+  const selBlock = selS ? blockOf(selS) : null
 
   // The whole row is the control: the orange counter looks like a button,
   // so it is one.
@@ -240,7 +334,10 @@ export function MapPage() {
       aria-expanded={sheetOpen}
       onClick={() => foldSheet(!sheetOpen)}
     >
-      <span className="eyebrow">Cerca de ti</span>
+      <span className="row" style={{ gap: 8 }}>
+        <span className="eyebrow">{here ? 'Cerca de ti' : 'En el barrio'}</span>
+        {me && <PrecisionBadge accuracyM={me.accuracyM} at={me.at} />}
+      </span>
       {!isError && (
         <span className="chip chip-warn">
           <BlinkRing />
@@ -266,17 +363,22 @@ export function MapPage() {
     </div>
   )
 
-  // In the part of the sheet that stays when it is folded: the answer to a
-  // tap on «Ir a mi posición» must not depend on the list being open.
-  const noticeBox = notice && notice !== dismissedNotice && (
+  // In the part of the sheet that stays when it is folded: what the map
+  // needs from the neighbour must not depend on the list being open.
+  const noticeBox = panel && notice !== dismissedNotice && (
     <div
       className="panel panel-2 pad row"
       role="status"
       style={{ padding: 10, gap: 8, fontSize: 12, boxShadow: 'none' }}
     >
       <span className="grow" style={{ color: 'var(--ink-dim)' }}>
-        {notice}
+        {panel.text}
       </span>
+      {panel.action && (
+        <button type="button" className="chip chip-accent map-locate-ask" onClick={locate}>
+          {panel.action}
+        </button>
+      )}
       <button
         type="button"
         className="chip chip-ghost"
@@ -303,7 +405,10 @@ export function MapPage() {
           onMapTap={() => setSel(null)}
           onUserMove={() => setFollowing(false)}
           me={me && !outsideBarrio ? me : null}
+          rangeM={PLAY_RULES.verifyRadiusM}
           follow={follow}
+          mayResumeFollow={sel === null}
+          onResumeFollow={() => setFollowing(true)}
           followRequest={locateCount}
           bottomPadding={sheetHeight}
           focus={focus}
@@ -429,6 +534,11 @@ export function MapPage() {
                     Parpadea en el mapa hasta que otros vecinos lo confirmen.
                   </p>
                 )}
+                {selS.status === 'pending' && selBlock && (
+                  <p className="map-card-text map-card-hint" role="note">
+                    {selBlock}
+                  </p>
+                )}
                 <div className="row" style={{ gap: 8, marginTop: 12 }}>
                   <button
                     type="button"
@@ -443,6 +553,7 @@ export function MapPage() {
                       type="button"
                       className="btn btn-accent"
                       style={{ flex: 1 }}
+                      disabled={selBlock !== null}
                       onClick={() => setVerifying(true)}
                     >
                       ✔ Verificar
@@ -461,9 +572,11 @@ export function MapPage() {
         {selS && nearbyHeader}
         {/* Two taps, two meanings: the row shows the creature on the map
             first; its «Verificar» goes straight to the modal (the second
-            door, LCHP-15). Verifying means "I have seen it too", so the
-            neighbour can look before committing. */}
-        {(heat ? NO_SIGHTINGS : pending).map((s) => (
+            door, LCHP-15). Verifying means "I have seen it there", so that
+            door is only on the rows the neighbour is standing next to; a
+            far row still takes the map to its creature, where the card says
+            how much closer to get. */}
+        {(heat ? [] : pending).map(({ sighting: s, distanceM, near }) => (
           <div key={s.id} className="panel map-nearby-row">
             <button type="button" className="map-nearby-show" onClick={() => pick(s.id)}>
               <CreatureSprite id={s.speciesId} scale={2.8} />
@@ -475,21 +588,24 @@ export function MapPage() {
                   className="mono"
                   style={{ display: 'block', fontSize: 11, color: 'var(--ink-dim)' }}
                 >
-                  La Latina · {formatAge(s.createdAt)}
+                  {distanceM !== null ? `a ${formatMeters(distanceM)}` : 'La Latina'} ·{' '}
+                  {formatAge(s.createdAt)}
                 </span>
               </span>
             </button>
-            <button
-              type="button"
-              className="chip chip-accent map-nearby-verify"
-              aria-label={`Verificar ${speciesName(s.speciesId)}`}
-              onClick={() => {
-                pick(s.id)
-                setVerifying(true)
-              }}
-            >
-              Verificar
-            </button>
+            {near && (
+              <button
+                type="button"
+                className="chip chip-accent map-nearby-verify"
+                aria-label={`Verificar ${speciesName(s.speciesId)}`}
+                onClick={() => {
+                  pick(s.id)
+                  setVerifying(true)
+                }}
+              >
+                Verificar
+              </button>
+            )}
           </div>
         ))}
       </MapSheet>
@@ -499,6 +615,7 @@ export function MapPage() {
         <VerifyModal
           sighting={selS}
           speciesName={speciesName(selS.speciesId)}
+          blocked={selBlock}
           onClose={() => setVerifying(false)}
           onResult={onVerifyResult}
           onReclassify={() => showToast('Reclasificar · próximamente')}

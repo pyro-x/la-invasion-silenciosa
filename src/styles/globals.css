@@ -528,6 +528,30 @@ body {
   padding: 0 14px;
   cursor: pointer;
 }
+/* The error of the position on screen, or its age (LCHP-49). */
+.geo-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  color: var(--ink-dim);
+}
+.geo-badge.is-warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.map-locate-ask {
+  min-height: 36px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 /* Blinks at the pace of the pending pins: it is what ties their orange
    ring to «Por verificar». Round, because a square read as a checkbox. */
 .chip-ring {
