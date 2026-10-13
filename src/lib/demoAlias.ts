@@ -1,52 +1,44 @@
 // Sample nickname for this device while Ranking and Perfil run on fake
-// services (D-007, D-065). Built from fixed word lists only, never from user
+// services (D-007, D-065). Built from a fixed word list only, never from user
 // or device data.
 const STORAGE_KEY = 'sil_demo_alias_v1'
-const ALIAS_PATTERN = /^[a-z]+_[a-z]+_\d{2}$/
+const ALIAS_PATTERN = /^[a-z]{3,4}_\d{3}$/
 
-const NOUNS = [
+// Four letters at most: eight characters is what fits in the ranking row
+// next to «· tú» without wrapping at the 412 px viewport.
+const WORDS = [
   'gato',
-  'gorrion',
-  'vencejo',
-  'mirlo',
-  'erizo',
-  'caracol',
-  'grillo',
   'buho',
-  'zorro',
-  'mapache',
-  'botijo',
-  'churro',
-  'farol',
-  'adoquin',
-  'organillo',
-  'barquillo',
-]
-
-const ADJECTIVES = [
-  'castizo',
-  'chulapo',
-  'curioso',
-  'sigiloso',
-  'nocturno',
-  'veloz',
-  'tranquilo',
-  'valiente',
-  'despierto',
-  'discreto',
-  'travieso',
-  'madrugador',
+  'pato',
+  'topo',
+  'sapo',
+  'lobo',
+  'oso',
+  'puma',
+  'mono',
+  'loro',
+  'pez',
+  'pavo',
+  'gamo',
+  'rana',
+  'foca',
+  'olmo',
+  'pino',
+  'seta',
+  'nube',
+  'luna',
+  'faro',
+  'kiwi',
+  'higo',
+  'coco',
 ]
 
 let memoryAlias: string | null = null
 
-function pick(words: string[], random: () => number): string {
-  return words[Math.min(Math.floor(random() * words.length), words.length - 1)]
-}
-
 export function generateDemoAlias(random: () => number = Math.random): string {
-  const number = 10 + Math.min(Math.floor(random() * 90), 89)
-  return `${pick(NOUNS, random)}_${pick(ADJECTIVES, random)}_${number}`
+  const word = WORDS[Math.min(Math.floor(random() * WORDS.length), WORDS.length - 1)]
+  const number = 100 + Math.min(Math.floor(random() * 900), 899)
+  return `${word}_${number}`
 }
 
 function readStoredAlias(): string | null {

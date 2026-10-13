@@ -11,13 +11,18 @@ describe('demo alias', () => {
     vi.restoreAllMocks()
   })
 
-  it('builds noun_adjective_number from the word lists', () => {
-    expect(generateDemoAlias(() => 0)).toBe('gato_castizo_10')
-    expect(generateDemoAlias(() => 0.999999)).toBe('barquillo_madrugador_99')
+  it('builds word_number from the word list', () => {
+    expect(generateDemoAlias(() => 0)).toBe('gato_100')
+    expect(generateDemoAlias(() => 0.999999)).toBe('coco_999')
   })
 
-  it('stays inside the lists when the random source returns 1', () => {
-    expect(generateDemoAlias(() => 1)).toBe('barquillo_madrugador_99')
+  it('stays inside the list when the random source returns 1', () => {
+    expect(generateDemoAlias(() => 1)).toBe('coco_999')
+  })
+
+  it('fits the ranking row: eight characters at most', () => {
+    const aliases = Array.from({ length: 500 }, () => generateDemoAlias())
+    expect(Math.max(...aliases.map((alias) => alias.length))).toBeLessThanOrEqual(8)
   })
 
   it('gives different devices different nicks', () => {
@@ -32,14 +37,14 @@ describe('demo alias', () => {
   })
 
   it('returns the stored nick of a returning device', () => {
-    localStorage.setItem(STORAGE_KEY, 'erizo_veloz_42')
-    expect(getDemoAlias()).toBe('erizo_veloz_42')
+    localStorage.setItem(STORAGE_KEY, 'lobo_342')
+    expect(getDemoAlias()).toBe('lobo_342')
   })
 
   it('replaces a stored value that is not a generated nick', () => {
     localStorage.setItem(STORAGE_KEY, '<b>pyroxine</b>')
     const alias = getDemoAlias()
-    expect(alias).toMatch(/^[a-z]+_[a-z]+_\d{2}$/)
+    expect(alias).toMatch(/^[a-z]{3,4}_\d{3}$/)
     expect(localStorage.getItem(STORAGE_KEY)).toBe(alias)
   })
 
