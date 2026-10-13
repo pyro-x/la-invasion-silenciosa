@@ -684,3 +684,7 @@ Review budget: two rounds (a UI change outside the security-critical zone). Roun
 ### D-068 · Addendum 2 · 2026-10-13 · Review round 2, budget spent
 
 Round 2, Codex on `5c4200c`: **needs attention**, one finding, and no routing or retry regression found. **Taken: the screen neither took focus nor announced itself.** A tab that opened a failing page kept the focus, so a screen-reader user stayed on the tab bar without hearing that the page had failed or finding «Reintentar». The title now takes focus when the screen appears (both variants, and again after a retry that fails), with tests. The two rounds are spent; this last change was not reviewed again.
+
+### D-068 · Addendum 3 · 2026-10-13 · CodeRabbit on the pull request
+
+CodeRabbit is read as one more seat of the review (David, 2026-10-13), under the same budget. Its review of `f7015be` had one finding, minor: **taken.** The router matches `/mapa/` to the map but the location keeps the trailing slash, so a map that failed at `/mapa/` offered «Volver al mapa», which only led back to the same failing page. The comparison now ignores trailing slashes, with a test.

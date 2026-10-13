@@ -124,6 +124,15 @@ describe('a render error on the map', () => {
   })
 })
 
+describe('a render error on the map reached with a trailing slash', () => {
+  it('still offers the start screen', () => {
+    broken.map = true
+    renderRoute('/mapa/')
+    expect(screen.getByRole('button', { name: ERROR_COPY.backToStart })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: ERROR_COPY.backToMap })).not.toBeInTheDocument()
+  })
+})
+
 describe('a render error on a page outside the shell', () => {
   it('shows the error screen in the app frame, without a tab bar', async () => {
     broken.onboarding = true

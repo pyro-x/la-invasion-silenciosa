@@ -30,7 +30,8 @@ export function ErrorScreen(props: ErrorScreenProps) {
 
   const copy = ERROR_COPY[props.variant]
   const sprite = props.variant === 'error' ? 'glitch' : 'missing'
-  const mapFailed = props.variant === 'error' && pathname === MAP_PATH
+  // The router matches `/mapa/` to the map too, and the location keeps the slash.
+  const mapFailed = props.variant === 'error' && pathname.replace(/\/+$/, '') === MAP_PATH
 
   // The router's boundary drops its error when the location object changes,
   // so going to the address we are already on renders the route again. (A
