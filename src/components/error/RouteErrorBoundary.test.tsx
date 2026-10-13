@@ -74,7 +74,7 @@ describe('a render error on a page inside the shell', () => {
   it('«Reintentar» drops the cached remote data and renders the route again', async () => {
     const user = userEvent.setup()
     queryClient.setQueryData(['cached'], 'stale')
-    renderRoute('/ranking')
+    renderRoute('/ranking', queryClient)
     broken.ranking = false
     await user.click(screen.getByRole('button', { name: ERROR_COPY.retry }))
     expect(await screen.findByText('Ranking semanal')).toBeInTheDocument()
