@@ -219,7 +219,10 @@ export function MapPage() {
   }
 
   const speciesName = (id: string) => species.find((c) => c.id === id)?.name ?? ''
-  const speciesMeaning = (id: string) => species.find((c) => c.id === id)?.description ?? ''
+  const speciesMeaning = (id: string) => {
+    const found = species.find((c) => c.id === id)
+    return found?.shortDescription ?? found?.description ?? ''
+  }
   const pending = sightings.filter((s) => s.status === 'pending')
   const selS = sightings.find((s) => s.id === sel)
 

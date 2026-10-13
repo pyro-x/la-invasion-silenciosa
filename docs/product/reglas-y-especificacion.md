@@ -30,8 +30,31 @@ Un juego de **ciencia ciudadana** gamificado: los vecinos ("exploradores urbanos
 | 002 | 🏚️ **Turistox** | Edificio con actividad turística observable desde el espacio público | Frecuente |
 | 003 | 🤖 **Checkinchu** | Punto de acceso automatizado (pantalla / terminal de auto check-in) | Raro |
 | 004 | 🔑 **Keymon** | Vivienda turística completa operando en el barrio | Legendario |
+| 005 | 🏪 **Localín** | Antiguo local comercial a pie de calle convertido en alojamiento turístico o de corta estancia | Frecuente |
 
 Cada criatura tiene una **ficha** (Pokédex) con: qué es, hábitat, pista de rastreo, rareza y progreso de capturas.
+
+### 005 · 🏪 Localín
+
+Incorporada en octubre de 2026 (D-066). Las cuatro especies anteriores y sus avistamientos no cambian.
+
+**Qué es:** antiguo local comercial a pie de calle —por ejemplo, una panadería, una ferretería o una tienda de barrio— convertido en alojamiento turístico o de corta estancia para visitantes, independientemente de la plataforma que lo anuncie.
+
+**Descripción de la ficha:** «Donde antes había una panadería, una ferretería o una tienda de barrio, ahora hay maletas. Localín habita antiguos locales comerciales a pie de calle convertidos en alojamientos turísticos.»
+
+**Descripción corta (listado de especies y ficha del avistamiento en el mapa):** «Antiguo comercio de barrio convertido en alojamiento turístico.» La ficha de detalle de la especie muestra la descripción completa.
+
+**Hábitat:** «Bajos comerciales que antes albergaban negocios del barrio.»
+
+**Pista de rastreo:** «Tienen que cumplirse dos cosas: que antes fuera un comercio del barrio y que hoy aloje visitantes. Estar en un bajo, tener la persiana echada o un candado no basta.»
+
+**Rareza:** frecuente. **Puntos:** los mismos que el resto de criaturas (§4); no tiene bonificación propia.
+
+**Diseño:** opción 01, «El toldo»: fachada verde con toldo de franjas amarillas y crema, contorno oscuro y cuadrícula de 12 × 13 píxeles, como las criaturas existentes. [Sprite y paleta](../prototype/localin/localin-approved.json) · [Vista ampliada](../prototype/localin/localin-preview.png).
+
+**Criterio de clasificación:** debe poder establecerse tanto el uso comercial anterior como el uso turístico actual. Estar en una planta baja, tener la persiana cerrada o mostrar un candado no basta para identificar un Localín. Cuando se cumplen ambos criterios, Localín es la categoría específica frente a Keymon; no se registra el mismo alojamiento como ambas especies por ese único hecho. No incluye alquileres residenciales ordinarios por el mero hecho de ser temporales.
+
+Se aplica la misma regla de oro (§3.1) y el mismo ciclo de validación comunitaria que al resto de criaturas.
 
 ---
 
@@ -56,7 +79,7 @@ La app recuerda esta regla en el onboarding, en el flujo de captura y en la band
 ### 3.3. Qué debe contener cada avistamiento
 - **Foto** de la criatura (sin personas ni datos privados).
 - **Ubicación aproximada** (por privacidad, no se guarda la posición exacta).
-- **Categoría** (Candadín / Turistox / Checkinchu / Keymon).
+- **Categoría** (Candadín / Turistox / Checkinchu / Keymon / Localín).
 
 ---
 
@@ -118,11 +141,11 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Función técnica:** en móvil, ese toque activa la **pantalla completa**.
 
 ### 1 · Onboarding
-- **Qué hace:** presenta la misión (locución de bienvenida), el guiño a las chisperas de 1808, la **regla de oro** y el sello de la asociación.
+- **Qué hace:** presenta la misión (locución de bienvenida) con las cinco criaturas en la cabecera, el guiño a las chisperas de 1808, la **regla de oro** y el sello de la asociación.
 - **Comportamiento:** se muestra solo la **primera vez** (se recuerda en el dispositivo). Forzable con `?onboarding=1` o desde Tweaks.
 
 ### 2 · Mapa
-- **Contenido:** cartografía real de La Latina (OpenStreetMap) con los **avistamientos anclados a calles reales**; leyenda de las 4 criaturas.
+- **Contenido:** cartografía real de La Latina (OpenStreetMap) con los **avistamientos anclados a calles reales**; leyenda de las 5 criaturas.
 - **Interacciones:**
   - Toggle **Avistamientos / Mapa de calor**.
   - Tocar un pin → ficha rápida (criatura, calle, autor, estado); si está pendiente, botón **Verificar**.
@@ -130,13 +153,13 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Mapa de calor:** densidad real — cada avistamiento es un foco que se intensifica (amarillo → naranja → rojo) donde se solapan. Cuentan todos, también los pendientes; los validados pesan más.
 
 ### 3 · Especies (Pokédex)
-- **Contenido:** listado de las 4 criaturas con número, nombre, descripción, rareza y progreso (capturadas / total).
+- **Contenido:** listado de las 5 criaturas con número, nombre, descripción, rareza y progreso (capturadas / total).
 - **Ficha de detalle:** sprite grande, qué es, hábitat, pista de rastreo, rareza y puntos que otorga.
 
 ### 4 · Cazar / Registrar (botón central)
 Flujo de **4 pasos**:
 1. **Captura** — visor de cámara + recordatorio de privacidad → disparar / repetir / usar foto.
-2. **Identificar** — elegir la especie (Candadín / Turistox / Checkinchu / Keymon).
+2. **Identificar** — elegir la especie (Candadín / Turistox / Checkinchu / Keymon / Localín).
 3. **Ubicación** — mapa con ubicación aproximada + toggle de privacidad ("solo guardamos ubicación aproximada").
 4. **Revisar y enviar** — resumen (foto, especie, ubicación, estado pendiente) → enviar.
 - **Salida:** pantalla de éxito con **+10 pts pendientes de validación** y vuelta al mapa; el avistamiento queda **pendiente**. Los puntos se consolidan solo cuando se valida.

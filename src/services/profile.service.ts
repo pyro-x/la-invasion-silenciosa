@@ -19,7 +19,7 @@ const PROFILE: Omit<Profile, 'alias'> = {
   weekRank: 6,
   color: '#e23b3b',
   counts: { sightings: 9, verifications: 3, videos: 1 },
-  perSpecies: { candadin: 7, turistox: 5, checkinchu: 2, keymon: 1 },
+  perSpecies: { candadin: 7, turistox: 5, checkinchu: 2, keymon: 1, localin: 3 },
 }
 
 const BADGES: Badge[] = [

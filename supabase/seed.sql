@@ -27,3 +27,13 @@ values
   ((select id from public.species where slug = 'turistox'),    40.410929, -3.707373, 'pending',  'unverified',         0, now() - interval '35 minutes'), -- Plaza de Cascorro
   ((select id from public.species where slug = 'keymon'),      40.411613, -3.710446, 'pending',  'unverified',         2, now() - interval '1 hour')      -- Calle de la Cava Alta
 on conflict do nothing;
+
+-- LCHP-47: two Localín rows, one per state, so the fifth species shows on the
+-- dev map and in «Cerca de ti». Not from the prototype: the coordinates were
+-- picked by hand inside the barrio and stand for no real premises.
+insert into public.sightings
+  (species_id, lat_public, lng_public, moderation_status, confidence, verification_count, created_at)
+values
+  ((select id from public.species where slug = 'localin'),     40.412150, -3.708930, 'approved', 'community_verified', 3, now() - interval '3 hours'),
+  ((select id from public.species where slug = 'localin'),     40.410480, -3.709620, 'pending',  'unverified',         0, now() - interval '50 minutes')
+on conflict do nothing;

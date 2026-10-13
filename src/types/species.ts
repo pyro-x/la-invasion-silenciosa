@@ -1,4 +1,10 @@
-export type SpeciesId = 'candadin' | 'turistox' | 'checkinchu' | 'keymon'
+export const SPECIES_IDS = ['candadin', 'turistox', 'checkinchu', 'keymon', 'localin'] as const
+
+export type SpeciesId = (typeof SPECIES_IDS)[number]
+
+export function isSpeciesId(value: string): value is SpeciesId {
+  return SPECIES_IDS.some((id) => id === value)
+}
 
 /** Displayed verbatim in the UI (Spanish product copy). */
 export type Rarity = 'común' | 'frecuente' | 'raro' | 'legendario'
@@ -12,6 +18,8 @@ export type Species = {
   rarity: Rarity
   /** What it is (Spanish product copy). */
   description: string
+  /** One-line version for the species list and the map sheet, when `description` is too long there. */
+  shortDescription?: string
   habitat: string
   trackingTip: string
   /** Points awarded to the author when a sighting is validated. */

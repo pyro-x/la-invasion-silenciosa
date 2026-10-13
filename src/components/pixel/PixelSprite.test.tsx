@@ -1,7 +1,8 @@
 import { render } from '@testing-library/react'
 import { CreatureSprite } from './CreatureSprite'
 import { MiniPix, PixelSprite } from './PixelSprite'
-import { NAV_ICONS, SPRITES } from './sprites'
+import { SPECIES_IDS } from '@/types/species'
+import { NAV_ICONS, SPRITES, SPRITE_PALETTES } from './sprites'
 
 describe('pixel artwork', () => {
   it('draws a creature as an SVG of its grid, at the size asked for', () => {
@@ -42,6 +43,18 @@ describe('pixel artwork', () => {
   it('keeps the style its caller passes', () => {
     const { container } = render(<CreatureSprite id="turistox" style={{ opacity: 0.4 }} />)
     expect(container.querySelector('svg')).toHaveStyle({ opacity: '0.4', display: 'block' })
+  })
+
+  it('keeps every creature on the same 12 × 13 grid, with a colour for each letter', () => {
+    for (const id of SPECIES_IDS) {
+      expect(SPRITES[id]).toHaveLength(13)
+      for (const row of SPRITES[id]) {
+        expect(row).toHaveLength(12)
+        for (const letter of row) {
+          if (letter !== '.') expect(SPRITE_PALETTES[id]).toHaveProperty(letter)
+        }
+      }
+    }
   })
 
   it('paints nothing with box-shadow any more', () => {

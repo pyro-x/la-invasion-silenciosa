@@ -67,8 +67,8 @@ select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
 select is(
   (select count(*)::int from public.species),
-  4,
-  'anon sees only the 4 active species (inactive one hidden by policy)'
+  5,
+  'anon sees only the 5 active species (inactive one hidden by policy)'
 );
 
 select throws_ok(
@@ -411,7 +411,7 @@ set local role service_role;
 
 select is(
   (select count(*)::int from public.species where is_active),
-  4,
+  5,
   'service_role reads the species catalog (create-sighting validation)'
 );
 

@@ -1,4 +1,5 @@
-// Pixel-art grids ported verbatim from the prototype (docs/prototype/fuentes/pixel.jsx).
+// Pixel-art grids ported verbatim from the prototype (docs/prototype/fuentes/pixel.jsx);
+// localin from its approved grid (docs/prototype/localin/localin-approved.json).
 // Each creature grid is 12px wide; nav icons are 7px monochrome ('X' = currentcolor).
 import type { SpeciesId } from '@/types/species'
 
@@ -63,6 +64,21 @@ export const SPRITES: Record<SpeciesId, string[]> = {
     '...KBBKK....',
     '...KKKK.....',
   ],
+  localin: [
+    '............',
+    '..KKKKKKKK..',
+    '.KBBBBBBBBK.',
+    'KKKKKKKKKKKK',
+    'KAAWWAAWWAAK',
+    '.KKKKKKKKKK.',
+    '.KBWWBBWWBK.',
+    '.KBWPBBWPBK.',
+    '.KBBBBBBBBK.',
+    '.KBBBKKBBBK.',
+    '.KBBKAAKBBK.',
+    '.KBBKAKKBBK.',
+    '.KKKKKKKKKK.',
+  ],
 }
 
 /** Per-character color palettes, from the prototype's CREATURES data. */
@@ -87,6 +103,7 @@ export const SPRITE_PALETTES: Record<SpeciesId, Record<string, string>> = {
     A: '#ff2e88',
   },
   keymon: { K: '#241a2e', B: '#9b6cf0', D: '#6a3fc0', L: '#e0d2ff', W: '#fff7ea', P: '#241a2e' },
+  localin: { K: '#241a2e', B: '#62bd75', A: '#f5b62e', W: '#fff7ea', P: '#241a2e' },
 }
 
 export type NavIconName = 'map' | 'dex' | 'hunt' | 'rank' | 'me'
