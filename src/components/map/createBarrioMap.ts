@@ -33,6 +33,8 @@ export type BarrioMapHandlers = {
   onMapTap: () => void
   /** The user — not the app — started moving the map. */
   onUserMove: () => void
+  /** A move the user chose — a gesture, a zoom button, a cluster — ended. */
+  onUserSettled: () => void
 }
 
 export type BarrioMapController = {
@@ -769,6 +771,7 @@ export function createBarrioMap(
   map.on('wheel', userMoved)
   map.on('moveend', () => {
     lookSoon()
+    if (userChoseView) handlers.onUserSettled()
     // A step that was stopped before it arrived — by the app or by the
     // user's own hand — ends at a zoom nobody chose. Arrival is judged
     // against what is reachable now: the window may have changed size on
@@ -832,6 +835,7 @@ export function createBarrioMap(
       .then(
         (zoom) => {
           if (destroyed || mine !== intent) return
+          followed = null
           handlers.onUserMove()
           userStep(zoom, center)
         },

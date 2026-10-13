@@ -78,6 +78,10 @@ export function BarrioMap({
   // exists; StrictMode's remount re-runs them all against the new one.
   const controller = useRef<BarrioMapController | null>(null)
   const handlers = useRef({ onPick, onMapTap, onUserMove, onResumeFollow })
+  // Which tap on «Ir a mi posición» the map has already zoomed in for, and
+  // whether it still owes that tap the street-level zoom.
+  const zoomedFor = useRef<number | null>(null)
+  const streetOwed = useRef(false)
   // When the neighbour last moved the map or changed what is picked.
   const touchedAt = useRef(0)
 
@@ -94,11 +98,19 @@ export function BarrioMap({
         touchedAt.current = Date.now()
         handlers.current.onUserMove()
       },
+      // The wait before following returns counts from the hand leaving the
+      // map, not from it landing: a drag can last longer than the wait.
+      onUserSettled: () => {
+        touchedAt.current = Date.now()
+      },
     })
     controller.current = created
     return () => {
       created.destroy()
       controller.current = null
+      // The next controller owes the zoom-in again (StrictMode's remount).
+      zoomedFor.current = null
+      streetOwed.current = false
     }
   }, [])
 
@@ -131,16 +143,38 @@ export function BarrioMap({
   // later fixes only recentre, so a neighbour who zooms out is not pulled
   // back in every few seconds. The street-level zoom waits for a fix that
   // deserves it: a vague one only gets as close as the barrio.
-  const zoomedFor = useRef<number | null>(null)
+  // A neighbour who took the map before the zoom-in happened has spent it:
+  // following that returns by itself only recentres.
   useEffect(() => {
     const map = controller.current
-    if (!follow || !me || !map) return
-    const asked = zoomedFor.current !== followRequest
+    if (!me || !map) return
+    if (!follow) {
+      zoomedFor.current = followRequest
+      streetOwed.current = false
+      return
+    }
     const vague = isVague(me)
-    if (!vague) zoomedFor.current = followRequest
-    if (!asked && map.metresFromCentre(me) < NOISE_M) return
-    map.follow(me, asked ? (vague ? VAGUE_ZOOM : FOLLOW_MIN_ZOOM) : undefined)
+    if (zoomedFor.current !== followRequest) {
+      zoomedFor.current = followRequest
+      streetOwed.current = vague
+      map.follow(me, vague ? VAGUE_ZOOM : FOLLOW_MIN_ZOOM)
+      return
+    }
+    if (streetOwed.current && !vague) {
+      streetOwed.current = false
+      map.follow(me, FOLLOW_MIN_ZOOM)
+      return
+    }
+    if (map.metresFromCentre(me) < NOISE_M) return
+    map.follow(me)
   }, [follow, me, followRequest])
+
+  // Before the effect below: a press on a zoom button is a touch.
+  useEffect(() => {
+    if (!zoomStep) return
+    touchedAt.current = Date.now()
+    controller.current?.zoomBy(zoomStep.delta)
+  }, [zoomStep])
 
   // Alcorqueando's rule: a neighbour who dragged the map to look around and
   // then walked on gets the map back without asking for it. Judged when a
@@ -154,10 +188,6 @@ export function BarrioMap({
     if (map.metresFromCentre(me) <= rangeM) return
     handlers.current.onResumeFollow()
   }, [follow, mayResumeFollow, me, rangeM])
-
-  useEffect(() => {
-    if (zoomStep) controller.current?.zoomBy(zoomStep.delta)
-  }, [zoomStep])
 
   return <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 }

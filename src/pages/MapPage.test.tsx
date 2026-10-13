@@ -739,6 +739,20 @@ describe('map screen', () => {
       expect(screen.getByRole('button', { name: '✔ Verificar' })).toBeDisabled()
     })
 
+    it('a notice put away stays away while it is the same notice with other numbers', async () => {
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await standAt(user, NEXT_TO_PENDING, 180)
+      await screen.findByText(/Tu ubicación es poco precisa \(± 180 m\)\. /)
+      await user.click(screen.getByRole('button', { name: 'Cerrar aviso' }))
+      const [success] = watchPositionMock.mock.calls.at(-1) ?? []
+      act(() => success?.(geoFix(...NEXT_TO_PENDING, 172)))
+      expect(screen.getByText('± 172 m')).toBeInTheDocument()
+      expect(
+        screen.queryByText(/Tu ubicación es poco precisa \(± 172 m\)\. /),
+      ).not.toBeInTheDocument()
+    })
+
     it('a validated creature needs nobody near: its card has no reason to give', async () => {
       const user = userEvent.setup()
       renderRoute('/mapa')

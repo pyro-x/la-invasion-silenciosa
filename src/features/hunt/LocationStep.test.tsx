@@ -21,6 +21,7 @@ describe('location step', () => {
           accuracyM: 9,
           at: Date.now() - 3 * 60_000,
         }}
+        onFix={noop}
         onPositionChanged={noop}
         onApproxToggled={noop}
         onNext={noop}

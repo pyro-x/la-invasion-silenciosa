@@ -1223,8 +1223,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   sigue concedido**. Si va a preguntar de nuevo (un permiso «solo esta
   vez» caducado) o no sabe decirlo (sin API de permisos; Safari, que
   responde «preguntar» a casi todo), se pausa en vez de arriesgar el aviso
-  nativo sin toque, y la hoja dice «Toca «Ir a mi posición» para volver a
-  ver dónde estás.» En el iPhone de David (2026-10-09) el punto seguía
+  nativo sin toque, y la hoja dice «Para seguir jugando, el mapa tiene que
+  volver a saber dónde estás.» con el botón **Usar mi ubicación** (texto de
+  LCHP-49; antes remitía al botón «Ir a mi posición»). En el iPhone de David (2026-10-09) el punto seguía
   ahí al cambiar de app y volver; no se anotó la versión de iOS ni si la
   observación se reanudó o nunca llegó a pausarse, así que no está medido
   cuántas veces ocurre la pausa en otros iPhone. Al salir de la pantalla se deja
@@ -1421,13 +1422,19 @@ de Alcorqueando, vive en `BarrioMap.tsx`:
 
 * un movimiento menor de 0,7 m es ruido del GPS y no mueve el mapa;
 * una posición poco precisa solo acerca hasta z15; el zoom de calle (z17)
-  espera a una que lo merezca;
+  queda pendiente y lo da la primera posición buena. Mientras sigan
+  llegando posiciones poco precisas solo la primera acerca: las demás
+  recentran, como cualquier posición posterior;
 * **el seguimiento vuelve solo** cuando el mapa lleva 10 s sin tocarse y
   el vecino está a más del radio del centro del mapa. A diferencia de
   Alcorqueando, **nunca mientras haya una criatura elegida**: una ficha
   que se está leyendo no se va de la pantalla (era la objeción de D-061 al
-  seguimiento por defecto). Elegir o cerrar una ficha cuenta como tocar el
-  mapa. Volver a seguir no vuelve a acercar el zoom.
+  seguimiento por defecto). Elegir o cerrar una ficha y pulsar +/− cuentan
+  como tocar el mapa, y **los 10 s se cuentan desde que la mano lo suelta**,
+  no desde que lo coge. «Fuera de lo que muestra» es una distancia, no lo
+  que cabe en pantalla: más del radio (85 m) entre el vecino y el centro
+  del mapa, con el zoom que sea. Volver a seguir no vuelve a acercar el
+  zoom, tampoco si el vecino movió el mapa antes de la primera posición.
 
 **Lo que se dibuja:** alrededor del punto del vecino, un anillo a trazos
 con el radio de verificación (capa `me-range`, bajo el halo del punto), y
@@ -1475,6 +1482,36 @@ evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
 * El regreso del seguimiento se evalúa **cuando llega una posición**, como
   en Alcorqueando, no con un temporizador: la observación trae una al menos
   cada 20 s.
+
+**Ronda 2 (D-066 Addendum 2):**
+
+* Los 10 s de espera se contaban desde el inicio del gesto: al soltar un
+  arrastre largo el mapa volvía al instante. Ahora cuentan desde que
+  termina (el controlador avisa con `onUserSettled`), y los botones +/−
+  también cuentan.
+* Un aviso cerrado sigue cerrado mientras sea el mismo aviso con otros
+  números («poco precisa (± 180 m)» → «(± 172 m)»).
+* La posición leída en el paso de ubicación se guarda en la página: salir
+  del paso y volver ya no juzga contra la posición más antigua de la
+  puerta del equipo.
+* Un pin apenas fuera del radio ya no lee «a 50 m de ti. El máximo son
+  50 m»: la distancia que se muestra al rechazar se redondea hacia arriba.
+* Un cúmulo abierto, o un pin elegido, antes de medirse la hoja ya no lo
+  deshace el encuadre inicial.
+
+**Decidido y anotado, no cambiado:**
+
+* **Una posición antigua avisa, no bloquea**, tampoco al verificar. Si la
+  observación deja de recibir posiciones (solo errores de tiempo agotado),
+  o al volver de segundo plano con una de hasta diez minutos, «Verificar»
+  sigue disponible con la última conocida y la insignia dice su edad. Es
+  lo que hace Alcorqueando; si el paseo muestra que hace falta, bloquear
+  por encima de `stalePositionMs` es un cambio de una línea.
+* **Una verificación guardada dice ahora algo más:** que quien la hizo
+  estaba a unos 85 m de esa coordenada pública a esa hora. La posición
+  sigue sin enviarse, pero esa deducción es nueva para quien verifica (el
+  autor de un avistamiento ya la tenía). Se queda en `verifications`, que
+  no es pública.
 
 **No verificado:** GPS real en las calles de La Latina, ni el aviso de
 permiso en iPhone y Android con este flujo. Queda para el paseo de David

@@ -109,46 +109,54 @@ const VERIFY_TOASTS: Record<VerifyOutcome['kind'], string> = {
 // do about it (Alcorqueando's dock: ask, searching, error, imprecise). The
 // native prompt is never raised on arrival (D-052): without a position the
 // sheet asks, and the tap on its button is the gesture the browser wants.
-type LocatePanel = { text: string; action: string | null }
+/** `kind` names the notice whatever its numbers say: closing «poco precisa»
+ * at ± 180 m keeps it closed at ± 172 m. */
+type LocatePanel = { kind: string; text: string; action: string | null }
 
 function locatePanel(geo: GeoWatchState, outsideBarrio: boolean): LocatePanel | null {
   switch (geo.kind) {
     case 'idle':
       return {
+        kind: 'ask',
         text: 'Para jugar, el mapa tiene que saber dónde estás.',
         action: 'Usar mi ubicación',
       }
     case 'paused':
       return {
+        kind: 'paused',
         text: 'Para seguir jugando, el mapa tiene que volver a saber dónde estás.',
         action: 'Usar mi ubicación',
       }
     case 'searching':
       return {
+        kind: 'searching',
         text: 'Buscando tu posición… Si el navegador pregunta, pulsa «Permitir».',
         action: null,
       }
     case 'denied':
-      return { text: locationSettingsGuidance(), action: 'Reintentar' }
+      return { kind: 'denied', text: locationSettingsGuidance(), action: 'Reintentar' }
     case 'unavailable':
     case 'timeout':
       return {
+        kind: 'no-signal',
         text: 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.',
         action: 'Reintentar',
       }
     case 'unsupported':
-      return { text: 'Este navegador no ofrece tu ubicación.', action: null }
+      return { kind: 'unsupported', text: 'Este navegador no ofrece tu ubicación.', action: null }
     case 'ok':
       // The map is a barrio game: a position outside La Latina is shown no
       // map to follow, and nothing there can be captured or verified.
       if (outsideBarrio) {
         return {
+          kind: 'outside',
           text: 'Estás fuera de La Latina: puedes mirar el mapa, pero para cazar o verificar hay que estar en el barrio.',
           action: null,
         }
       }
       if (isVague(geo.position)) {
         return {
+          kind: 'vague',
           text: `Tu ubicación es poco precisa (± ${formatMeters(geo.position.accuracyM)}). ${precisionGuidance()}`,
           action: 'Reintentar',
         }
@@ -292,7 +300,7 @@ export function MapPage() {
   const me = geo.kind === 'ok' ? geo.position : null
   const outsideBarrio = me !== null && !isWithinLaLatina(me.lat, me.lng)
   const panel = locatePanel(geo, outsideBarrio)
-  const notice = panel?.text ?? null
+  const notice = panel?.kind ?? null
   const follow = following && me !== null && !outsideBarrio
 
   // A position good enough to measure from. Distances go to the public

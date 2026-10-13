@@ -308,11 +308,12 @@ const sighting = (
 const mounted: BarrioMapController[] = []
 
 function mount() {
-  const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0 }
+  const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0, userSettled: 0 }
   const controller = createBarrioMap(document.createElement('div'), {
     onPick: (id) => calls.picked.push(id),
     onMapTap: () => calls.mapTaps++,
     onUserMove: () => calls.userMoves++,
+    onUserSettled: () => calls.userSettled++,
   })
   mounted.push(controller)
   return { controller, calls }
@@ -476,9 +477,37 @@ describe('createBarrioMap', () => {
     controller.follow(me, 17)
     // the ease has ended by the time the sheet says how tall it is
     emit('moveend')
+    const before = recorded.eases.length
     controller.setBottomPadding(280)
     expect(recorded.fits).toHaveLength(1)
+    // one more ease, after the fit, back to where following had sent the map
+    expect(recorded.eases).toHaveLength(before + 1)
     expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.712, 40.4115], zoom: 17 })
+  })
+
+  it('a pin picked before the sheet is measured is not undone by the opening fit', () => {
+    const { controller } = mount()
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+    emit('moveend')
+    controller.goTo({ lat: 40.411, lng: -3.709 })
+    emit('moveend')
+    const before = recorded.eases.length
+    controller.setBottomPadding(280)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(before)
+  })
+
+  it("tells when a move of the user's has ended, and says nothing of the app's own", () => {
+    const { controller, calls } = mount()
+    controller.setBottomPadding(200)
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+    emit('moveend')
+    expect(calls.userSettled).toBe(0)
+    userDrag()
+    expect(calls.userSettled).toBe(1)
+    controller.zoomBy(1)
+    emit('moveend')
+    expect(calls.userSettled).toBe(2)
   })
 
   it('the opening fit brings back nothing the neighbour or a pin took the map from', () => {
@@ -964,6 +993,24 @@ describe('createBarrioMap', () => {
       expect(calls.mapTaps).toBe(0)
       emit('moveend')
       expect(stored()).not.toBeNull()
+    })
+
+    it('a cluster opened before the sheet is measured is not undone by the opening fit', async () => {
+      const { controller } = await mountReady()
+      controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+      emit('moveend')
+      recorded.hits = [
+        {
+          geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
+          properties: { cluster_id: 9 },
+        },
+      ]
+      tap(-3.711, 40.412)
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(2))
+      emit('moveend')
+      controller.setBottomPadding(280)
+      expect(recorded.fits).toHaveLength(1)
+      expect(recorded.eases).toHaveLength(2)
     })
 
     it('a sheet resize while a cluster opens sends the move again, centre included', async () => {

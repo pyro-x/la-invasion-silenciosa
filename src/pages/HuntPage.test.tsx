@@ -263,7 +263,7 @@ describe('capture flow (Cazar)', () => {
       drag.to = { lat: 40.4126, lng: -3.7102 }
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(
-        await screen.findByText('Ese punto está a 111 m de ti. El máximo son 50 m.'),
+        await screen.findByText('Ese punto está a 112 m de ti. El máximo son 50 m.'),
       ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
 
@@ -287,6 +287,53 @@ describe('capture flow (Cazar)', () => {
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(screen.getByText('Estás fuera de La Latina')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+    })
+
+    it('a position that can no longer be read is not kept as if it still held', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+      await screen.findByText('Tu posición')
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        geolocation: {
+          getCurrentPosition: (_ok: PositionCallback, onError: (error: { code: number }) => void) =>
+            onError({ code: 2 }),
+        },
+      })
+      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      expect(
+        await screen.findByText('Activa tu ubicación para situar la criatura'),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+    })
+
+    it('leaving the step and coming back judges against the position read there', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+      await screen.findByText('Tu posición')
+      await user.click(screen.getByRole('button', { name: 'Paso 2' }))
+      await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
+      // no tap: the map goes back to the position the step already had
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
+    })
+
+    it('a pin just over the radius is told a distance that is over it', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+      await screen.findByText('Tu posición')
+      // 50.3 m north of the fix
+      drag.to = { lat: HERE.latitude + 50.3 / 111_195, lng: HERE.longitude }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      expect(
+        await screen.findByText('Ese punto está a 51 m de ti. El máximo son 50 m.'),
+      ).toBeInTheDocument()
     })
 
     it('a position too vague places no creature, and says how to fix it', async () => {

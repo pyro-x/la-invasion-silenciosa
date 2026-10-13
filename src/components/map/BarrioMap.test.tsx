@@ -1,27 +1,37 @@
+import { StrictMode } from 'react'
 import { render } from '@testing-library/react'
 import { BarrioMap } from './BarrioMap'
-import type { BarrioMapController } from './createBarrioMap'
+import type { BarrioMapController, BarrioMapHandlers } from './createBarrioMap'
 import type { MapSightingGeo } from '@/types/sighting'
 
-const calls = vi.hoisted(() => ({ log: [] as string[], fromCentreM: 500, moving: false }))
+const calls = vi.hoisted(() => ({
+  log: [] as string[],
+  fromCentreM: 500,
+  moving: false,
+  handlers: null as BarrioMapHandlers | null,
+}))
 
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}))
 
 vi.mock('./createBarrioMap', () => ({
-  createBarrioMap: (): BarrioMapController => ({
-    setSightings: (sightings) =>
-      calls.log.push(`sightings ${sightings.map((s) => s.id).join(',')}`),
-    setSelected: (id) => calls.log.push(`selected ${id}`),
-    setHeat: (on) => calls.log.push(`heat ${on}`),
-    setMe: (me, rangeM) => calls.log.push(`me ${me ? me.lat : null} ${rangeM}`),
-    metresFromCentre: () => calls.fromCentreM,
-    isMoving: () => calls.moving,
-    setBottomPadding: (px) => calls.log.push(`padding ${px}`),
-    goTo: (target) => calls.log.push(`goTo ${target.id} ${target.lat}`),
-    follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
-    zoomBy: (delta) => calls.log.push(`zoomBy ${delta}`),
-    destroy: () => calls.log.push('destroy'),
-  }),
+  createBarrioMap: (_container: HTMLElement, handlers: BarrioMapHandlers): BarrioMapController => {
+    calls.handlers = handlers
+    return controllerStub
+  },
+}))
+
+const controllerStub = vi.hoisted((): BarrioMapController => ({
+  setSightings: (sightings) => calls.log.push(`sightings ${sightings.map((s) => s.id).join(',')}`),
+  setSelected: (id) => calls.log.push(`selected ${id}`),
+  setHeat: (on) => calls.log.push(`heat ${on}`),
+  setMe: (me, rangeM) => calls.log.push(`me ${me ? me.lat : null} ${rangeM}`),
+  metresFromCentre: () => calls.fromCentreM,
+  isMoving: () => calls.moving,
+  setBottomPadding: (px) => calls.log.push(`padding ${px}`),
+  goTo: (target) => calls.log.push(`goTo ${target.id} ${target.lat}`),
+  follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
+  zoomBy: (delta) => calls.log.push(`zoomBy ${delta}`),
+  destroy: () => calls.log.push('destroy'),
 }))
 
 const SIGHTINGS: MapSightingGeo[] = [
@@ -132,6 +142,37 @@ describe('BarrioMap', () => {
     expect(moves().at(-1)).toBe('follow 40.4116 undefined')
   })
 
+  it('while fixes stay vague only the first one is a zoom request', () => {
+    const vague = { lat: 40.4115, lng: -3.712, accuracyM: 400 }
+    const view = render(<BarrioMap {...base} me={vague} follow />)
+    view.rerender(<BarrioMap {...base} me={{ ...vague, lat: 40.4116 }} follow />)
+    expect(calls.log.filter((line) => line.startsWith('follow'))).toEqual([
+      'follow 40.4115 15',
+      'follow 40.4116 undefined',
+    ])
+  })
+
+  it('a neighbour who took the map before the first fix is not zoomed in when following returns', () => {
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    // the first fix arrives with following already off
+    const view = render(<BarrioMap {...base} me={me} />)
+    view.rerender(<BarrioMap {...base} me={{ ...me }} follow />)
+    expect(calls.log.filter((line) => line.startsWith('follow'))).toEqual([
+      'follow 40.4115 undefined',
+    ])
+  })
+
+  it("StrictMode's second map still gets the zoom-in the first one spent", () => {
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    render(
+      <StrictMode>
+        <BarrioMap {...base} me={me} follow />
+      </StrictMode>,
+    )
+    const afterRemount = calls.log.slice(calls.log.lastIndexOf('destroy') + 1)
+    expect(afterRemount).toContain('follow 40.4115 17')
+  })
+
   it('does not move the map for GPS noise', () => {
     const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
     const view = render(<BarrioMap {...base} me={me} follow />)
@@ -185,15 +226,38 @@ describe('BarrioMap', () => {
       expect(onResumeFollow).not.toHaveBeenCalled()
     })
 
-    it('not under a hand: a drag that outlasts the wait is left alone', () => {
+    it('not under a hand, and the wait counts from the hand leaving the map', () => {
       const { onResumeFollow, fix } = leftAlone()
+      calls.handlers?.onUserMove()
       calls.moving = true
-      vi.advanceTimersByTime(10_001)
+      vi.advanceTimersByTime(12_000)
       fix()
       expect(onResumeFollow).not.toHaveBeenCalled()
+      // the finger lifts after twelve seconds of dragging
       calls.moving = false
+      calls.handlers?.onUserSettled()
+      fix()
+      expect(onResumeFollow).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(10_001)
       fix()
       expect(onResumeFollow).toHaveBeenCalledTimes(1)
+    })
+
+    it('a drag long after arriving starts the wait again', () => {
+      const { onResumeFollow, fix } = leftAlone()
+      vi.advanceTimersByTime(60_000)
+      calls.handlers?.onUserMove()
+      calls.handlers?.onUserSettled()
+      vi.advanceTimersByTime(5_000)
+      fix()
+      expect(onResumeFollow).not.toHaveBeenCalled()
+    })
+
+    it('a zoom button counts as touching the map', () => {
+      const { onResumeFollow, fix } = leftAlone()
+      vi.advanceTimersByTime(10_001)
+      fix({ zoomStep: { delta: 1 } })
+      expect(onResumeFollow).not.toHaveBeenCalled()
     })
 
     it('not while a creature is open, and picking one counts as touching the map', () => {

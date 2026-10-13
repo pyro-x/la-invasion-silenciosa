@@ -30,8 +30,8 @@ export type GeoFix =
 /**
  * One-shot position fix. Must be called from a user gesture (LCHP-5/LCHP-14
  * decision: the native permission prompt fires on tap, never on load).
- * Never rejects — denial and absence are ordinary outcomes with a manual-pin
- * fallback, not exceptions.
+ * Never rejects — denial and absence are ordinary outcomes the caller
+ * explains, not exceptions.
  */
 export function getGeoFix(): Promise<GeoFix> {
   return new Promise((resolve) => {

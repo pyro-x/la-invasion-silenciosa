@@ -6,8 +6,9 @@
 //
 // A creature is registered where the neighbour stands (LCHP-49, D-066,
 // Alcorqueando's rules): the pin can be nudged around their position, not
-// dragged across the barrio, and without a position good enough there is no
-// pin at all. The fix is still a one-shot; the watch comes with LCHP-36.
+// dragged across the barrio, and without a position good enough the step
+// does not continue. The fix is still a one-shot; the watch comes with
+// LCHP-36.
 import { lazy, Suspense, useRef, useState } from 'react'
 import { PrecisionBadge } from '@/components/map/PrecisionBadge'
 import { getGeoFix, isWithinLaLatina, type GeoFix } from '@/lib/geo'
@@ -24,6 +25,9 @@ type Props = {
   approxOnly: boolean
   /** Geolocation outcome cached by the equipment gate, if it ran. */
   primedFix: GeoFix | null
+  /** A position read here: the page keeps it, so leaving the step and
+   * coming back judges against it and not against an older one. */
+  onFix: (fix: GeoFix) => void
   onPositionChanged: (position: CapturePosition) => void
   onApproxToggled: () => void
   onNext: () => void
@@ -74,7 +78,8 @@ function describe(
   if (outOfBounds) return { title: 'El pin está fuera de La Latina', note: aim }
   if (pin.kind === 'far') {
     return {
-      title: `Ese punto está a ${formatMeters(pin.distanceM)} de ti. El máximo son ${RADIUS}.`,
+      // rounded up: never «a 50 m» against a maximum of 50 m
+      title: `Ese punto está a ${formatMeters(Math.ceil(pin.distanceM))} de ti. El máximo son ${RADIUS}.`,
       note: 'Vuelve a tu posición y acerca el pin a la criatura.',
     }
   }
@@ -92,6 +97,7 @@ export function LocationStep({
   position,
   approxOnly,
   primedFix,
+  onFix,
   onPositionChanged,
   onApproxToggled,
   onNext,
@@ -126,6 +132,7 @@ export function LocationStep({
   async function locate() {
     setGeo('locating')
     const fix = await getGeoFix()
+    onFix(fix)
     if (fix.kind !== 'ok') {
       // The rule needs a position: an older one is not kept as if it held.
       setFix(null)

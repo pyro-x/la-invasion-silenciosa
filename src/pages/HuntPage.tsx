@@ -281,6 +281,7 @@ export function HuntPage() {
             position={state.position}
             approxOnly={state.approxOnly}
             primedFix={primedFix}
+            onFix={setPrimedFix}
             onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
             onApproxToggled={() => dispatch({ type: 'APPROX_TOGGLED' })}
             onNext={() => dispatch({ type: 'NEXT' })}
