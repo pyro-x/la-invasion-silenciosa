@@ -1,5 +1,6 @@
 import { ARRIVAL_MS, arrivalOpacities, blinkDelayMs, blinkOpacity, BLINK_MS } from './blink'
 import { PIN_SIZE, PIN_SPECIES, PIN_STATES, pinName, pinSvg } from './pinArt'
+import type { SpeciesId } from '@/types/species'
 
 const colors = { card: '#fffdf8', line: '#ddccaf', warn: '#e07a16', accent: '#a00000' }
 
@@ -28,6 +29,16 @@ describe('pinSvg', () => {
     expect(selected).toContain(`<rect width="${PIN_SIZE}" height="${PIN_SIZE}"`)
     expect(selected).not.toContain('filter="url(#soft)"')
     expect(validated).toContain('filter="url(#soft)"')
+  })
+
+  // Only reachable if the service stops dropping unknown species (LCHP-50):
+  // the blinking twin of a pending pin draws its face with this.
+  it('draws the stand-in, not an error, for a species without artwork', () => {
+    const slugFromNewerDatabase: string = 'gentrificator'
+    const svg = pinSvg(slugFromNewerDatabase as SpeciesId, 'pending', colors)
+    expect(svg).toContain(`viewBox="0 0 ${PIN_SIZE} ${PIN_SIZE}"`)
+    expect(svg).toContain('fill="#927a66"')
+    expect(svg).toContain('fill="#e07a16"')
   })
 
   it('names one image per creature and state', () => {

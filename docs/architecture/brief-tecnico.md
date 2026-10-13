@@ -528,6 +528,18 @@ type Species = {
 };
 ```
 
+**El catálogo de la base de datos puede ir por delante del cliente**
+(LCHP-50, D-067). La base de datos alojada es una sola para producción y
+para las previews de los PR, y un cliente ya abierto o instalado (PWA)
+sigue en su versión: en cuanto se hace `db push` de una especie nueva,
+hay clientes que no la conocen. Para ellos, **un avistamiento de una
+especie que su versión no conoce no aparece en el mapa hasta que el
+cliente se actualiza** — ni pin, ni fila en «Cerca de ti», ni cuenta en
+«Por verificar» ni en el mapa de calor, y sin aviso al vecino. Como
+segunda barrera, `CreatureSprite` dibuja un comodín («?») en vez de
+lanzar un error si aun así recibe un id sin sprite: una especie nueva
+nunca puede tirar una pantalla.
+
 ### sightings
 
 ```ts
@@ -1339,7 +1351,10 @@ datos que el propio mapa dibuja.
   mapa no se puede inclinar (`maxPitch: 0`): inclinado, un gemelo dejaría
   de coincidir con su pin.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
-  (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
+  (amarillo → rojo oscuro) sobre **todos** los avistamientos que llegan
+  al mapa — validados y pendientes; los de una especie que esta versión
+  del cliente no conoce se descartan antes, igual que para los pines
+  (§14 `species`, D-067) —, en su
   coordenada pública real. Los validados pesan más que los pendientes
   (1 frente a 0,4): decisión de David, para que el mapa no salga vacío al
   principio del piloto, cuando casi todo está por verificar, y lo
