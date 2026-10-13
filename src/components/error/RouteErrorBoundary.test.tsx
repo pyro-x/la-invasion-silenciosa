@@ -6,7 +6,6 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { handleRouterError, rootErrorOptions } from '@/app/errorHandlers'
 import { routes } from '@/app/router'
-import { errorReference } from '@/lib/errorReport'
 import { queryClient } from '@/lib/queryClient'
 import { APP_VERSION } from '@/lib/version'
 import { renderRoute } from '@/test/render'
@@ -31,7 +30,14 @@ vi.mock('@/pages/MapPage', () => ({
   MapPage: () => (broken.map ? fail() : <div className="screen">El mapa</div>),
 }))
 
-const reference = errorReference(new TypeError(RAW_MESSAGE))
+const CODE = /error ([0-9A-Z]{3}-[0-9A-Z]{3})\n/
+
+function loggedCode() {
+  const entry = String(vi.mocked(console.error).mock.calls[0][0])
+  const code = CODE.exec(entry)?.[1]
+  if (!code) throw new Error(`no reference code in the console entry: ${entry}`)
+  return code
+}
 
 function tabBar() {
   return screen.queryByRole('navigation', { name: 'Navegación principal' })
@@ -53,10 +59,11 @@ describe('a render error on a page inside the shell', () => {
     broken.ranking = true
   })
 
-  it('shows the app error screen with its reference code and none of the raw error', () => {
+  it('shows the app error screen with none of the raw error and no code', () => {
     renderRoute('/ranking')
     expect(screen.getByRole('heading', { name: ERROR_COPY.error.title })).toBeInTheDocument()
-    expect(screen.getByText(reference)).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/c[oó]digo/i)
+    expect(document.body).not.toHaveTextContent(/[0-9A-Z]{3}-[0-9A-Z]{3}/)
     expect(document.body).not.toHaveTextContent('Unexpected Application Error')
     expect(document.body).not.toHaveTextContent('forEach')
     expect(document.body).not.toHaveTextContent('TypeError')
@@ -148,7 +155,7 @@ describe('a render error on a page outside the shell', () => {
 })
 
 describe('a thrown value that is not an error', () => {
-  it('shows the error screen and is logged once with the same code', async () => {
+  it('shows the error screen and is logged once', async () => {
     const thrown: object = Object.create(null)
     function Hostile(): never {
       throw thrown
@@ -164,10 +171,13 @@ describe('a thrown value that is not an error', () => {
       root.render(<RouterProvider router={router} onError={handleRouterError} />)
     })
 
-    const code = errorReference(new Error('A value that is not an error was thrown'))
-    expect(within(container).getByText(code)).toBeInTheDocument()
+    expect(
+      within(container).getByRole('heading', { name: ERROR_COPY.error.title }),
+    ).toBeInTheDocument()
     expect(console.error).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(console.error).mock.calls[0][0]).toContain(`error ${code}`)
+    expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
+      'stack: Error: A value that is not an error was thrown',
+    )
 
     act(() => root.unmount())
     container.remove()
@@ -190,7 +200,6 @@ describe('an unknown address', () => {
     expect(screen.getByRole('heading', { name: ERROR_COPY.notFound.title })).toHaveFocus()
     expect(within(tabBar()!).getByText('Especies')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: ERROR_COPY.retry })).not.toBeInTheDocument()
-    expect(screen.queryByText(new RegExp(ERROR_COPY.referenceLabel))).not.toBeInTheDocument()
     expect(console.error).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: ERROR_COPY.backToMap }))
     expect(await screen.findByText('El mapa')).toBeInTheDocument()
@@ -221,14 +230,16 @@ describe('the console entry', () => {
     container.remove()
   })
 
-  it('is written once per render error, with the code the screen shows', async () => {
+  it('is written once per render error, with a code the screen does not show', async () => {
     broken.ranking = true
     await mount('/ranking')
 
-    expect(within(container).getByText(reference)).toBeInTheDocument()
+    expect(
+      within(container).getByRole('heading', { name: ERROR_COPY.error.title }),
+    ).toBeInTheDocument()
     expect(console.error).toHaveBeenCalledTimes(1)
     const [entry, error] = vi.mocked(console.error).mock.calls[0]
-    expect(entry).toContain(`error ${reference}`)
+    expect(container).not.toHaveTextContent(loggedCode())
     expect(entry).toContain(`version: ${APP_VERSION}`)
     expect(entry).toContain(`route: ${window.location.pathname}`)
     expect(entry).toContain('source: caught')

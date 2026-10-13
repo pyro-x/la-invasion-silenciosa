@@ -1,26 +1,35 @@
 import { UNSAFE_ErrorResponseImpl as RouteErrorResponse } from 'react-router'
-import { errorReference, reportError, toError } from './errorReport'
+import { reportError, toError } from './errorReport'
 import { APP_VERSION } from './version'
 
-describe('errorReference', () => {
+function referenceOf(error: Error) {
+  return reportError({ error, source: 'caught' }).reference
+}
+
+describe('the reference code', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('is three and three characters from an alphabet without I, L, O or U', () => {
-    expect(errorReference(new Error('boom'))).toMatch(
-      /^[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{3}$/,
-    )
+    expect(referenceOf(new Error('boom'))).toMatch(/^[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{3}$/)
   })
 
   it('is the same for the same failure on the same build', () => {
-    expect(errorReference(new TypeError('boom'))).toBe(errorReference(new TypeError('boom')))
+    expect(referenceOf(new TypeError('boom'))).toBe(referenceOf(new TypeError('boom')))
   })
 
-  it('changes with the message, the kind of error and the build', () => {
+  it('changes with the message and the kind of error', () => {
     const codes = new Set([
-      errorReference(new Error('boom')),
-      errorReference(new Error('bang')),
-      errorReference(new TypeError('boom')),
-      errorReference(new Error('boom'), 'v9.9.9+abcdef0'),
+      referenceOf(new Error('boom')),
+      referenceOf(new Error('bang')),
+      referenceOf(new TypeError('boom')),
     ])
-    expect(codes.size).toBe(4)
+    expect(codes.size).toBe(3)
   })
 })
 
@@ -77,7 +86,6 @@ describe('reportError', () => {
       'version',
     ])
     expect(report).toMatchObject({
-      reference: errorReference(error),
       version: APP_VERSION,
       route: '/especies/keymon',
       source: 'caught',

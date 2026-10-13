@@ -1,7 +1,7 @@
 // Everything the app says about an unexpected error goes through here
-// (LCHP-52, D-068): the reference code the error screen shows and the one
-// console entry a developer reads. A reporting service, if one is ever
-// approved, plugs into reportError and nothing else changes.
+// (LCHP-52, D-068): the one console entry a developer reads, with its
+// reference code. A reporting service, if one is ever approved, plugs into
+// reportError and nothing else changes.
 import { isRouteErrorResponse } from 'react-router'
 import { APP_VERSION } from '@/lib/version'
 
@@ -32,11 +32,12 @@ export function toError<Thrown>(thrown: Thrown): Error {
   }
 }
 
-// Derived from the build and the failure, not random: the screen and the
-// console agree without sharing state, and the same failure on the same
-// build gives the same code on every device with the same browser engine.
-export function errorReference(error: Error, version: string = APP_VERSION): string {
-  const text = `${version}|${error.name}|${error.message}`
+// Derived from the build and the failure, not random: the same failure on
+// the same build gives the same code on every device with the same browser
+// engine, so two reports of one bug can be told to be the same. It is not
+// shown to the user while there is nowhere to look it up (D-068 Addendum 4).
+function errorReference(error: Error): string {
+  const text = `${APP_VERSION}|${error.name}|${error.message}`
   let hash = 0x811c9dc5
   for (let index = 0; index < text.length; index++) {
     hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193)

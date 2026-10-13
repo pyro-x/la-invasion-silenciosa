@@ -11,9 +11,7 @@ import { ERROR_COPY } from './errorCopy'
 
 const MAP_PATH = '/mapa'
 
-type ErrorScreenProps =
-  | { variant: 'error'; reference: string; standalone?: boolean }
-  | { variant: 'notFound'; standalone?: boolean }
+type ErrorScreenProps = { variant: 'error' | 'notFound'; standalone?: boolean }
 
 export function ErrorScreen(props: ErrorScreenProps) {
   const navigate = useNavigate()
@@ -87,19 +85,6 @@ export function ErrorScreen(props: ErrorScreenProps) {
           {mapFailed ? ERROR_COPY.backToStart : ERROR_COPY.backToMap}
         </button>
       </div>
-      {props.variant === 'error' && (
-        <p
-          className="mono"
-          style={{ fontSize: 11, lineHeight: 1.6, color: 'var(--ink-dim)', marginTop: 6 }}
-        >
-          {ERROR_COPY.referenceLabel}:{' '}
-          <strong style={{ color: 'var(--ink)', letterSpacing: '0.06em' }}>
-            {props.reference}
-          </strong>
-          <br />
-          {ERROR_COPY.referenceHint}
-        </p>
-      )}
     </div>
   )
 

@@ -688,3 +688,10 @@ Round 2, Codex on `5c4200c`: **needs attention**, one finding, and no routing or
 ### D-068 · Addendum 3 · 2026-10-13 · CodeRabbit on the pull request
 
 CodeRabbit is read as one more seat of the review (David, 2026-10-13). Its review of `f7015be` had one finding, minor: **taken.** The router matches `/mapa/` to the map but the location keeps the trailing slash, so a map that failed at `/mapa/` offered «Volver al mapa», which only led back to the same failing page. The comparison now ignores trailing slashes, with a test. Its review of `5a261b7` had one nitpick, **taken:** the retry test seeded and checked the app's query client while the route was mounted under another one; the test helper now accepts a client, and that test mounts the route under the one the screen resets, as the app does. CodeRabbit sits outside the two-round budget (David, same day), which applies to the adversarial review.
+
+### D-068 · Addendum 4 · 2026-10-13 · The reference code is not shown on screen (David)
+
+**Decision (David, on the PR):** the error screen does not show the reference code for now. «Código del fallo: …» and «Si avisas a la asociación, dales este código.» are gone from the screen and from `errorCopy.ts`. This amends items 2 and 7 above and the «Proven in a browser» paragraph, where the screen showed the code.
+**Why:** the code cannot be looked up anywhere, so asking a neighbour to quote it promises something nobody can honour. It comes back to the screen when there is somewhere to look it up (a reporting service, or a list the association keeps).
+**What stays:** the code is still computed and written in the console entry. It lets a developer tell that two reports are the same failure, and it is what a reporting service would key on. `errorReference` is now private to `src/lib/errorReport.ts`; the boundary no longer computes anything from the error, it only tells a 404 from the rest.
+**Checked again in a browser** without the two lines, at 412 × 892, 1280 × 800 and 360 × 640: the screen has no code and no «código» text, the console entry still carries one, the layout stays centred with no overflow and no scroll. Screenshots retaken.

@@ -2537,7 +2537,8 @@ navegación. Ahora:
   variantes (`error`, `notFound`). Los textos están en
   `src/components/error/errorCopy.ts` y los dos sprites en
   `src/components/pixel/errorSprites.ts`; no son especies y no pasan por
-  el catálogo. En pantalla nunca aparecen el mensaje ni la traza. Al
+  el catálogo. En pantalla nunca aparecen el mensaje, la traza ni el
+  código de referencia. Al
   aparecer, el foco pasa al título, para que un lector de pantalla diga
   lo que ha ocurrido.
 - **Reintentar** vacía la caché de TanStack Query (`resetQueries`) y
@@ -2568,10 +2569,12 @@ navegación. Ahora:
   `console.error` propio de React Router.
 - **El código de referencia** son seis caracteres (`XXX-XXX`, alfabeto
   sin I, L, O ni U) de un hash FNV-1a de versión, nombre y mensaje del
-  error. Es determinista: pantalla y consola lo calculan cada una por su
-  lado y coinciden, y el mismo fallo en la misma versión da el mismo
+  error. Es determinista: el mismo fallo en la misma versión da el mismo
   código en cualquier dispositivo con el mismo motor de navegador (los
-  mensajes de error cambian entre motores).
+  mensajes de error cambian entre motores), así que dos avisos del mismo
+  fallo se reconocen como el mismo. **Solo va en la entrada de consola**
+  (D-068 Addendum 4): no se muestra al vecino mientras no haya dónde
+  consultarlo, y es la clave que usaría un servicio de reporte.
 
 No cubierto, conocido: una página que lance el valor `undefined` se queda
 sin pantalla (el límite de React Router distingue «sin error» con

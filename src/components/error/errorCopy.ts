@@ -14,6 +14,4 @@ export const ERROR_COPY = {
   retry: 'Reintentar',
   backToMap: 'Volver al mapa',
   backToStart: 'Ir al inicio',
-  referenceLabel: 'Código del fallo',
-  referenceHint: 'Si avisas a la asociación, dales este código.',
 } as const
