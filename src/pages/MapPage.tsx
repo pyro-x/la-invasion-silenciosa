@@ -27,6 +27,8 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocateFixed } from 'lucide-react'
 import { blinkDelayMs } from '@/components/map/blink'
+import { LocationNotice } from '@/components/map/LocationNotice'
+import { locatePanel } from '@/components/map/locatePanel'
 import { MapSheet } from '@/components/map/MapSheet'
 import { PrecisionBadge } from '@/components/map/PrecisionBadge'
 import type { MapFocus } from '@/components/map/BarrioMap'
@@ -35,14 +37,7 @@ import { VerifyModal } from '@/components/sightings/VerifyModal'
 import { Toast } from '@/components/ui/Toast'
 import { formatAge } from '@/lib/age'
 import { isWithinLaLatina } from '@/lib/geo'
-import {
-  resumeGeoWatchIfGranted,
-  startGeoWatch,
-  stopGeoWatch,
-  useGeoWatch,
-  type GeoWatchState,
-} from '@/lib/geoWatch'
-import { locationSettingsGuidance, precisionGuidance } from '@/lib/permissions'
+import { resumeGeoWatchIfGranted, startGeoWatch, stopGeoWatch, useGeoWatch } from '@/lib/geoWatch'
 import {
   distanceMeters,
   formatMeters,
@@ -103,66 +98,6 @@ const VERIFY_TOASTS: Record<VerifyOutcome['kind'], string> = {
   already_verified: 'Ya habías verificado este avistamiento',
   not_verifiable: 'Este avistamiento ya no se puede verificar',
   error: 'No se pudo enviar, inténtalo de nuevo',
-}
-
-// What the sheet says about the neighbour's position, and the one thing to
-// do about it (Alcorqueando's dock: ask, searching, error, imprecise). The
-// native prompt is never raised on arrival (D-052): without a position the
-// sheet asks, and the tap on its button is the gesture the browser wants.
-/** `kind` names the notice whatever its numbers say: closing «poco precisa»
- * at ± 180 m keeps it closed at ± 172 m. */
-type LocatePanel = { kind: string; text: string; action: string | null }
-
-function locatePanel(geo: GeoWatchState, outsideBarrio: boolean): LocatePanel | null {
-  switch (geo.kind) {
-    case 'idle':
-      return {
-        kind: 'ask',
-        text: 'Para jugar, el mapa tiene que saber dónde estás.',
-        action: 'Usar mi ubicación',
-      }
-    case 'paused':
-      return {
-        kind: 'paused',
-        text: 'Para seguir jugando, el mapa tiene que volver a saber dónde estás.',
-        action: 'Usar mi ubicación',
-      }
-    case 'searching':
-      return {
-        kind: 'searching',
-        text: 'Buscando tu posición… Si el navegador pregunta, pulsa «Permitir».',
-        action: null,
-      }
-    case 'denied':
-      return { kind: 'denied', text: locationSettingsGuidance(), action: 'Reintentar' }
-    case 'unavailable':
-    case 'timeout':
-      return {
-        kind: 'no-signal',
-        text: 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.',
-        action: 'Reintentar',
-      }
-    case 'unsupported':
-      return { kind: 'unsupported', text: 'Este navegador no ofrece tu ubicación.', action: null }
-    case 'ok':
-      // The map is a barrio game: a position outside La Latina is shown no
-      // map to follow, and nothing there can be captured or verified.
-      if (outsideBarrio) {
-        return {
-          kind: 'outside',
-          text: 'Estás fuera de La Latina: puedes mirar el mapa, pero para cazar o verificar hay que estar en el barrio.',
-          action: null,
-        }
-      }
-      if (isVague(geo.position)) {
-        return {
-          kind: 'vague',
-          text: `Tu ubicación es poco precisa (± ${formatMeters(geo.position.accuracyM)}). ${precisionGuidance()}`,
-          action: 'Reintentar',
-        }
-      }
-      return null
-  }
 }
 
 const OUTSIDE_BLOCK = 'Estás fuera de La Latina: desde ahí no se puede verificar.'
@@ -366,28 +301,7 @@ export function MapPage() {
   // In the part of the sheet that stays when it is folded: what the map
   // needs from the neighbour must not depend on the list being open.
   const noticeBox = panel && notice !== dismissedNotice && (
-    <div
-      className="panel panel-2 pad row"
-      role="status"
-      style={{ padding: 10, gap: 8, fontSize: 12, boxShadow: 'none' }}
-    >
-      <span className="grow" style={{ color: 'var(--ink-dim)' }}>
-        {panel.text}
-      </span>
-      {panel.action && (
-        <button type="button" className="chip chip-accent map-locate-ask" onClick={locate}>
-          {panel.action}
-        </button>
-      )}
-      <button
-        type="button"
-        className="chip chip-ghost"
-        aria-label="Cerrar aviso"
-        onClick={() => setDismissedNotice(notice)}
-      >
-        ✕
-      </button>
-    </div>
+    <LocationNotice panel={panel} onAction={locate} onDismiss={() => setDismissedNotice(notice)} />
   )
 
   const sheetVars: CSSProperties & Record<'--sheet-h', string> = { '--sheet-h': `${sheetHeight}px` }

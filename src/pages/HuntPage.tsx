@@ -2,8 +2,10 @@
 // species → map position → POST /create-sighting. A failed submit keeps every
 // collected field (retry is pressing send again); success invalidates the map
 // query so the new pending marker blinks on return. The equipment gate
-// (LCHP-28) fronts the flow whenever a native permission prompt is coming:
-// one tap primes camera + location, and both are handed to their steps.
+// (LCHP-28, LCHP-54) is the door: it shows whenever the camera is not granted
+// or there is no position yet, one tap asks for both, and the flow opens once
+// the camera has answered and the watch has a position. The watch then runs
+// for the whole flow (the location step reads it live) and stops on leave.
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -18,15 +20,15 @@ import { EquipmentGate } from '@/features/hunt/EquipmentGate'
 import { LocationStep } from '@/features/hunt/LocationStep'
 import { PhotoStep } from '@/features/hunt/PhotoStep'
 import { PrivacyNote } from '@/features/hunt/PrivacyNote'
-import { getGeoFix, type GeoFix } from '@/lib/geo'
-import { CAMERA_CONSTRAINTS, cameraPermissionState } from '@/lib/permissions'
+import { resumeGeoWatchIfGranted, startGeoWatch, stopGeoWatch, useGeoWatch } from '@/lib/geoWatch'
+import { CAMERA_CONSTRAINTS, cameraPermissionState, type CameraPermission } from '@/lib/permissions'
 import { submitSighting } from '@/services/sightings.service'
 import { listSpecies } from '@/services/species.service'
 
 const STEP_TITLES = [
   'Captura la criatura',
   'Identifica la especie',
-  'Ubicación aproximada',
+  '¿Dónde está la criatura?',
   'Revisa y envía',
 ]
 
@@ -35,50 +37,57 @@ const SUCCESS_MESSAGE = 'Avistamiento enviado · +10 puntos pendientes de valida
 
 const NETWORK_ERROR_MESSAGE = 'No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.'
 
-type GateState = 'checking' | 'open' | 'done'
-
 export function HuntPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(captureFlowReducer, initialCaptureFlowState)
   const { data: species } = useQuery({ queryKey: ['species'], queryFn: listSpecies })
 
-  // Equipment gate (LCHP-28): shown unless the camera permission is already
-  // granted (Android remembers; iOS Safari re-asks per session, so the gate
-  // re-arms exactly when a native prompt is coming). The primed stream lives
-  // in a ref — it is a live resource, not render state.
-  const [gate, setGate] = useState<GateState>('checking')
+  // The door (LCHP-28, LCHP-54): the camera permission is read once (reliable
+  // in the Permissions API; Android remembers, iOS Safari re-asks per
+  // session) and the watch resumes on arrival only when the browser says it
+  // will not ask (as /mapa does). The gate shows until both are in hand, and
+  // once passed it stays passed: a position lost later is the location
+  // step's notice, not a door closing mid-photo. The primed stream lives in
+  // a ref — it is a live resource, not render state.
+  const geo = useGeoWatch()
+  const [camera, setCamera] = useState<CameraPermission | null>(null)
+  const [resumed, setResumed] = useState(false)
   const [arming, setArming] = useState(false)
+  const [cameraArmed, setCameraArmed] = useState(false)
+  const [passed, setPassed] = useState(false)
   const [autoStartCamera, setAutoStartCamera] = useState(false)
-  const [primedFix, setPrimedFix] = useState<GeoFix | null>(null)
   const primedStreamRef = useRef<MediaStream | null>(null)
-  const stepReadFix = useRef(false)
   const aliveRef = useRef(true)
 
   useEffect(() => {
-    void cameraPermissionState().then((camera) => {
+    void cameraPermissionState().then((state) => {
       if (!aliveRef.current) return
-      if (camera === 'granted') {
-        setAutoStartCamera(true)
-        setGate('done')
-      } else {
-        setGate('open')
-      }
+      setCamera(state)
+      if (state === 'granted') setAutoStartCamera(true)
+    })
+    void resumeGeoWatchIfGranted().then(() => {
+      if (aliveRef.current) setResumed(true)
     })
   }, [])
 
-  // One gesture, both prompts: fired in parallel and synchronously within the
-  // tap (Safari's transient activation must cover both). The stream is handed
-  // to the viewfinder AS SOON AS the camera resolves — never parked while the
-  // slower geolocation settles (Codex review: a parked stream is a leak) —
-  // and the fix lands whenever it lands, pre-centering the location step.
+  const checked = camera !== null && resumed
+  const cameraReady = camera === 'granted' || cameraArmed
+  const equipped = cameraReady && geo.kind === 'ok'
+  if (checked && equipped && !passed) setPassed(true)
+
+  // One gesture, both prompts, fired synchronously within the tap (Safari's
+  // transient activation must cover both). The watch is started only when it
+  // is not already running; the camera only when it is not already granted.
+  // The stream waits in its ref until the first position opens the flow —
+  // seconds at most; on leave it is stopped like any other.
   function armEquipment() {
+    if (geo.kind !== 'ok' && geo.kind !== 'searching') startGeoWatch()
+    if (cameraReady || arming) return
     setArming(true)
     const streamPromise: Promise<MediaStream | null> = navigator.mediaDevices?.getUserMedia
       ? navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).catch(() => null)
       : Promise.resolve(null)
-    const fixPromise = getGeoFix()
-
     void streamPromise.then((stream) => {
       if (!aliveRef.current) {
         stream?.getTracks().forEach((track) => track.stop())
@@ -86,12 +95,8 @@ export function HuntPage() {
       }
       primedStreamRef.current = stream
       setAutoStartCamera(true)
-      setGate('done')
-    })
-    void fixPromise.then((fix) => {
-      // A slow answer must not replace a position the location step has
-      // read since: that one is newer.
-      if (aliveRef.current && !stepReadFix.current) setPrimedFix(fix)
+      setArming(false)
+      setCameraArmed(true)
     })
   }
 
@@ -101,8 +106,8 @@ export function HuntPage() {
     return stream
   }
 
-  // The preview object URL and an unconsumed primed stream both outlive
-  // React state; release them on unmount.
+  // The preview object URL, an unconsumed primed stream and the watch all
+  // outlive React state; release them on unmount.
   const previewUrlRef = useRef<string | null>(null)
   useEffect(() => {
     previewUrlRef.current = state.photo?.previewUrl ?? null
@@ -113,6 +118,7 @@ export function HuntPage() {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
       primedStreamRef.current?.getTracks().forEach((track) => track.stop())
       primedStreamRef.current = null
+      stopGeoWatch()
     },
     [],
   )
@@ -139,7 +145,7 @@ export function HuntPage() {
     })
   }
 
-  const showGate = gate === 'open' && state.step === 0 && !state.done
+  const showGate = checked && !passed && !equipped && state.step === 0 && !state.done
 
   if (state.done && state.speciesId !== null) {
     return (
@@ -222,10 +228,10 @@ export function HuntPage() {
         )}
 
         {showGate && (
-          <EquipmentGate arming={arming} onArm={armEquipment} onSkip={() => setGate('done')} />
+          <EquipmentGate geo={geo} cameraReady={cameraReady} arming={arming} onArm={armEquipment} />
         )}
 
-        {!showGate && gate !== 'checking' && state.step === 0 && (
+        {!showGate && checked && state.step === 0 && (
           <PhotoStep
             photo={state.photo}
             autoStart={autoStartCamera}
@@ -274,7 +280,7 @@ export function HuntPage() {
               style={{ opacity: isStepComplete(state, 1) ? 1 : 0.45 }}
               onClick={() => dispatch({ type: 'NEXT' })}
             >
-              ▸ Ubicación aproximada
+              ▸ Sitúala en el mapa
             </button>
           </div>
         )}
@@ -282,14 +288,9 @@ export function HuntPage() {
         {state.step === 2 && (
           <LocationStep
             position={state.position}
-            approxOnly={state.approxOnly}
-            primedFix={primedFix}
-            onFix={(fix) => {
-              stepReadFix.current = true
-              setPrimedFix(fix)
-            }}
+            geo={geo}
             onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
-            onApproxToggled={() => dispatch({ type: 'APPROX_TOGGLED' })}
+            onLocate={startGeoWatch}
             onNext={() => dispatch({ type: 'NEXT' })}
           />
         )}

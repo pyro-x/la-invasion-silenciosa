@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderRoute } from '@/test/render'
+import { resetGeoWatchForTests } from '@/lib/geoWatch'
 import type { CameraPermission } from '@/lib/permissions'
 import type { NewSightingSubmission, SubmitSightingResult } from '@/services/sightings.service'
 
@@ -19,8 +20,8 @@ vi.mock('@/lib/photo', async (importOriginal) => {
   return { ...actual, processPhoto: () => processPhotoMock() }
 })
 
-// Controls whether the equipment gate shows: 'granted' (default) skips it,
-// like an Android return visit; 'prompt' arms it, like a first visit.
+// The camera half of the door: 'granted' (default) is an Android return
+// visit; 'prompt' a first visit, where the gate must ask.
 const cameraStateMock = vi.fn<() => Promise<CameraPermission>>(() => Promise.resolve('granted'))
 vi.mock('@/lib/permissions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/permissions')>()
@@ -30,13 +31,16 @@ vi.mock('@/lib/permissions', async (importOriginal) => {
 // Where the neighbour's finger leaves the pin when a test drags the map.
 const drag = vi.hoisted(() => ({ to: { lat: 40.4116, lng: -3.7102 } }))
 
-// The MapLibre picker needs WebGL; the stub reports the initial-load center
-// once (like the real map) and, when a GPS fly is requested, its landing.
+// The MapLibre picker needs WebGL; the stub reports its opening centre once
+// (the position it was given, or the barrio frame) and, when a fly is
+// requested, its landing — like the real map.
 vi.mock('@/components/map/LocationPickerMap', () => ({
   LocationPickerMap: ({
+    initialCenter,
     flyTo,
     onCenterChanged,
   }: {
+    initialCenter: { lat: number; lng: number } | null
     flyTo: { lat: number; lng: number } | null
     onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
   }) => {
@@ -45,7 +49,7 @@ vi.mock('@/components/map/LocationPickerMap', () => ({
     useEffect(() => {
       if (!sent.current) {
         sent.current = true
-        onCenterChanged({ lat: 40.4118, lng: -3.7105 }, false)
+        onCenterChanged(initialCenter ?? { lat: 40.4118, lng: -3.7105 }, false)
       }
       // a new object is a new fly, as in the real map
       if (flyTo && flown.current !== flyTo) {
@@ -68,27 +72,100 @@ vi.mock('@/services/sightings.service', () => ({
   listMapSightings: () => Promise.resolve([]),
 }))
 
+// The phone's geolocation, as the watch sees it.
+type Success = (position: GeolocationPosition) => void
+type Failure = (error: GeolocationPositionError) => void
+const watchPositionMock = vi.fn<(success: Success, failure: Failure) => number>()
+const clearWatchMock = vi.fn<(id: number) => void>()
+const permissionsQueryMock = vi.fn<() => Promise<{ state: PermissionState }>>()
+
+// The neighbour stands in the barrio, 40 m from where the map's barrio frame opens.
+const HERE = { latitude: 40.4116, longitude: -3.7102 }
+
+function geoFix(
+  { latitude, longitude }: { latitude: number; longitude: number },
+  accuracy: number,
+): GeolocationPosition {
+  const coords = {
+    latitude,
+    longitude,
+    accuracy,
+    altitude: null,
+    altitudeAccuracy: null,
+    heading: null,
+    speed: null,
+  }
+  return { coords: { ...coords, toJSON: () => coords }, timestamp: Date.now(), toJSON: () => ({}) }
+}
+
+function geoFailure(code: number): GeolocationPositionError {
+  return { code, message: '', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }
+}
+
+/** Every watch is answered at once with this position. */
+function phoneAt(at: { latitude: number; longitude: number } = HERE, accuracy = 9) {
+  watchPositionMock.mockImplementation((success) => {
+    success(geoFix(at, accuracy))
+    return 1
+  })
+}
+
+/** The phone holds its answer; `watcher()` hands the callbacks to the test. */
+function phoneHolds() {
+  watchPositionMock.mockImplementation(() => 1)
+}
+
+function watcher() {
+  const [success, fail] = watchPositionMock.mock.calls.at(-1) ?? []
+  if (!success || !fail) throw new Error('watchPosition was not called')
+  return { success, fail }
+}
+
+/** The browser remembers the location grant: the watch resumes on arrival. */
+function locationGranted() {
+  localStorage.setItem('lis.geo.granted', '1')
+  permissionsQueryMock.mockResolvedValue({ state: 'granted' })
+}
+
+/** A first visit: nothing remembered, the browser would ask. */
+function firstVisit() {
+  localStorage.removeItem('lis.geo.granted')
+  permissionsQueryMock.mockResolvedValue({ state: 'prompt' })
+}
+
+function stubNavigator(extra: Record<string, unknown> = {}) {
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    geolocation: {
+      watchPosition: watchPositionMock,
+      clearWatch: clearWatchMock,
+      getCurrentPosition: () => {},
+    },
+    permissions: { query: permissionsQueryMock },
+    ...extra,
+  })
+}
+
 beforeEach(() => {
+  resetGeoWatchForTests()
   submitMock.mockReset()
   processPhotoMock.mockClear()
   cameraStateMock.mockClear()
   cameraStateMock.mockResolvedValue('granted')
+  watchPositionMock.mockReset()
+  clearWatchMock.mockReset()
+  permissionsQueryMock.mockReset()
   localStorage.clear()
-  stubFix(9)
+  // the returning neighbour: both permissions remembered, no gate
+  locationGranted()
+  phoneAt()
+  stubNavigator()
 })
 
-// The neighbour stands in the barrio, 40 m from where the map opens.
-const HERE = { latitude: 40.4116, longitude: -3.7102 }
-
-function stubFix(accuracy: number, at: { latitude: number; longitude: number } = HERE) {
-  vi.stubGlobal('navigator', {
-    ...navigator,
-    geolocation: {
-      getCurrentPosition: (ok: (p: { coords: Record<string, number> }) => void) =>
-        ok({ coords: { ...at, accuracy } }),
-    },
-  })
-}
+// stubs must not leak into the next test even when an assertion throws
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 async function walkToLocation(user: ReturnType<typeof userEvent.setup>) {
   const galleryInput = await screen.findByLabelText(/Galería/)
@@ -97,31 +174,15 @@ async function walkToLocation(user: ReturnType<typeof userEvent.setup>) {
   })
   await user.click(await screen.findByRole('button', { name: /Usar foto/ }))
   await user.click(await screen.findByRole('button', { name: 'CANDADÍN' }))
-  await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
+  await user.click(screen.getByRole('button', { name: /Sitúala en el mapa/ }))
 }
 
-// stubs must not leak into the next test even when an assertion throws
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
-
 async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
-  // step 1: pick a photo through the gallery input → pipeline → preview
-  // (findBy: the gate check resolves async before the step renders)
-  const galleryInput = await screen.findByLabelText(/Galería/)
-  fireEvent.change(galleryInput, {
-    target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
-  })
-  await user.click(await screen.findByRole('button', { name: /Usar foto/ }))
-
-  // step 2: species picker
-  await user.click(await screen.findByRole('button', { name: 'CANDADÍN' }))
-  await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
-
-  // step 3: no pin without a position; the tap asks for it and the
-  // (stubbed, lazy-loaded) picker map lands on the fix
-  await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+  await walkToLocation(user)
+  // step 3 opens on the position the watch already has: no tap. The way on
+  // opens once the (lazy) picker has reported its opening centre.
   expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
 }
 
@@ -138,8 +199,7 @@ describe('capture flow (Cazar)', () => {
 
     await walkToReview(user)
 
-    // privacy toggle text lives on the location step we just passed through;
-    // the review card shows the approximate-location line instead
+    // the review card shows the approximate-location line of what the map shows
     expect(screen.getByText('La Latina · Ubicación aproximada')).toBeInTheDocument()
     expect(screen.getByText('Por verificar')).toBeInTheDocument()
 
@@ -196,37 +256,20 @@ describe('capture flow (Cazar)', () => {
     )
   })
 
-  describe('a creature is registered where the neighbour stands (LCHP-49)', () => {
-    it('without a position there is no pin, and the step says what to do', async () => {
+  describe('a creature is registered where the neighbour stands (LCHP-49, LCHP-54)', () => {
+    it('step 3 opens on the neighbour with no tap: position, precision, and the way on', async () => {
       const user = userEvent.setup()
       renderHunt()
       await walkToLocation(user)
 
-      // the map opened on the barrio: its centre is nobody's position
-      expect(
-        await screen.findByText('Activa tu ubicación para situar la criatura'),
-      ).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-    })
-
-    it('a denial (code=1, the iOS Safari case) explains the way back and stays blocked', async () => {
-      const user = userEvent.setup()
-      vi.stubGlobal('navigator', {
-        ...navigator,
-        geolocation: {
-          getCurrentPosition: (_ok: PositionCallback, onError: (error: { code: number }) => void) =>
-            onError({ code: 1 }),
-        },
-      })
-      renderHunt()
-      await walkToLocation(user)
-
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
-      // per-platform guidance (non-iOS test env → the padlock path), with no
-      // promise of a pin placed by hand
-      const guidance = await screen.findByText(/candado de la barra/)
-      expect(guidance).not.toHaveTextContent('a mano')
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(screen.getByText('± 9 m')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+      // the prompt no longer belongs to this step
+      expect(screen.queryByRole('button', { name: /Usar mi ubicación/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Volver a mi posición/ })).toBeInTheDocument()
     })
 
     it('the pin can be nudged near the neighbour: sent as placed by hand, with no accuracy claim', async () => {
@@ -234,10 +277,9 @@ describe('capture flow (Cazar)', () => {
       submitMock.mockResolvedValue({ kind: 'created', id: 'nudged' })
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
-      expect(await screen.findByText('± 9 m')).toBeInTheDocument()
+      await screen.findByText('Tu posición')
 
-      // about 22 m north of the fix
+      // about 22 m north of the position
       drag.to = { lat: 40.4118, lng: -3.7102 }
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(await screen.findByText('Pin ajustado a mano · a 22 m de ti')).toBeInTheDocument()
@@ -256,10 +298,9 @@ describe('capture flow (Cazar)', () => {
       const user = userEvent.setup()
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
       await screen.findByText('Tu posición')
 
-      // about 111 m north of the fix, still inside La Latina
+      // about 111 m north of the position, still inside La Latina
       drag.to = { lat: 40.4126, lng: -3.7102 }
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(
@@ -276,92 +317,81 @@ describe('capture flow (Cazar)', () => {
     it('a neighbour just outside La Latina registers nothing, even with the pin inside it', async () => {
       const user = userEvent.setup()
       // 22 m beyond the barrio's northern margin
-      stubFix(9, { latitude: 40.416, longitude: -3.7102 })
+      phoneAt({ latitude: 40.416, longitude: -3.7102 })
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
       expect(await screen.findByText('Estás fuera de La Latina')).toBeInTheDocument()
 
-      // 33 m south of the fix: inside the barrio, and inside the radius
+      // 33 m south of the position: inside the barrio, and inside the radius
       drag.to = { lat: 40.4157, lng: -3.7102 }
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(screen.getByText('Estás fuera de La Latina')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
     })
 
-    it('a position that can no longer be read is not kept as if it still held', async () => {
+    it('walking away re-judges the pin where it is; «Volver a mi posición» brings it back', async () => {
       const user = userEvent.setup()
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
       await screen.findByText('Tu posición')
-      vi.stubGlobal('navigator', {
-        ...navigator,
-        geolocation: {
-          getCurrentPosition: (_ok: PositionCallback, onError: (error: { code: number }) => void) =>
-            onError({ code: 2 }),
-        },
-      })
+
+      // the phone reports the neighbour 60 m north of the pin
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      expect(
+        await screen.findByText(/Ese punto está a 6\d m de ti\. El máximo son 50 m\./),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+
       await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
-      expect(
-        await screen.findByText('Activa tu ubicación para situar la criatura'),
-      ).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-
-      // nor does it come back by leaving the step and returning to it
-      await user.click(screen.getByRole('button', { name: 'Paso 2' }))
-      await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
-      expect(
-        await screen.findByText('Activa tu ubicación para situar la criatura'),
-      ).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-    })
-
-    it("a slow answer to the gate's request does not replace a position read since", async () => {
-      const user = userEvent.setup()
-      cameraStateMock.mockResolvedValue('prompt')
-      const fakeStream = Object.assign(new MediaStream(), { getTracks: () => [] })
-      let gateFails: (error: { code: number }) => void = () => {}
-      vi.stubGlobal('navigator', {
-        ...navigator,
-        mediaDevices: { getUserMedia: () => Promise.resolve(fakeStream) },
-        geolocation: {
-          // the gate's request: GPS cold, no answer yet
-          getCurrentPosition: (
-            _ok: PositionCallback,
-            onError: (error: { code: number }) => void,
-          ) => {
-            gateFails = onError
-          },
-        },
-      })
-      renderHunt()
-      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
-      await user.click(await screen.findByRole('button', { name: /Cerrar visor/ }))
-      // from here on the phone answers at once
-      stubFix(9)
-      await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
-      await screen.findByText('Tu posición')
-
-      // only now does the gate's request give up
-      gateFails({ code: 3 })
-      await user.click(screen.getByRole('button', { name: 'Paso 2' }))
-      await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
     })
 
-    it('leaving the step and coming back judges against the position read there', async () => {
+    it('a position that turns vague while on the step withdraws the way on', async () => {
       const user = userEvent.setup()
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+      await screen.findByText('Tu posición')
+
+      act(() => watcher().success(geoFix(HERE, 180)))
+      expect(await screen.findByText('Tu ubicación es poco precisa (± 180 m)')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+    })
+
+    it('a position lost while on the step shows the way back, and «Reintentar» is the tap', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+
+      // the phone revokes the permission (code=1, the iOS Safari case)
+      act(() => watcher().fail(geoFailure(1)))
+      // per-platform guidance (non-iOS test env → the padlock path), with no
+      // promise of a pin placed by hand
+      const guidance = await screen.findByText(/candado de la barra/)
+      expect(guidance).not.toHaveTextContent('a mano')
+      expect(screen.getByText('Activa tu ubicación para situar la criatura')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Reintentar' }))
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
+    })
+
+    it('leaving the step and coming back opens on the latest position', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
       await screen.findByText('Tu posición')
       await user.click(screen.getByRole('button', { name: 'Paso 2' }))
-      await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
-      // no tap: the map goes back to the position the step already had
+      // meanwhile the neighbour walked 22 m north
+      act(() => watcher().success(geoFix({ latitude: 40.4118, longitude: -3.7102 }, 7)))
+      await user.click(screen.getByRole('button', { name: /Sitúala en el mapa/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(screen.getByText('± 7 m')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
     })
 
@@ -369,9 +399,8 @@ describe('capture flow (Cazar)', () => {
       const user = userEvent.setup()
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
       await screen.findByText('Tu posición')
-      // 50.3 m north of the fix
+      // 50.3 m north of the position
       drag.to = { lat: HERE.latitude + 50.3 / 111_195, lng: HERE.longitude }
       await user.click(screen.getByRole('button', { name: 'drag the map' }))
       expect(
@@ -379,12 +408,11 @@ describe('capture flow (Cazar)', () => {
       ).toBeInTheDocument()
     })
 
-    it('a position too vague places no creature, and says how to fix it', async () => {
+    it('a position too vague passes the door but places no creature, and says how to fix it', async () => {
       const user = userEvent.setup()
-      stubFix(180)
+      phoneAt(HERE, 180)
       renderHunt()
       await walkToLocation(user)
-      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
 
       expect(await screen.findByText('Tu ubicación es poco precisa (± 180 m)')).toBeInTheDocument()
       expect(screen.getByText(/precisión alta/)).toBeInTheDocument()
@@ -392,81 +420,132 @@ describe('capture flow (Cazar)', () => {
     })
   })
 
-  it('shows the equipment gate when camera permission is not granted; «Ahora no» skips it', async () => {
-    const user = userEvent.setup()
-    cameraStateMock.mockResolvedValue('prompt')
-    renderHunt()
-
-    expect(await screen.findByText('¡Prepara tu equipo!')).toBeInTheDocument()
-    // the gate no longer calls the position optional
-    expect(screen.getByText(/solo se registra estando junto a ella/)).toBeInTheDocument()
-    // the gate replaces the step content — no viewfinder button yet
-    expect(screen.queryByRole('button', { name: /Abrir visor/ })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /Ahora no/ }))
-    expect(await screen.findByRole('button', { name: /Abrir visor/ })).toBeInTheDocument()
-    expect(screen.getByLabelText(/Galería/)).toBeInTheDocument()
-  })
-
-  it('the gate primes both permissions in one tap: viewfinder opens live, location step pre-centers', async () => {
-    const user = userEvent.setup()
-    cameraStateMock.mockResolvedValue('prompt')
-    // a real happy-dom MediaStream (srcObject type-checks its value), plus
-    // the getTracks its stub implementation lacks
-    const fakeStream = Object.assign(new MediaStream(), { getTracks: () => [] })
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      mediaDevices: { getUserMedia: () => Promise.resolve(fakeStream) },
-      geolocation: {
-        getCurrentPosition: (ok: (p: { coords: Record<string, number> }) => void) =>
-          ok({ coords: { latitude: 40.4116, longitude: -3.7102, accuracy: 9 } }),
-      },
+  describe('the door (LCHP-28, LCHP-54)', () => {
+    it('a returning neighbour with both permissions sees no gate: the watch resumes with no tap', async () => {
+      renderHunt()
+      expect(await screen.findByLabelText(/Galería/)).toBeInTheDocument()
+      expect(screen.queryByText('¡Prepara tu equipo!')).not.toBeInTheDocument()
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
     })
-    renderHunt()
 
-    await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+    it('a first visit asks nothing on load; the gate shows, and its tap starts the watch and the camera together', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      cameraStateMock.mockResolvedValue('prompt')
+      // a real happy-dom MediaStream (srcObject type-checks its value), plus
+      // the getTracks its stub implementation lacks
+      const fakeStream = Object.assign(new MediaStream(), { getTracks: () => [] })
+      const getUserMedia = vi.fn(() => Promise.resolve(fakeStream))
+      stubNavigator({ mediaDevices: { getUserMedia } })
+      renderHunt()
 
-    // the granted stream is handed straight to the viewfinder
-    expect(await screen.findByRole('button', { name: /Disparar/ })).toBeInTheDocument()
+      expect(await screen.findByText('¡Prepara tu equipo!')).toBeInTheDocument()
+      expect(screen.getByText(/solo se registra estando junto a ella/)).toBeInTheDocument()
+      expect(watchPositionMock).not.toHaveBeenCalled()
+      expect(getUserMedia).not.toHaveBeenCalled()
+      // the gate replaces the step content, and there is no way around it
+      expect(screen.queryByRole('button', { name: /Abrir visor/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Ahora no/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Volver al mapa' })).toBeInTheDocument()
 
-    // continue on the gallery path (happy-dom video can't capture frames)
-    await user.click(screen.getByRole('button', { name: /Cerrar visor/ }))
-    fireEvent.change(screen.getByLabelText(/Galería/), {
-      target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
+      await user.click(screen.getByRole('button', { name: /Activar cámara y ubicación/ }))
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
+      expect(getUserMedia).toHaveBeenCalledTimes(1)
+      // the granted stream is handed straight to the viewfinder
+      expect(await screen.findByRole('button', { name: /Disparar/ })).toBeInTheDocument()
     })
-    await user.click(await screen.findByRole('button', { name: /Usar foto/ }))
-    await user.click(await screen.findByRole('button', { name: 'CANDADÍN' }))
-    await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
 
-    // the cached gate fix pre-centers the map: GPS position without any tap
-    expect(await screen.findByText('Tu posición')).toBeInTheDocument()
-    expect(screen.getByText('± 9 m')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
-  })
+    it('the gate waits for the first position: searching until the phone answers, then the flow opens', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      phoneHolds()
+      renderHunt()
 
-  it('stops a granted stream if the user leaves before the arming settles (no camera-light leak)', async () => {
-    const user = userEvent.setup()
-    cameraStateMock.mockResolvedValue('prompt')
-    const stopTrack = vi.fn()
-    let resolveStream: (stream: MediaStream) => void = () => {}
-    const fakeStream = Object.assign(new MediaStream(), {
-      getTracks: () => [{ stop: stopTrack }],
+      await user.click(await screen.findByRole('button', { name: /Activar mi ubicación/ }))
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Buscando tu posición… Si el navegador pregunta, pulsa «Permitir».',
+      )
+      expect(screen.getByRole('button', { name: /Buscando tu posición/ })).toBeDisabled()
+      expect(screen.queryByLabelText(/Galería/)).not.toBeInTheDocument()
+
+      act(() => watcher().success(geoFix(HERE, 9)))
+      expect(await screen.findByLabelText(/Galería/)).toBeInTheDocument()
+      expect(screen.queryByText('¡Prepara tu equipo!')).not.toBeInTheDocument()
     })
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      mediaDevices: {
-        getUserMedia: () => new Promise<MediaStream>((resolve) => (resolveStream = resolve)),
-      },
-      geolocation: { getCurrentPosition: () => {} }, // never answers (GPS cold)
-    })
-    renderHunt()
 
-    await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
-    // the user gives up mid-wait and leaves the flow
-    await user.click(screen.getByLabelText('Cerrar'))
-    // ...and only then does the OS deliver the granted stream
-    resolveStream(fakeStream)
-    await waitFor(() => expect(stopTrack).toHaveBeenCalled())
+    it('a location denial is answered at the gate: guidance, retry, the way back, and no photo step', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      phoneHolds()
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar mi ubicación/ }))
+      act(() => watcher().fail(geoFailure(1)))
+      expect(await screen.findByText(/candado de la barra/)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Volver al mapa' })).toBeInTheDocument()
+      expect(screen.queryByLabelText(/Galería/)).not.toBeInTheDocument()
+
+      // the neighbour allows it in the browser and tries again
+      phoneAt()
+      await user.click(screen.getByRole('button', { name: /Reintentar/ }))
+      expect(await screen.findByLabelText(/Galería/)).toBeInTheDocument()
+    })
+
+    it('a camera denial is not a wall: the photo step opens with the system camera and the gallery', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      cameraStateMock.mockResolvedValue('prompt')
+      stubNavigator({
+        mediaDevices: { getUserMedia: () => Promise.reject(new Error('NotAllowedError')) },
+      })
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+      expect(await screen.findByLabelText(/Galería/)).toBeInTheDocument()
+      expect(screen.getByLabelText(/Cámara del sistema/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Disparar/ })).not.toBeInTheDocument()
+    })
+
+    it('a position lost after the door does not close it again: the notice waits at step 3', async () => {
+      renderHunt()
+      await screen.findByLabelText(/Galería/)
+      act(() => watcher().fail(geoFailure(1)))
+      expect(screen.getByLabelText(/Galería/)).toBeInTheDocument()
+      expect(screen.queryByText('¡Prepara tu equipo!')).not.toBeInTheDocument()
+    })
+
+    it('leaving the flow stops the watch', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await screen.findByLabelText(/Galería/)
+      await user.click(screen.getByLabelText('Cerrar'))
+      await waitFor(() => expect(clearWatchMock).toHaveBeenCalled())
+    })
+
+    it('stops a granted stream if the user leaves before the arming settles (no camera-light leak)', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      cameraStateMock.mockResolvedValue('prompt')
+      phoneHolds()
+      const stopTrack = vi.fn()
+      let resolveStream: (stream: MediaStream) => void = () => {}
+      const fakeStream = Object.assign(new MediaStream(), {
+        getTracks: () => [{ stop: stopTrack }],
+      })
+      stubNavigator({
+        mediaDevices: {
+          getUserMedia: () => new Promise<MediaStream>((resolve) => (resolveStream = resolve)),
+        },
+      })
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+      // the user gives up mid-wait and leaves the flow
+      await user.click(screen.getByLabelText('Cerrar'))
+      // ...and only then does the OS deliver the granted stream
+      resolveStream(fakeStream)
+      await waitFor(() => expect(stopTrack).toHaveBeenCalled())
+    })
   })
 
   it('keeps collected data when navigating back through the step indicator', async () => {
@@ -482,15 +561,16 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
     await user.click(await screen.findByRole('button', { name: 'KEYMON' }))
-    await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
+    await user.click(screen.getByRole('button', { name: /Sitúala en el mapa/ }))
+    expect(screen.getByText('¿Dónde está la criatura?')).toBeInTheDocument()
     expect(
-      screen.getByText('Por privacidad, guardamos solo una ubicación aproximada.'),
+      screen.getByText('Por privacidad, en el mapa solo se muestra una ubicación aproximada.'),
     ).toBeInTheDocument()
 
     // back to the species step: the selection is still there
     await user.click(screen.getByRole('button', { name: 'Paso 2' }))
     expect(screen.getByText('Identifica la especie')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Ubicación aproximada/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Sitúala en el mapa/ })).toBeEnabled()
 
     // and back to the photo step: the preview is still there
     await user.click(screen.getByRole('button', { name: 'Paso 1' }))

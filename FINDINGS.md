@@ -65,3 +65,9 @@ while working on something else.
 **Problem:** `reglas-y-especificacion.md`, screen «2 · Mapa», says the map has a «leyenda de las 5 criaturas» and that a pin opens a card with «criatura, calle, autor, estado». The brief §18 records that there is no legend (D-061), and D-046 that the map shows neither author nor street. The app follows the decisions; the product spec is stale.
 **Context:** found during LCHP-47 while updating the four-species enumerations. That ticket changed the count in the sentence (4 → 5) and left the rest.
 **Proposal:** rewrite the «2 · Mapa» bullets to match brief §18 and D-046. Docs-only PR.
+
+## [LCHP-55] — Rules §3.3 says the exact position is not stored; D-049 stores it privately
+
+**Problem:** `reglas-y-especificacion.md` §3.3 still reads «Ubicación aproximada (por privacidad, no se guarda la posición exacta)»; since D-049 the server keeps the exact coordinate privately and snaps only the public one.
+**Context:** found in LCHP-54 while replacing the location step's sentence «guardamos solo una ubicación aproximada» (same false claim) with «en el mapa solo se muestra una ubicación aproximada».
+**Proposal:** one docs PR rewording §3.3 to D-049 in the association's terms; check §6 for the same claim (LCHP-48 covers §6 «Mapa»).

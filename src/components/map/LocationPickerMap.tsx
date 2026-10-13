@@ -1,26 +1,33 @@
 // Center-pin location picker (LCHP-14): the pin is fixed at the viewport
 // center and the user drags the map underneath (chosen over tap-to-place —
 // finger-precise on small screens). The submitted position is ALWAYS the map
-// center; `flyTo` recenters programmatically (GPS fix) without counting as a
-// user move.
+// center; `initialCenter` opens the map on the neighbour's position (LCHP-54:
+// the watch already has it when the step opens) and `flyTo` recenters
+// programmatically without counting as a user move.
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addAttribution } from './attribution'
 import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
 
+// Street level: the 50 m radius a pin may be nudged in fills the picker.
+const PICK_ZOOM = 17
+
 type Props = {
+  /** Where the map opens, read once at mount; the barrio frame otherwise. */
+  initialCenter?: { lat: number; lng: number } | null
   /** Programmatic recenter (a GPS fix). Same object identity = no move. */
   flyTo: { lat: number; lng: number } | null
   /** Fires on every settle with the new center; byUser=false for `flyTo`. */
   onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
 }
 
-export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
+export function LocationPickerMap({ initialCenter = null, flyTo, onCenterChanged }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const onCenterChangedRef = useRef(onCenterChanged)
   const movedByCode = useRef(false)
+  const opensAt = useRef(initialCenter)
 
   useEffect(() => {
     onCenterChangedRef.current = onCenterChanged
@@ -28,12 +35,14 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
 
   useEffect(() => {
     if (!containerRef.current) return
+    const at = opensAt.current
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: tileProvider.style,
-      bounds: LA_LATINA_BOUNDS,
+      ...(at
+        ? { center: [at.lng, at.lat], zoom: PICK_ZOOM }
+        : { bounds: LA_LATINA_BOUNDS, fitBoundsOptions: { padding: 16 } }),
       maxBounds: LA_LATINA_MAX_BOUNDS,
-      fitBoundsOptions: { padding: 16 },
       attributionControl: false,
       dragRotate: false,
       pitchWithRotate: false,
@@ -62,7 +71,7 @@ export function LocationPickerMap({ flyTo, onCenterChanged }: Props) {
     const map = mapRef.current
     if (!map || !flyTo) return
     movedByCode.current = true
-    map.easeTo({ center: [flyTo.lng, flyTo.lat], zoom: 17, duration: 600 })
+    map.easeTo({ center: [flyTo.lng, flyTo.lat], zoom: PICK_ZOOM, duration: 600 })
   }, [flyTo])
 
   return (

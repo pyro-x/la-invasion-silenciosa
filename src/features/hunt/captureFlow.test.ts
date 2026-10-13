@@ -38,12 +38,11 @@ const TO_REVIEW: CaptureFlowAction[] = [
 ]
 
 describe('captureFlowReducer', () => {
-  it('starts at the photo step with the privacy toggle on and nothing collected', () => {
+  it('starts at the photo step with nothing collected', () => {
     expect(initialCaptureFlowState.step).toBe(0)
     expect(initialCaptureFlowState.photo).toBeNull()
     expect(initialCaptureFlowState.speciesId).toBeNull()
     expect(initialCaptureFlowState.position).toBeNull()
-    expect(initialCaptureFlowState.approxOnly).toBe(true)
     expect(initialCaptureFlowState.submitError).toBeNull()
   })
 
@@ -78,15 +77,6 @@ describe('captureFlowReducer', () => {
     expect(run([{ type: 'NEXT' }], outside).step).toBe(2)
     const backInside = run([{ type: 'POSITION_CHANGED', position: POSITION }], outside)
     expect(run([{ type: 'NEXT' }], backInside).step).toBe(3)
-  })
-
-  it('toggles the approximate-location switch only on the location step', () => {
-    expect(run([{ type: 'APPROX_TOGGLED' }]).approxOnly).toBe(true)
-    const atLocation = run(TO_REVIEW.slice(0, 4))
-    expect(run([{ type: 'APPROX_TOGGLED' }], atLocation).approxOnly).toBe(false)
-    expect(
-      run([{ type: 'APPROX_TOGGLED' }, { type: 'APPROX_TOGGLED' }], atLocation).approxOnly,
-    ).toBe(true)
   })
 
   it('going back to a previous step keeps the collected data', () => {
