@@ -1206,7 +1206,8 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 * **«Ir a mi posición»** (`src/lib/geoWatch.ts`, portado de Alcorqueando)
   — *enmendado por LCHP-49: desde entonces el mapa sigue al vecino por
   defecto y los avisos no esperan a un toque; ver «Se juega donde estás»
-  más abajo. Lo que sigue describe el mecanismo, que no cambia*:
+  más abajo. Lo que sigue describe el mecanismo, que no cambia, y marca en
+  su sitio las dos frases que sí cambian*:
   el permiso nativo se pide **solo al tocar el botón, nunca al cargar**
   (D-052). Con posición: punto verde + círculo de precisión, y el mapa la
   sigue hasta que el vecino arrastra el mapa, hace zoom con los dedos o la
@@ -1228,8 +1229,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   gesto del vecino — no guarda su zoom intermedio (el gesto guarda luego
   lo suyo). En una
   visita posterior **el punto reaparece** sin preguntar solo si el
-  navegador confirma que el permiso sigue concedido; el mapa **no** se
-  recentra solo (seguir exige tocar el botón). Al volver de segundo plano
+  navegador confirma que el permiso sigue concedido. Hasta LCHP-49 el mapa
+  no se recentraba solo (seguir exigía tocar el botón); desde entonces esa
+  primera posición también lleva el mapa hasta el vecino. Al volver de segundo plano
   la observación se reanuda **solo si el navegador afirma que el permiso
   sigue concedido**. Si va a preguntar de nuevo (un permiso «solo esta
   vez» caducado) o no sabe decirlo (sin API de permisos; Safari, que
@@ -1243,8 +1245,10 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   de observar y se olvida la posición (también en memoria). Los avisos
   (denegado → cómo permitirlo, texto por plataforma; sin señal; **fuera de
   La Latina no se muestra ni se sigue la posición**) se ven en la cabecera
-  de la hoja, plegada o no, y **solo tras tocar el botón**: una
-  observación reanudada al llegar no saluda con un aviso.
+  de la hoja, plegada o no. Hasta LCHP-49 solo tras tocar el botón; desde
+  entonces **sin esperar a un toque**, también con una observación
+  reanudada al llegar, porque dicen por qué no se puede jugar (ver «Se
+  juega donde estás»).
 * **Privacidad de la posición del vecino:** no se envía a nuestros
   servidores ni se guarda. La vista recordada (abajo) solo registra
   movimientos hechos por el vecino, nunca los de la app, y **no registra
