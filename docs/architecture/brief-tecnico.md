@@ -1562,23 +1562,31 @@ Usuario pulsa “Cazar”
 Puerta de equipamiento (D-053, D-070) — la ubicación es la puerta.
 Al entrar se lee el permiso de cámara y se reanuda la observación de
 posición (geoWatch, la misma de /mapa) SOLO si el navegador afirma
-que el permiso sigue concedido. La puerta aparece si falta cualquiera
-de las dos: «¡Prepara tu equipo!» + regla de oro; UN tap dispara
-cámara y observación en un solo gesto (el permiso nativo nunca se
-pide al cargar, D-052). La puerta ESPERA a la primera posición:
-mientras busca, «Buscando tu posición… Si el navegador pregunta,
-pulsa «Permitir».»; denegada / sin señal / sin soporte → aviso con la
-guía POR PLATAFORMA (iOS: Ajustes → Privacidad y seguridad →
-Localización → Sitios web de Safari; resto: el candado del navegador)
-+ «Reintentar», y no se pasa. No hay «Ahora no»: la salida es «Volver
-al mapa». La cámara denegada sí pasa (cámara del sistema / galería,
-D-050). El stream concedido pasa vivo al visor. En Android se
-auto-salta desde la 2ª visita; en iOS re-aparece por sesión (WebKit
-no persiste el permiso de cámara, bug 215884, y Safari no confirma el
-de ubicación) — un diálogo nativo nunca interrumpe a mitad de acción.
-Pasada la puerta no vuelve a cerrarse: una posición perdida después
-es un aviso del paso 3. La observación sigue viva durante todo el
-flujo y se detiene al salir de /cazar.
+que el permiso sigue concedido; una observación reanudada que aún
+busca ya pasa la puerta (el permiso está confirmado; el paso 3 dirá
+«Buscando tu posición…» hasta la primera posición). La puerta aparece
+si falta cualquiera de las dos: «¡Prepara tu equipo!» + regla de oro;
+UN tap dispara cámara y observación en un solo gesto (el permiso
+nativo nunca se pide al cargar, D-052). La puerta ESPERA a la posición
+que pidió el tap: mientras busca, «Buscando tu posición… Si el
+navegador pregunta, pulsa «Permitir».» con el botón desactivado;
+denegada → guía POR PLATAFORMA (iOS: Ajustes → Privacidad y seguridad
+→ Localización → Sitios web de Safari; resto: el candado del
+navegador) + «⟳ Reintentar»; sin señal → «No se pudo obtener tu
+posición…» + «⟳ Reintentar»; sin soporte → «Este navegador no ofrece
+tu ubicación.» y nada que reintentar. De ninguna se pasa. No hay
+«Ahora no»: la salida es «Volver al mapa». La cámara denegada sí pasa
+(cámara del sistema / galería, D-050). El stream concedido pasa vivo
+al visor; si la posición se deniega mientras tanto, el stream se
+cierra (sin luz de cámara detrás de la guía) y el visor se reabre solo
+al pasar la puerta; una petición de cámara sin respuesta se da por
+perdida a los 15 s. En Android con los dos permisos recordados no hay
+puerta; en iOS re-aparece por sesión (WebKit no persiste el permiso de
+cámara, bug 215884, y Safari no confirma el de ubicación) — un diálogo
+nativo nunca interrumpe a mitad de acción. Pasada la puerta no vuelve
+a cerrarse: una posición perdida después es un aviso del paso 3. La
+observación sigue viva durante todo el flujo y se detiene al salir de
+/cazar.
 ↓
 Foto: visor in-app (getUserMedia, cámara trasera) o cámara del
 sistema / galería (D-050) → pipeline §17.1 → previsualización
@@ -1605,8 +1613,13 @@ una línea dice «Por privacidad, en el mapa solo se muestra una
 ubicación aproximada.»
 Un pin fuera de La Latina bloquea el paso (espejo del bbox servidor)
 ↓
-Revisa y envía → POST /create-sighting (multipart: foto limpia +
-species_id + lat/lng exactos + accuracy si es GPS)
+Revisa y envía: la regla sigue viva hasta el envío — si el vecino se
+alejó más de 50 m del pin, su posición se volvió imprecisa o se
+perdió, o salió del barrio, «Enviar al registro» se desactiva con el
+motivo y «◂ Volver a situarla» (D-070)
+↓
+POST /create-sighting (multipart: foto limpia + species_id + lat/lng
+exactos + accuracy si es GPS)
 ↓
 El servidor guarda la imagen privada, lat/lng_private exactos (D-049)
 y snapea lat/lng_public a la rejilla de privacidad

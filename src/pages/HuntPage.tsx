@@ -19,6 +19,7 @@ import {
 import { EquipmentGate } from '@/features/hunt/EquipmentGate'
 import { LocationStep } from '@/features/hunt/LocationStep'
 import { PhotoStep } from '@/features/hunt/PhotoStep'
+import { whyNotSend } from '@/features/hunt/presence'
 import { PrivacyNote } from '@/features/hunt/PrivacyNote'
 import { resumeGeoWatchIfGranted, startGeoWatch, stopGeoWatch, useGeoWatch } from '@/lib/geoWatch'
 import { CAMERA_CONSTRAINTS, cameraPermissionState, type CameraPermission } from '@/lib/permissions'
@@ -36,6 +37,8 @@ const STEP_TITLES = [
 const SUCCESS_MESSAGE = 'Avistamiento enviado · +10 puntos pendientes de validación'
 
 const NETWORK_ERROR_MESSAGE = 'No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.'
+
+const CAMERA_WAIT_MS = 15_000
 
 export function HuntPage() {
   const navigate = useNavigate()
@@ -55,6 +58,9 @@ export function HuntPage() {
   const [resumed, setResumed] = useState(false)
   const [arming, setArming] = useState(false)
   const [cameraArmed, setCameraArmed] = useState(false)
+  // The tap started the watch: its answer may be a denial, so the door
+  // waits for it. A watch resumed on arrival was already granted.
+  const [askedForPosition, setAskedForPosition] = useState(false)
   const [passed, setPassed] = useState(false)
   const [autoStartCamera, setAutoStartCamera] = useState(false)
   const primedStreamRef = useRef<MediaStream | null>(null)
@@ -73,20 +79,30 @@ export function HuntPage() {
 
   const checked = camera !== null && resumed
   const cameraReady = camera === 'granted' || cameraArmed
-  const equipped = cameraReady && geo.kind === 'ok'
+  const waitingForFix = geo.kind === 'searching' && askedForPosition
+  const located = geo.kind === 'ok' || (geo.kind === 'searching' && !askedForPosition)
+  const equipped = cameraReady && located
   if (checked && equipped && !passed) setPassed(true)
 
   // One gesture, both prompts, fired synchronously within the tap (Safari's
   // transient activation must cover both). The watch is started only when it
   // is not already running; the camera only when it is not already granted.
-  // The stream waits in its ref until the first position opens the flow —
-  // seconds at most; on leave it is stopped like any other.
+  // The stream waits in its ref until the first position opens the flow;
+  // it is released if the position is refused, and on leave.
   function armEquipment() {
-    if (geo.kind !== 'ok' && geo.kind !== 'searching') startGeoWatch()
+    if (geo.kind !== 'ok' && geo.kind !== 'searching') {
+      setAskedForPosition(true)
+      startGeoWatch()
+    }
     if (cameraReady || arming) return
     setArming(true)
+    // A request the browser never answers must not hold the door shut:
+    // after the limit the system camera and the gallery take over (D-050).
     const streamPromise: Promise<MediaStream | null> = navigator.mediaDevices?.getUserMedia
-      ? navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).catch(() => null)
+      ? Promise.race([
+          navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), CAMERA_WAIT_MS)),
+        ])
       : Promise.resolve(null)
     void streamPromise.then((stream) => {
       if (!aliveRef.current) {
@@ -100,6 +116,20 @@ export function HuntPage() {
     })
   }
 
+  // A stream granted while the position is refused would keep the camera
+  // light on behind the guidance: it is released, and the viewfinder opens
+  // again by itself once the door passes (the permission is already given).
+  const refused =
+    geo.kind === 'denied' ||
+    geo.kind === 'unavailable' ||
+    geo.kind === 'timeout' ||
+    geo.kind === 'unsupported'
+  useEffect(() => {
+    if (passed || !refused) return
+    primedStreamRef.current?.getTracks().forEach((track) => track.stop())
+    primedStreamRef.current = null
+  }, [passed, refused])
+
   function takePrimedStream(): MediaStream | null {
     const stream = primedStreamRef.current
     primedStreamRef.current = null
@@ -112,19 +142,25 @@ export function HuntPage() {
   useEffect(() => {
     previewUrlRef.current = state.photo?.previewUrl ?? null
   })
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // StrictMode runs this setup again after a simulated unmount: revive.
+    aliveRef.current = true
+    return () => {
       aliveRef.current = false
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
       primedStreamRef.current?.getTracks().forEach((track) => track.stop())
       primedStreamRef.current = null
       stopGeoWatch()
-    },
-    [],
-  )
+    }
+  }, [])
+
+  // The rule of step 3 holds until the send: a neighbour who walked away
+  // from the pin, or whose position was lost meanwhile, is told so here.
+  const me = geo.kind === 'ok' ? geo.position : null
+  const sendBlock = state.step === 3 && state.position ? whyNotSend(me, state.position) : null
 
   async function submit() {
-    if (state.sending || state.done) return
+    if (state.sending || state.done || sendBlock) return
     if (!state.photo || state.speciesId === null || !state.position) return
     dispatch({ type: 'SUBMIT_STARTED' })
     const result = await submitSighting({
@@ -228,7 +264,14 @@ export function HuntPage() {
         )}
 
         {showGate && (
-          <EquipmentGate geo={geo} cameraReady={cameraReady} arming={arming} onArm={armEquipment} />
+          <EquipmentGate
+            geo={geo}
+            cameraReady={cameraReady}
+            located={located}
+            waitingForFix={waitingForFix}
+            arming={arming}
+            onArm={armEquipment}
+          />
         )}
 
         {!showGate && checked && state.step === 0 && (
@@ -337,6 +380,22 @@ export function HuntPage() {
               </div>
             </div>
             <PrivacyNote />
+            {sendBlock && (
+              <div
+                className="panel panel-2 pad stack"
+                role="note"
+                style={{ padding: 12, gap: 10, fontSize: 12.5, color: 'var(--ink-dim)' }}
+              >
+                <span>{sendBlock}</span>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => dispatch({ type: 'STEP_SELECTED', step: 2 })}
+                >
+                  ◂ Volver a situarla
+                </button>
+              </div>
+            )}
             {state.submitError && (
               <div
                 className="panel pad"
@@ -349,7 +408,7 @@ export function HuntPage() {
             <button
               className="btn btn-accent"
               onClick={() => void submit()}
-              disabled={state.sending}
+              disabled={state.sending || sendBlock !== null}
             >
               {state.sending
                 ? 'Enviando…'

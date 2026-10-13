@@ -2,22 +2,30 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LocationStep } from './LocationStep'
 
-// The MapLibre picker needs WebGL; the step's own logic does not.
+// The MapLibre picker needs WebGL; the step's own logic does not. The stub
+// reports the barrio frame's centre on load, as the real map does when it
+// could not open where it was asked to.
+const reported = vi.hoisted(() => ({ centre: { lat: 40.4118, lng: -3.7105 } }))
 vi.mock('@/components/map/LocationPickerMap', () => ({
-  LocationPickerMap: () => <div data-testid="picker-map" />,
+  LocationPickerMap: ({
+    onCenterChanged,
+  }: {
+    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
+  }) => {
+    onCenterChanged(reported.centre, false)
+    return <div data-testid="picker-map" />
+  },
 }))
 
 const noop = () => {}
+const HERE = { lat: 40.4116, lng: -3.7102, accuracyM: 9, at: Date.now() }
 
 describe('location step', () => {
   it('shows the age of the position, not a fresh error, once it is old', async () => {
     render(
       <LocationStep
         position={null}
-        geo={{
-          kind: 'ok',
-          position: { lat: 40.4116, lng: -3.7102, accuracyM: 9, at: Date.now() - 3 * 60_000 },
-        }}
+        geo={{ kind: 'ok', position: { ...HERE, at: Date.now() - 3 * 60_000 } }}
         onPositionChanged={noop}
         onLocate={noop}
         onNext={noop}
@@ -25,6 +33,49 @@ describe('location step', () => {
     )
     expect(await screen.findByText('Posición de hace 3 min')).toHaveClass('is-warn')
     expect(screen.queryByText('± 9 m')).not.toBeInTheDocument()
+  })
+
+  it('the position it opens on is its position at once; a settle elsewhere is not taken for it', async () => {
+    const onPositionChanged = vi.fn()
+    render(
+      <LocationStep
+        position={null}
+        geo={{ kind: 'ok', position: HERE }}
+        onPositionChanged={onPositionChanged}
+        onLocate={noop}
+        onNext={noop}
+      />,
+    )
+    await screen.findByTestId('picker-map')
+    // the opening position, tagged GPS with its accuracy — and nothing for
+    // the map's report of a centre that is not it
+    expect(onPositionChanged).toHaveBeenCalledTimes(1)
+    expect(onPositionChanged).toHaveBeenCalledWith({
+      lat: HERE.lat,
+      lng: HERE.lng,
+      accuracyM: 9,
+      source: 'gps',
+    })
+  })
+
+  it('a watch still searching says so, and offers nothing to tap yet', async () => {
+    render(
+      <LocationStep
+        position={null}
+        geo={{ kind: 'searching', position: null }}
+        onPositionChanged={noop}
+        onLocate={noop}
+        onNext={noop}
+      />,
+    )
+    expect(await screen.findByText('Buscando tu posición…')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Activa tu ubicación para situar la criatura'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Volver a mi posición|Usar mi ubicación/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
   })
 
   it('a watch paused behind the step asks again, and the ask is the tap that restarts it', async () => {

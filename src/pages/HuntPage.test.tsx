@@ -81,6 +81,8 @@ const permissionsQueryMock = vi.fn<() => Promise<{ state: PermissionState }>>()
 
 // The neighbour stands in the barrio, 40 m from where the map's barrio frame opens.
 const HERE = { latitude: 40.4116, longitude: -3.7102 }
+// About 60 m north of HERE: outside the capture radius.
+const SIXTY_M_NORTH = { latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }
 
 function geoFix(
   { latitude, longitude }: { latitude: number; longitude: number },
@@ -146,6 +148,12 @@ function stubNavigator(extra: Record<string, unknown> = {}) {
   })
 }
 
+// a real happy-dom MediaStream (srcObject type-checks its value), plus the
+// getTracks its stub implementation lacks
+function fakeCamera(stopTrack = vi.fn()) {
+  return Object.assign(new MediaStream(), { getTracks: () => [{ stop: stopTrack }] })
+}
+
 beforeEach(() => {
   resetGeoWatchForTests()
   submitMock.mockReset()
@@ -179,8 +187,7 @@ async function walkToLocation(user: ReturnType<typeof userEvent.setup>) {
 
 async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
   await walkToLocation(user)
-  // step 3 opens on the position the watch already has: no tap. The way on
-  // opens once the (lazy) picker has reported its opening centre.
+  // step 3 opens on the position the watch already has: no tap
   expect(await screen.findByText('Tu posición')).toBeInTheDocument()
   await waitFor(() => expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
@@ -329,16 +336,15 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
     })
 
-    it('walking away re-judges the pin where it is; «Volver a mi posición» brings it back', async () => {
+    it('walking away re-judges the pin where it is; «Volver a mi posición» brings it back with its accuracy', async () => {
       const user = userEvent.setup()
+      submitMock.mockResolvedValue({ kind: 'created', id: 'returned' })
       renderHunt()
       await walkToLocation(user)
       await screen.findByText('Tu posición')
 
       // the phone reports the neighbour 60 m north of the pin
-      act(() =>
-        watcher().success(geoFix({ latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }, 9)),
-      )
+      act(() => watcher().success(geoFix(SIXTY_M_NORTH, 7)))
       expect(
         await screen.findByText(/Ese punto está a 6\d m de ti\. El máximo son 50 m\./),
       ).toBeInTheDocument()
@@ -346,7 +352,18 @@ describe('capture flow (Cazar)', () => {
 
       await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+      await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
+      await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+      await waitFor(() => expect(submitMock).toHaveBeenCalled())
+      // the pin went back to the newest position, with that position's accuracy
+      expect(submitMock.mock.calls[0][0]).toMatchObject({
+        lat: SIXTY_M_NORTH.latitude,
+        lng: SIXTY_M_NORTH.longitude,
+        accuracyM: 7,
+      })
     })
 
     it('a position that turns vague while on the step withdraws the way on', async () => {
@@ -378,7 +395,9 @@ describe('capture flow (Cazar)', () => {
 
       await user.click(screen.getByRole('button', { name: 'Reintentar' }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
     })
 
     it('leaving the step and coming back opens on the latest position', async () => {
@@ -392,7 +411,9 @@ describe('capture flow (Cazar)', () => {
       await user.click(screen.getByRole('button', { name: /Sitúala en el mapa/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
       expect(screen.getByText('± 7 m')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
     })
 
     it('a pin just over the radius is told a distance that is over it', async () => {
@@ -418,6 +439,33 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByText(/precisión alta/)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
     })
+
+    it('the rule holds at the review: a neighbour who walked away cannot send until back at the pin', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToReview(user)
+      expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeEnabled()
+
+      act(() => watcher().success(geoFix(SIXTY_M_NORTH, 9)))
+      expect(await screen.findByRole('note')).toHaveTextContent(
+        /El pin está a 6\d m de ti\. Acércate a menos de 50 m, o vuelve a situarlo\./,
+      )
+      expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeDisabled()
+
+      // back at the pin: the way on returns
+      act(() => watcher().success(geoFix(HERE, 9)))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeEnabled(),
+      )
+
+      // a position lost at the review blocks too, and «Volver a situarla» goes back to the map
+      act(() => watcher().fail(geoFailure(1)))
+      expect(await screen.findByRole('note')).toHaveTextContent(/Activa tu ubicación para enviar/)
+      expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeDisabled()
+      await user.click(screen.getByRole('button', { name: /Volver a situarla/ }))
+      expect(await screen.findByText('¿Dónde está la criatura?')).toBeInTheDocument()
+      expect(submitMock).not.toHaveBeenCalled()
+    })
   })
 
   describe('the door (LCHP-28, LCHP-54)', () => {
@@ -428,14 +476,43 @@ describe('capture flow (Cazar)', () => {
       expect(watchPositionMock).toHaveBeenCalledTimes(1)
     })
 
-    it('a first visit asks nothing on load; the gate shows, and its tap starts the watch and the camera together', async () => {
+    it('a resumed watch still searching passes the door: step 3 waits for the fix, then centres', async () => {
       const user = userEvent.setup()
+      phoneHolds()
+      renderHunt()
+      // the browser already granted: nothing to ask, the photo step opens
+      expect(await screen.findByLabelText(/Galería/)).toBeInTheDocument()
+      expect(screen.queryByText('¡Prepara tu equipo!')).not.toBeInTheDocument()
+
+      await walkToLocation(user)
+      expect(await screen.findByText('Buscando tu posición…')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+
+      act(() => watcher().success(geoFix(HERE, 9)))
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+    })
+
+    it('nothing is judged before the browser has answered whether the watch may resume', async () => {
+      cameraStateMock.mockResolvedValue('prompt')
+      let answer: (state: { state: PermissionState }) => void = () => {}
+      permissionsQueryMock.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+      renderHunt()
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+      expect(screen.queryByText('¡Prepara tu equipo!')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/Galería/)).not.toBeInTheDocument()
+
+      act(() => answer({ state: 'prompt' }))
+      expect(await screen.findByText('¡Prepara tu equipo!')).toBeInTheDocument()
+    })
+
+    it('a first visit asks nothing on load; the gate shows, and its tap starts the watch and the camera together, in the gesture', async () => {
       firstVisit()
       cameraStateMock.mockResolvedValue('prompt')
-      // a real happy-dom MediaStream (srcObject type-checks its value), plus
-      // the getTracks its stub implementation lacks
-      const fakeStream = Object.assign(new MediaStream(), { getTracks: () => [] })
-      const getUserMedia = vi.fn(() => Promise.resolve(fakeStream))
+      const getUserMedia = vi.fn(() => Promise.resolve(fakeCamera()))
       stubNavigator({ mediaDevices: { getUserMedia } })
       renderHunt()
 
@@ -448,14 +525,30 @@ describe('capture flow (Cazar)', () => {
       expect(screen.queryByRole('button', { name: /Ahora no/ })).not.toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Volver al mapa' })).toBeInTheDocument()
 
-      await user.click(screen.getByRole('button', { name: /Activar cámara y ubicación/ }))
+      // both requests leave within the tap itself (Safari's transient activation)
+      fireEvent.click(screen.getByRole('button', { name: /Activar cámara y ubicación/ }))
       expect(watchPositionMock).toHaveBeenCalledTimes(1)
       expect(getUserMedia).toHaveBeenCalledTimes(1)
       // the granted stream is handed straight to the viewfinder
       expect(await screen.findByRole('button', { name: /Disparar/ })).toBeInTheDocument()
     })
 
-    it('the gate waits for the first position: searching until the phone answers, then the flow opens', async () => {
+    it('with the camera granted and no position, the gate asks for the position only', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      const getUserMedia = vi.fn(() => Promise.resolve(fakeCamera()))
+      stubNavigator({ mediaDevices: { getUserMedia } })
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar mi ubicación/ }))
+      // the viewfinder opens on the granted permission: that is the photo
+      // step's own request, the door made none
+      expect(await screen.findByRole('button', { name: /Disparar/ })).toBeInTheDocument()
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
+      expect(getUserMedia).toHaveBeenCalledTimes(1)
+    })
+
+    it('the gate waits for the position the tap asked for: searching until the phone answers, then the flow opens', async () => {
       const user = userEvent.setup()
       firstVisit()
       phoneHolds()
@@ -491,6 +584,30 @@ describe('capture flow (Cazar)', () => {
       expect(await screen.findByLabelText(/Galería/)).toBeInTheDocument()
     })
 
+    it('a camera granted while the position is refused is released, and comes back by itself after', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      cameraStateMock.mockResolvedValue('prompt')
+      phoneHolds()
+      const stopTrack = vi.fn()
+      const getUserMedia = vi.fn(() => Promise.resolve(fakeCamera(stopTrack)))
+      stubNavigator({ mediaDevices: { getUserMedia } })
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+      await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1))
+      act(() => watcher().fail(geoFailure(1)))
+      // no camera light behind the Settings guidance
+      await waitFor(() => expect(stopTrack).toHaveBeenCalled())
+      expect(screen.getByText(/candado de la barra/)).toBeInTheDocument()
+
+      // allowed and retried: the viewfinder opens again on the granted permission
+      phoneAt()
+      await user.click(screen.getByRole('button', { name: /Reintentar/ }))
+      expect(await screen.findByRole('button', { name: /Disparar/ })).toBeInTheDocument()
+      expect(getUserMedia).toHaveBeenCalledTimes(2)
+    })
+
     it('a camera denial is not a wall: the photo step opens with the system camera and the gallery', async () => {
       const user = userEvent.setup()
       firstVisit()
@@ -518,8 +635,11 @@ describe('capture flow (Cazar)', () => {
       const user = userEvent.setup()
       renderHunt()
       await screen.findByLabelText(/Galería/)
+      // the map the neighbour goes back to must not be the one stopping it
+      permissionsQueryMock.mockResolvedValue({ state: 'prompt' })
       await user.click(screen.getByLabelText('Cerrar'))
-      await waitFor(() => expect(clearWatchMock).toHaveBeenCalled())
+      await waitFor(() => expect(clearWatchMock).toHaveBeenCalledWith(1))
+      expect(watchPositionMock).toHaveBeenCalledTimes(1)
     })
 
     it('stops a granted stream if the user leaves before the arming settles (no camera-light leak)', async () => {
@@ -529,9 +649,6 @@ describe('capture flow (Cazar)', () => {
       phoneHolds()
       const stopTrack = vi.fn()
       let resolveStream: (stream: MediaStream) => void = () => {}
-      const fakeStream = Object.assign(new MediaStream(), {
-        getTracks: () => [{ stop: stopTrack }],
-      })
       stubNavigator({
         mediaDevices: {
           getUserMedia: () => new Promise<MediaStream>((resolve) => (resolveStream = resolve)),
@@ -543,7 +660,7 @@ describe('capture flow (Cazar)', () => {
       // the user gives up mid-wait and leaves the flow
       await user.click(screen.getByLabelText('Cerrar'))
       // ...and only then does the OS deliver the granted stream
-      resolveStream(fakeStream)
+      resolveStream(fakeCamera(stopTrack))
       await waitFor(() => expect(stopTrack).toHaveBeenCalled())
     })
   })

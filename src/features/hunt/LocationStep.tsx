@@ -38,11 +38,18 @@ const RADIUS = formatMeters(PLAY_RULES.captureRadiusM)
 // The two lines under the map, in Alcorqueando's voice.
 function describe(
   me: GeoPosition | null,
+  searching: boolean,
   position: CapturePosition | null,
   outOfBounds: boolean,
   pin: Presence,
 ): { title: string; note: string } {
   const aim = `Arrastra el mapa para dejar el pin sobre la criatura, a menos de ${RADIUS} de ti.`
+  if (!me && searching) {
+    return {
+      title: 'Buscando tu posición…',
+      note: 'El mapa se centrará en ti en cuanto el móvil la encuentre.',
+    }
+  }
   if (!me) {
     return {
       title: 'Activa tu ubicación para situar la criatura',
@@ -91,6 +98,22 @@ export function LocationStep({ position, geo, onPositionChanged, onLocate, onNex
     me ? { lat: me.lat, lng: me.lng, accuracyM: me.accuracyM } : null,
   )
   const centred = useRef(me !== null)
+  const onPositionChangedRef = useRef(onPositionChanged)
+  useEffect(() => {
+    onPositionChangedRef.current = onPositionChanged
+  })
+
+  // The position the step opened on is its position from the first render:
+  // the map's own report of the same centre comes only once its tiles land.
+  useEffect(() => {
+    if (!opensAt || !pendingFly.current) return
+    onPositionChangedRef.current({
+      ...opensAt,
+      accuracyM: pendingFly.current.accuracyM,
+      source: 'gps',
+    })
+    // the ref stays armed: the map's load report lands on it and is a no-op
+  }, [opensAt])
 
   function goTo(target: GeoPosition) {
     pendingFly.current = { lat: target.lat, lng: target.lng, accuracyM: target.accuracyM }
@@ -135,7 +158,7 @@ export function LocationStep({ position, geo, onPositionChanged, onLocate, onNex
   // Vague and outside are the panel's lines below; the notice is for a
   // position that is missing altogether.
   const panel = me ? null : locatePanel(geo, false)
-  const { title, note } = describe(me, position, outOfBounds, pin)
+  const { title, note } = describe(me, geo.kind === 'searching', position, outOfBounds, pin)
 
   return (
     <div className="stack" style={{ gap: 12 }}>
