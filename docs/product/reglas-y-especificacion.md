@@ -181,6 +181,14 @@ Flujo de **4 pasos**:
 - **Acciones:** **Confirmar (+5)** · Reclasificar · Saltar.
 - **Recordatorio:** comprobar que no aparezcan personas ni datos privados.
 
+### 8 · Pantalla de error y dirección desconocida
+- **Qué hace:** si una pantalla falla al dibujarse, el vecino ve una pantalla propia de la app, nunca el volcado técnico del error. Si la pantalla que falla es una de las de la barra inferior, la barra sigue ahí y se puede salir por cualquiera de sus destinos.
+- **Contenido (fallo inesperado):** una criatura «con interferencias», el aviso «Algo ha fallado», el título «Se nos ha colado un bicho», el texto «Este no sale en el catálogo: es un fallo de la app, no tuyo. Prueba otra vez o vuelve al mapa.» y un **código del fallo** corto (p. ej. `1NG-GY1`) con la nota «Si avisas a la asociación, dales este código.».
+- **Acciones:** **Reintentar** (vuelve a dibujar la pantalla, sin recargar la página) · **Volver al mapa**. Si la que ha fallado es el propio mapa, la segunda acción es **Ir al inicio**.
+- **Dirección desconocida:** una silueta vacía con ojos, «Página no encontrada», «Aquí no hay ninguna criatura», «Esta dirección no existe o ha cambiado de sitio. En el mapa sí hay rastro.» y **Volver al mapa**. Sin código y sin Reintentar.
+- **El código del fallo** se calcula en el dispositivo a partir de la versión de la app y del error: el mismo fallo en la misma versión da el mismo código. No identifica al vecino ni su ubicación, y hoy no se envía a ningún sitio.
+- Textos y dibujos propuestos en LCHP-52, pendientes del visto bueno de David.
+
 ### + Modo asociación (herramienta interna) (POST - VMP)
 Panel para la organización, con dos pestañas:
 - **Instagram** — feed simulado de @avlachispera (criatura de la semana, ranking del lunes, mapa de calor) donde el vecino participa **comentando la calle** (sin instalar nada).
