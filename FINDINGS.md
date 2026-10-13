@@ -65,3 +65,9 @@ while working on something else.
 **Problem:** `reglas-y-especificacion.md`, screen «2 · Mapa», says the map has a «leyenda de las 5 criaturas» and that a pin opens a card with «criatura, calle, autor, estado». The brief §18 records that there is no legend (D-061), and D-046 that the map shows neither author nor street. The app follows the decisions; the product spec is stale.
 **Context:** found during LCHP-47 while updating the four-species enumerations. That ticket changed the count in the sentence (4 → 5) and left the rest.
 **Proposal:** rewrite the «2 · Mapa» bullets to match brief §18 and D-046. Docs-only PR.
+
+## [LCHP-51] — A render error in any screen shows React Router's default error page, with no way back
+
+**Problem:** `src/app/router.tsx` declares no `errorElement` on any route. A screen that throws while rendering is replaced by React Router's development fallback: «Unexpected Application Error!», the message and the JavaScript stack trace, in English, with no tab bar and no link back.
+**Context:** it is what neighbours saw on `/mapa` during LCHP-50. That ticket removed the throw (a species id without a sprite); the fallback for the next one is unchanged. Left out of that PR because it needs Spanish copy and a small screen design.
+**Proposal:** one error screen for the route tree in the app's own look: a short Spanish message, «Reintentar», a way to another screen, no stack trace. Decide by 2026-10-27: schedule it or demote it to `post-mvp`.

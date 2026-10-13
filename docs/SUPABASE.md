@@ -63,6 +63,14 @@ Rules (the same ones AGENTS.md states, with the why):
   prototyping a query; the moment it's schema, it goes in a migration.)
 - **The brief's §14 mirrors the real schema** (sync rule): schema PRs
   update the brief in the same PR.
+- **A push to hosted reaches production at once, whatever branch it came
+  from.** There is one hosted database: the production site and every PR
+  preview read it. A migration pushed from an open PR is therefore live
+  for the client on `main`, which has not seen that PR's code (LCHP-50:
+  a species row pushed for a preview crashed `/mapa` in production).
+  Before pushing ahead of a merge, check that the deployed client
+  tolerates the new rows or columns; the client is written to ignore
+  reference data it does not know (D-067), and that has to stay true.
 
 ## The command cheat-sheet
 

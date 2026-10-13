@@ -528,6 +528,18 @@ type Species = {
 };
 ```
 
+**El catálogo de la base de datos puede ir por delante del cliente**
+(LCHP-50, D-067). La base de datos alojada es una sola para producción y
+para las previews de los PR, y un cliente ya abierto o instalado (PWA)
+sigue en su versión: en cuanto se hace `db push` de una especie nueva,
+hay clientes que no la conocen. Para ellos, **un avistamiento de una
+especie que su versión no conoce no aparece en el mapa hasta que el
+cliente se actualiza** — ni pin, ni fila en «Cerca de ti», ni cuenta en
+«Por verificar» ni en el mapa de calor, y sin aviso al vecino. Como
+segunda barrera, `CreatureSprite` dibuja un comodín («?») en vez de
+lanzar un error si aun así recibe un id sin sprite: una especie nueva
+nunca puede tirar una pantalla.
+
 ### sightings
 
 ```ts

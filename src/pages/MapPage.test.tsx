@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { resetGeoWatchForTests } from '@/lib/geoWatch'
 import { renderRoute } from '@/test/render'
 import type { MapSightingGeo } from '@/types/sighting'
+import type { SpeciesId } from '@/types/species'
 
 const FIXTURES: MapSightingGeo[] = [
   {
@@ -324,6 +325,25 @@ describe('map screen', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
     // the lying counter is hidden
     expect(screen.queryByText('0 Por verificar')).not.toBeInTheDocument()
+  })
+
+  // LCHP-50: the hosted database gained a species before this client could
+  // draw it, and its one pending sighting took the whole route down.
+  it('a sighting of a species without artwork does not take the screen down', async () => {
+    const user = userEvent.setup()
+    const slugFromNewerDatabase: string = 'gentrificator'
+    listMapSightingsMock.mockResolvedValue([
+      { ...FIXTURES[1], id: 's-newer', speciesId: slugFromNewerDatabase as SpeciesId },
+      ...FIXTURES,
+    ])
+    renderRoute('/mapa')
+    const sheet = within(await screen.findByRole('region', { name: 'Avistamientos cerca de ti' }))
+    expect(await sheet.findByText('2 Por verificar')).toBeInTheDocument()
+    expect(sheet.getByRole('button', { name: 'Verificar TURISTOX' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'pin s-newer' }))
+    expect(screen.getByTestId('map')).toHaveAttribute('data-selected', 's-newer')
+    expect(sheet.getByRole('button', { name: 'Ver evidencia' })).toBeInTheDocument()
+    expect(screen.queryByText(/Unexpected Application Error/)).not.toBeInTheDocument()
   })
 
   it('the heat map takes over: no creature stays picked and the list gives way to it', async () => {
