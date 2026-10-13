@@ -2,7 +2,7 @@
 // each creature's tile is described here as an SVG — the same shapes the
 // rest of the app draws (D-062) inside the tile the DOM pins had — and the
 // browser turns it into the image.
-import { SPRITES, SPRITE_PALETTES } from '@/components/pixel/sprites'
+import { creatureArt } from '@/components/pixel/creatureArt'
 import { spriteRects } from '@/components/pixel/spriteShapes'
 import { SPECIES_IDS, type SpeciesId } from '@/types/species'
 
@@ -25,8 +25,7 @@ const RADIUS = 8
 const CELL = 2
 
 export function pinSvg(species: SpeciesId, state: PinState, colors: PinColors): string {
-  const grid = SPRITES[species]
-  const palette = SPRITE_PALETTES[species]
+  const { grid, palette } = creatureArt(species)
   const border =
     state === 'selected' ? colors.accent : state === 'pending' ? colors.warn : colors.line
   const left = MARGIN + (TILE - grid[0].length * CELL) / 2

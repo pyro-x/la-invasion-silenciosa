@@ -327,9 +327,11 @@ describe('map screen', () => {
     expect(screen.queryByText('0 Por verificar')).not.toBeInTheDocument()
   })
 
-  // LCHP-50: the hosted database gained a species before this client could
-  // draw it, and its one pending sighting took the whole route down.
-  it('a sighting of a species without artwork does not take the screen down', async () => {
+  // Resilience of the screen itself, not the policy: the service drops such
+  // a sighting before it gets here (MapPage.unknownSpecies.test.tsx). This
+  // is the render that threw in LCHP-50, kept so that the «Cerca de ti» row
+  // and the card survive an id without artwork if one ever slips through.
+  it('the «Cerca de ti» row and the card survive a species id without artwork', async () => {
     const user = userEvent.setup()
     const slugFromNewerDatabase: string = 'gentrificator'
     listMapSightingsMock.mockResolvedValue([

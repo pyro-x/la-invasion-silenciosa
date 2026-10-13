@@ -1342,7 +1342,10 @@ datos que el propio mapa dibuja.
   mapa no se puede inclinar (`maxPitch: 0`): inclinado, un gemelo dejaría
   de coincidir con su pin.
 * **Mapa de calor:** una capa `heatmap` con la rampa del prototipo
-  (amarillo → rojo oscuro) sobre **todos** los avistamientos, en su
+  (amarillo → rojo oscuro) sobre **todos** los avistamientos que llegan
+  al mapa — validados y pendientes; los de una especie que esta versión
+  del cliente no conoce se descartan antes, igual que para los pines
+  (§14 `species`, D-067) —, en su
   coordenada pública real. Los validados pesan más que los pendientes
   (1 frente a 0,4): decisión de David, para que el mapa no salga vacío al
   principio del piloto, cuando casi todo está por verificar, y lo
