@@ -765,3 +765,12 @@ David confirmed (2026-10-13) that an old position stays a warning and does not b
 David's rule from this ticket on: CodeRabbit's review is one more seat of the panel. On `65566ee` it left one comment, Minor, and it was right: the brief's paragraph on «Ir a mi posición» (§18, the LCHP-34 section) still said notices appear only after a tap and that a resumed watch greets with none, against «Se juega donde estás» a page below. The note added at the top of that paragraph said it was amended but left the sentence standing. Corrected in place, together with a second sentence of the same paragraph CodeRabbit did not flag: that the map does not recentre by itself on a later visit. Documents only; no code changed.
 
 Also on this day: `main` was merged in after Localín (LCHP-47) landed. The branch had been cut before it, so its first preview crashed on the one real Localín sighting; and this entry, born as D-066, is D-069 because Localín took that number and the pull requests for LCHP-50 and LCHP-52 hold D-067 and D-068.
+
+### D-069 · Addendum 5 · 2026-10-13 · CodeRabbit's second review, and David's walk
+
+On `d75d1cb` CodeRabbit left two more comments.
+
+- **"Enforce the 85 m verification rule at a trusted boundary"** (Major): a registered user can insert a verification through PostgREST without the browser's check and, at threshold 1, validate a sighting and collect points. True, and known: it is the first open question of the ticket, answered at kickoff (browser only, as in Alcorqueando) and recorded above. **Dismissed as a change to this pull request; taken as a correction to the wording**, which CodeRabbit offered as the alternative: brief §20 now says the 85 m is a gate of the app and not a guarantee of presence, and names what the database does not check. Server enforcement is LCHP-53, to be scheduled if the pilot shows abuse; it is security-critical work with its own review.
+- **A stale line in the map flow of the brief** (Minor): «Verificar → próximamente (la transacción real es LCHP-15)». Older than this ticket, and wrong since LCHP-15. Corrected.
+
+David tried the preview live (2026-10-13) and asked for the merge: "it worked perfectly". That is the walk the ticket's last acceptance line asked for; which phones and where he tried it is not recorded here.

@@ -1111,7 +1111,8 @@ Ficha de detalle: especie · estado · antigüedad ·
 (verificado: exactamente 1 petición a Storage, solo tras pedirla;
 un avistamiento sin foto muestra un aviso amable)
 ↓
-«Verificar» → «próximamente» (la transacción real es LCHP-15)
+«Verificar» → modal de verificación (implementado en LCHP-15, §20;
+desde LCHP-49 solo estando cerca de la criatura)
 ```
 
 La foto es evidencia bajo demanda, no contenido principal del mapa. El
@@ -1604,7 +1605,10 @@ Otro vecino lo confirma desde el modal de verificación
 (dos puertas: la tarjeta del pin y la lista «Cerca de ti»;
  la foto se carga al abrir el modal — la evidencia ES lo que se juzga;
  desde LCHP-49 las dos puertas solo se abren a menos de 85 m de la
- criatura, comprobado en el navegador — §18 «Se juega donde estás»)
+ criatura. Es una puerta de la app, comprobada en el navegador, NO una
+ garantía de presencia: la política del INSERT y el trigger no miden
+ distancia, y un cliente modificado puede saltársela — decisión D-069,
+ §18 «Se juega donde estás»)
 ↓
 ├─ vecino REGISTRADO: la confirmación cuenta
 │  (al alcanzar validation_threshold — 1 en el piloto)
