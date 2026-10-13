@@ -3,7 +3,7 @@
 // sheet carries the sighting detail and the «Cerca de ti» list, and the map
 // centres itself in the part the sheet leaves free.
 //
-// The game is played where the neighbour stands (LCHP-49, D-066): the map
+// The game is played where the neighbour stands (LCHP-49, D-069): the map
 // follows their position from the first fix, the pending list is ordered by
 // how far each creature is, and «Verificar» needs them to be there.
 //

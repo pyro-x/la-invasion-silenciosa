@@ -1353,7 +1353,7 @@ Capturas de referencia de esta pantalla (sustituyen a `captura_03`,
 `captura_29` y `captura_30` como base de comparación, D-058): se generan
 con el loop visual sobre la app compilada y se adjuntan al PR.
 
-### Se juega donde estás (LCHP-49 — enmienda 2026-10-13, D-066) `Decidido`
+### Se juega donde estás (LCHP-49 — enmienda 2026-10-13, D-069) `Decidido`
 
 Decisión de David (2026-10-13): el juego se juega en la calle, como
 Alcorqueando. Enmienda D-061 (seguir solo tras un toque) y D-052 (GPS
@@ -1459,7 +1459,7 @@ debajo: «Está a 400 m de ti. Acércate a menos de 85 m para verificar.»,
 ubicación para verificar: hay que estar junto a la criatura.» «Ver
 evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
 
-**Lo que cerró la revisión (ronda 1, D-066 Addendum 1):**
+**Lo que cerró la revisión (ronda 1, D-069 Addendum 1):**
 
 * La ventana de verificación abierta **deja de permitir confirmar** si el
   vecino sale del radio, o su posición deja de servir, con ella abierta:
@@ -1483,7 +1483,7 @@ evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
   en Alcorqueando, no con un temporizador: la observación trae una al menos
   cada 20 s.
 
-**Ronda 2 (D-066 Addendum 2):**
+**Ronda 2 (D-069 Addendum 2):**
 
 * Los 10 s de espera se contaban desde el inicio del gesto: al soltar un
   arrastre largo el mapa volvía al instante. Ahora cuentan desde que
@@ -1548,7 +1548,7 @@ centrado en ti. «Usar mi ubicación» dispara getCurrentPosition EN EL
 TAP; si code=1 / no disponible → guía POR PLATAFORMA (iOS: Ajustes →
 Privacidad y seguridad → Localización → Sitios web de Safari; resto:
 el candado del navegador).
-Desde LCHP-49 (D-066) hace falta posición: el pin se puede ajustar a mano
+Desde LCHP-49 (D-069) hace falta posición: el pin se puede ajustar a mano
 solo a menos de 50 m del vecino («Ese punto está a 120 m de ti. El máximo
 son 50 m.»); sin posición, o con una peor que ± 150 m, no se continúa.
 Sigue siendo una posición puntual (getGeoFix); la observación continua

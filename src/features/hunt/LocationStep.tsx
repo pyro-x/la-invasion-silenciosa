@@ -4,7 +4,7 @@
 // fires the native prompt ON TAP for anyone who skipped it. The exact
 // coordinate goes to the server untouched (D-049).
 //
-// A creature is registered where the neighbour stands (LCHP-49, D-066,
+// A creature is registered where the neighbour stands (LCHP-49, D-069,
 // Alcorqueando's rules): the pin can be nudged around their position, not
 // dragged across the barrio, and without a position good enough the step
 // does not continue. The fix is still a one-shot; the watch comes with

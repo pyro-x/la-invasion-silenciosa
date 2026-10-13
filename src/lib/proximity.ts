@@ -1,4 +1,4 @@
-// The rules of presence (LCHP-49, D-066): the game is played where the
+// The rules of presence (LCHP-49, D-069): the game is played where the
 // neighbour stands. The values start from Alcorqueando's RULES and live
 // here alone, to be tuned after walking the barrio.
 //
