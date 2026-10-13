@@ -58,7 +58,6 @@ vi.mock('@/services/sightings.service', () => ({
   submitSighting: (submission: NewSightingSubmission) => submitMock(submission),
   // MapPage mounts when a test navigates away from /cazar via ✕
   listMapSightings: () => Promise.resolve([]),
-  listPendingSightings: () => Promise.resolve([]),
 }))
 
 beforeEach(() => {
