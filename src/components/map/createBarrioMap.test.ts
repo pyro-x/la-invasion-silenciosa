@@ -860,6 +860,7 @@ describe('createBarrioMap', () => {
       await mountReady()
       expect(recorded.layers.map((layer) => layer.id)).toEqual([
         'me-accuracy',
+        'me-range',
         'me-halo',
         'me-dot',
         'sighting-heat',
@@ -1006,6 +1007,28 @@ describe('createBarrioMap', () => {
       controller.setMe(null)
       expect(lastData('me-point')).toMatchObject({ type: 'FeatureCollection' })
       expect(lastData('me')).toMatchObject({ type: 'FeatureCollection' })
+    })
+
+    it('draws the ring of the radius the neighbour can act in, only when given one', async () => {
+      const { controller } = await mountReady()
+      const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+      controller.setMe(me)
+      expect(lastData('me-range')).toMatchObject({ type: 'FeatureCollection' })
+      controller.setMe(me, 85)
+      const ring = lastData('me-range') as { geometry: { type: string; coordinates: number[][] } }
+      expect(ring.geometry.type).toBe('LineString')
+      // the ring's northernmost point is 85 m up from the position
+      const top = Math.max(...ring.geometry.coordinates.map(([, lat]) => lat))
+      expect((top - me.lat) * 111_320).toBeCloseTo(85, 0)
+      controller.setMe(null, 85)
+      expect(lastData('me-range')).toMatchObject({ type: 'FeatureCollection' })
+    })
+
+    it('says how far a point is from the centre of the map', () => {
+      const { controller } = mount()
+      // the stub's centre is -3.71, 40.411
+      expect(controller.metresFromCentre({ lat: 40.411, lng: -3.71 })).toBe(0)
+      expect(controller.metresFromCentre({ lat: 40.412, lng: -3.71 })).toBeCloseTo(111.2, 0)
     })
   })
 

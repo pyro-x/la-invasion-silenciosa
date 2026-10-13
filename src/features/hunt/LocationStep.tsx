@@ -1,13 +1,18 @@
 // Real location step (LCHP-14/LCHP-28): the position is always the picker
-// map's center (fixed center pin, D-051). The gate may hand over a cached GPS
+// map's center (fixed center pin, D-052). The gate may hand over a cached GPS
 // fix so the map opens pre-centered without re-prompting; «Usar mi ubicación»
-// fires the native prompt ON TAP for anyone who skipped it. Denial or absence
-// degrade to the manual pin, never a dead end — with per-platform recovery
-// guidance (the old copy sent iOS users to a settings page with no location
-// entry). The exact coordinate goes to the server untouched (D-049).
+// fires the native prompt ON TAP for anyone who skipped it. The exact
+// coordinate goes to the server untouched (D-049).
+//
+// A creature is registered where the neighbour stands (LCHP-49, D-066,
+// Alcorqueando's rules): the pin can be nudged around their position, not
+// dragged across the barrio, and without a position good enough there is no
+// pin at all. The fix is still a one-shot; the watch comes with LCHP-36.
 import { lazy, Suspense, useRef, useState } from 'react'
+import { PrecisionBadge } from '@/components/map/PrecisionBadge'
 import { getGeoFix, isWithinLaLatina, type GeoFix } from '@/lib/geo'
-import { locationDenialGuidance } from '@/lib/permissions'
+import { locationSettingsGuidance, precisionGuidance } from '@/lib/permissions'
+import { formatMeters, PLAY_RULES, presenceAt, type Presence } from '@/lib/proximity'
 import type { CapturePosition } from './captureFlow'
 
 const LocationPickerMap = lazy(() =>
@@ -27,14 +32,59 @@ type Props = {
 type GeoState = 'idle' | 'locating' | 'granted' | 'denied' | 'unavailable'
 
 function geoMessageFor(geo: GeoState): string | null {
-  if (geo === 'denied') return locationDenialGuidance()
+  if (geo === 'denied') return locationSettingsGuidance()
   if (geo === 'unavailable') {
-    return 'No se pudo obtener tu posición. Coloca el pin a mano arrastrando el mapa.'
+    return 'No se pudo obtener tu posición. Inténtalo otra vez al aire libre.'
   }
   return null
 }
 
 type PendingFly = { lat: number; lng: number; accuracyM: number }
+/** Where the neighbour stands, and when the phone said so. */
+type Fix = PendingFly & { at: number }
+
+const stamped = (fix: PendingFly): Fix => ({ ...fix, at: Date.now() })
+
+const RADIUS = formatMeters(PLAY_RULES.captureRadiusM)
+
+// The two lines under the map, in Alcorqueando's voice.
+function describe(
+  fix: Fix | null,
+  position: CapturePosition | null,
+  outOfBounds: boolean,
+  pin: Presence,
+): { title: string; note: string } {
+  const aim = `Arrastra el mapa para dejar el pin sobre la criatura, a menos de ${RADIUS} de ti.`
+  if (!fix) {
+    return {
+      title: 'Activa tu ubicación para situar la criatura',
+      note: 'Solo se puede registrar una criatura estando junto a ella.',
+    }
+  }
+  if (pin.kind === 'vague') {
+    return {
+      title: `Tu ubicación es poco precisa (± ${formatMeters(pin.accuracyM)})`,
+      note: `Así no se puede situar la criatura. ${precisionGuidance()}`,
+    }
+  }
+  if (!isWithinLaLatina(fix.lat, fix.lng)) {
+    return {
+      title: 'Estás fuera de La Latina',
+      note: 'Solo se registran criaturas dentro del barrio.',
+    }
+  }
+  if (outOfBounds) return { title: 'El pin está fuera de La Latina', note: aim }
+  if (pin.kind === 'far') {
+    return {
+      title: `Ese punto está a ${formatMeters(pin.distanceM)} de ti. El máximo son ${RADIUS}.`,
+      note: 'Vuelve a tu posición y acerca el pin a la criatura.',
+    }
+  }
+  if (pin.kind === 'near' && position?.source === 'manual') {
+    return { title: `Pin ajustado a mano · a ${formatMeters(pin.distanceM)} de ti`, note: aim }
+  }
+  return { title: 'Tu posición', note: aim }
+}
 
 // easeTo lands exactly on the target unless maxBounds clamps it; anything
 // closer than ~10 m is the fly settling, not the initial-load report.
@@ -62,16 +112,25 @@ export function LocationStep({
       ? { lat: primedFix.lat, lng: primedFix.lng, accuracyM: primedFix.accuracyM }
       : null,
   )
+  const [fix, setFix] = useState<Fix | null>(() =>
+    primedFix?.kind === 'ok'
+      ? stamped({ lat: primedFix.lat, lng: primedFix.lng, accuracyM: primedFix.accuracyM })
+      : null,
+  )
 
   async function locate() {
     setGeo('locating')
     const fix = await getGeoFix()
     if (fix.kind !== 'ok') {
+      // The rule needs a position: an older one is not kept as if it held.
+      setFix(null)
       setGeo(fix.kind)
       return
     }
     setGeo('granted')
-    pendingFly.current = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM }
+    const next = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM }
+    setFix(stamped(next))
+    pendingFly.current = next
     setFlyTo({ lat: fix.lat, lng: fix.lng })
   }
 
@@ -95,8 +154,13 @@ export function LocationStep({
   }
 
   const outOfBounds = position !== null && !isWithinLaLatina(position.lat, position.lng)
-  const canContinue = position !== null && !outOfBounds
+  // While the map is still on its way to the fix there is no pin to judge.
+  const pin: Presence = fix
+    ? presenceAt(fix, position ?? fix, PLAY_RULES.captureRadiusM)
+    : { kind: 'unknown' }
+  const canContinue = position !== null && !outOfBounds && pin.kind === 'near'
   const geoMessage = geoMessageFor(geo)
+  const { title, note } = describe(fix, position, outOfBounds, pin)
 
   return (
     <div className="stack" style={{ gap: 12 }}>
@@ -117,7 +181,11 @@ export function LocationStep({
         onClick={() => void locate()}
         disabled={geo === 'locating'}
       >
-        {geo === 'locating' ? 'Localizando…' : '📡 Usar mi ubicación'}
+        {geo === 'locating'
+          ? 'Localizando…'
+          : fix
+            ? '📡 Volver a mi posición'
+            : '📡 Usar mi ubicación'}
       </button>
 
       {geoMessage && (
@@ -130,18 +198,11 @@ export function LocationStep({
         <div className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)', marginBottom: 4 }}>
           UBICACIÓN DEL AVISTAMIENTO
         </div>
-        <div style={{ fontWeight: 600, fontSize: 15 }}>
-          {outOfBounds
-            ? 'El pin está fuera de La Latina'
-            : position
-              ? position.source === 'gps'
-                ? `Tu posición${position.accuracyM !== null ? ` · ±${Math.round(position.accuracyM)} m` : ''}`
-                : 'Pin colocado a mano'
-              : 'Arrastra el mapa para colocar el pin'}
+        <div className="row" style={{ gap: 8, justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>{title}</span>
+          {fix && <PrecisionBadge accuracyM={fix.accuracyM} at={fix.at} />}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
-          Arrastra el mapa hasta dejar el pin sobre la criatura.
-        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>{note}</div>
       </div>
 
       <button
