@@ -79,7 +79,7 @@ La app recuerda esta regla en el onboarding, en el flujo de captura y en la band
 ### 3.3. Qué debe contener cada avistamiento
 - **Foto** de la criatura (sin personas ni datos privados).
 - **Ubicación aproximada** (por privacidad, no se guarda la posición exacta).
-- **Categoría** (Candadín / Turistox / Checkinchu / Keymon).
+- **Categoría** (Candadín / Turistox / Checkinchu / Keymon / Localín).
 
 ---
 
@@ -159,7 +159,7 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 ### 4 · Cazar / Registrar (botón central)
 Flujo de **4 pasos**:
 1. **Captura** — visor de cámara + recordatorio de privacidad → disparar / repetir / usar foto.
-2. **Identificar** — elegir la especie (Candadín / Turistox / Checkinchu / Keymon).
+2. **Identificar** — elegir la especie (Candadín / Turistox / Checkinchu / Keymon / Localín).
 3. **Ubicación** — mapa con ubicación aproximada + toggle de privacidad ("solo guardamos ubicación aproximada").
 4. **Revisar y enviar** — resumen (foto, especie, ubicación, estado pendiente) → enviar.
 - **Salida:** pantalla de éxito con **+10 pts pendientes de validación** y vuelta al mapa; el avistamiento queda **pendiente**. Los puntos se consolidan solo cuando se valida.
