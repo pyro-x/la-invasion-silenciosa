@@ -52,6 +52,7 @@ export function HuntPage() {
   const [autoStartCamera, setAutoStartCamera] = useState(false)
   const [primedFix, setPrimedFix] = useState<GeoFix | null>(null)
   const primedStreamRef = useRef<MediaStream | null>(null)
+  const stepReadFix = useRef(false)
   const aliveRef = useRef(true)
 
   useEffect(() => {
@@ -88,7 +89,9 @@ export function HuntPage() {
       setGate('done')
     })
     void fixPromise.then((fix) => {
-      if (aliveRef.current) setPrimedFix(fix)
+      // A slow answer must not replace a position the location step has
+      // read since: that one is newer.
+      if (aliveRef.current && !stepReadFix.current) setPrimedFix(fix)
     })
   }
 
@@ -281,7 +284,10 @@ export function HuntPage() {
             position={state.position}
             approxOnly={state.approxOnly}
             primedFix={primedFix}
-            onFix={setPrimedFix}
+            onFix={(fix) => {
+              stepReadFix.current = true
+              setPrimedFix(fix)
+            }}
             onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
             onApproxToggled={() => dispatch({ type: 'APPROX_TOGGLED' })}
             onNext={() => dispatch({ type: 'NEXT' })}

@@ -307,6 +307,49 @@ describe('capture flow (Cazar)', () => {
         await screen.findByText('Activa tu ubicación para situar la criatura'),
       ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+
+      // nor does it come back by leaving the step and returning to it
+      await user.click(screen.getByRole('button', { name: 'Paso 2' }))
+      await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
+      expect(
+        await screen.findByText('Activa tu ubicación para situar la criatura'),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+    })
+
+    it("a slow answer to the gate's request does not replace a position read since", async () => {
+      const user = userEvent.setup()
+      cameraStateMock.mockResolvedValue('prompt')
+      const fakeStream = Object.assign(new MediaStream(), { getTracks: () => [] })
+      let gateFails: (error: { code: number }) => void = () => {}
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        mediaDevices: { getUserMedia: () => Promise.resolve(fakeStream) },
+        geolocation: {
+          // the gate's request: GPS cold, no answer yet
+          getCurrentPosition: (
+            _ok: PositionCallback,
+            onError: (error: { code: number }) => void,
+          ) => {
+            gateFails = onError
+          },
+        },
+      })
+      renderHunt()
+      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+      await user.click(await screen.findByRole('button', { name: /Cerrar visor/ }))
+      // from here on the phone answers at once
+      stubFix(9)
+      await walkToLocation(user)
+      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+      await screen.findByText('Tu posición')
+
+      // only now does the gate's request give up
+      gateFails({ code: 3 })
+      await user.click(screen.getByRole('button', { name: 'Paso 2' }))
+      await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled()
     })
 
     it('leaving the step and coming back judges against the position read there', async () => {

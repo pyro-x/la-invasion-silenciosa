@@ -173,6 +173,17 @@ describe('BarrioMap', () => {
     expect(afterRemount).toContain('follow 40.4115 17')
   })
 
+  it('a neighbour who took the map while the street zoom was owed has spent it too', () => {
+    const vague = { lat: 40.4115, lng: -3.712, accuracyM: 400 }
+    const view = render(<BarrioMap {...base} me={vague} follow />)
+    view.rerender(<BarrioMap {...base} me={{ ...vague }} />)
+    view.rerender(<BarrioMap {...base} me={{ ...vague, accuracyM: 14 }} follow />)
+    expect(calls.log.filter((line) => line.startsWith('follow'))).toEqual([
+      'follow 40.4115 15',
+      'follow 40.4115 undefined',
+    ])
+  })
+
   it('does not move the map for GPS noise', () => {
     const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
     const view = render(<BarrioMap {...base} me={me} follow />)
@@ -248,6 +259,15 @@ describe('BarrioMap', () => {
       vi.advanceTimersByTime(60_000)
       calls.handlers?.onUserMove()
       calls.handlers?.onUserSettled()
+      vi.advanceTimersByTime(5_000)
+      fix()
+      expect(onResumeFollow).not.toHaveBeenCalled()
+    })
+
+    it('the start of a move is a touch on its own, before it has ended', () => {
+      const { onResumeFollow, fix } = leftAlone()
+      vi.advanceTimersByTime(60_000)
+      calls.handlers?.onUserMove()
       vi.advanceTimersByTime(5_000)
       fix()
       expect(onResumeFollow).not.toHaveBeenCalled()

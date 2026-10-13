@@ -677,5 +677,15 @@ On `2f47b85`: Sol approved; Terra asked for changes (one MEDIUM, one LOW); Opus 
 - **Four texts did not say what the code does** (LOW, Opus): the paused notice quoted in the brief, "out of what the map shows" (it is a distance from the centre, at any zoom), "places no pin" (the pin is drawn; the step does not continue), and a comment in `geo.ts` still promising a manual pin. Corrected.
 
 **Recorded, not changed:**
-- **An old position warns and does not block, for verification as for capture** (LOW, Opus). If the watch stops delivering fixes, or on return from the background with a position up to ten minutes old, «Verificar» stays available against the last known position and the badge says its age. This is Alcorqueando's behaviour. It weakens "nobody verifies from home" only for someone who was just there; blocking above `stalePositionMs` is a one-line change if the walk asks for it. **For David to confirm.**
+- **An old position warns and does not block, for verification as for capture** (LOW, Opus). If the watch stops delivering fixes, or on return from the background with a position up to ten minutes old, «Verificar» stays available against the last known position and the badge says its age. This is Alcorqueando's behaviour. It weakens "nobody verifies from home" only for someone who was just there; blocking above `stalePositionMs` is a one-line change if the walk asks for it. **Confirmed by David (2026-10-13): it stays a warning.**
 - **A stored verification now implies where its author was** (LOW, Opus): within about 85 m of that public coordinate at that time. The position is still never sent, but the inference is new for verifiers (a sighting's author already carried it). It lives in `verifications`, which no public view exposes. **For David to know**, since it touches the privacy rule.
+
+### D-066 · Addendum 3 · 2026-10-13 · Review round 3, the last of the budget
+
+On `a72a148`: Opus approved (19 of its 22 mutants of the delta killed; the three survivors were tests, below). Sol and Terra each asked for one change, the same one. The budget of three rounds is spent, so nothing below has been reviewed.
+
+- **A slow answer to the equipment gate's position request could replace a newer one read in the location step** (MEDIUM, Sol and Terra): round 2 lifted the step's position to the page, and the gate's request, still pending, wrote to the same place when it finally answered. Once the step has read a position the gate's answer is ignored. Three lines; folded in.
+- **Three tests pinned nothing** (LOW, Opus and Terra): the zoom-in spent by taking the map while the street zoom was owed; a failed re-locate surviving a round trip through the steps; the stamp at the start of a move, which the stamp at its end shadowed in the test Addendum 2 claimed for it. Each has its own case now.
+- Opus also checked that `verifications` is readable only by its own author (`0004_rls_policies_and_storage.sql`), which is what Addendum 2 relies on.
+
+David confirmed (2026-10-13) that an old position stays a warning and does not block.

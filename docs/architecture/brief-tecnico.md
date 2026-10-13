@@ -1501,7 +1501,8 @@ evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
 
 **Decidido y anotado, no cambiado:**
 
-* **Una posición antigua avisa, no bloquea**, tampoco al verificar. Si la
+* **Una posición antigua avisa, no bloquea**, tampoco al verificar
+  (**confirmado por David, 2026-10-13**). Si la
   observación deja de recibir posiciones (solo errores de tiempo agotado),
   o al volver de segundo plano con una de hasta diez minutos, «Verificar»
   sigue disponible con la última conocida y la insignia dice su edad. Es
