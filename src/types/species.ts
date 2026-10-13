@@ -1,4 +1,10 @@
-export type SpeciesId = 'candadin' | 'turistox' | 'checkinchu' | 'keymon'
+export const SPECIES_IDS = ['candadin', 'turistox', 'checkinchu', 'keymon', 'localin'] as const
+
+export type SpeciesId = (typeof SPECIES_IDS)[number]
+
+export function isSpeciesId(value: string): value is SpeciesId {
+  return SPECIES_IDS.some((id) => id === value)
+}
 
 /** Displayed verbatim in the UI (Spanish product copy). */
 export type Rarity = 'común' | 'frecuente' | 'raro' | 'legendario'

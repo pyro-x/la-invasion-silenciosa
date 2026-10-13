@@ -5,16 +5,21 @@
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { ensureSession } from '@/lib/session'
 import { supabase } from '@/lib/supabase'
-import type { SpeciesId } from '@/types/species'
+import { isSpeciesId, type SpeciesId } from '@/types/species'
 import type { MapSightingGeo, SightingStatus } from '@/types/sighting'
 
 // species_id is a UUID in the DB; the app keys sprites and the Pokédex by
 // slug. anon can read active species (policy species_select_active), so we
-// resolve the mapping here.
+// resolve the mapping here. A slug this build has no artwork for is left
+// out: the database can gain a species before every client has updated.
 async function speciesSlugById(): Promise<Map<string, SpeciesId>> {
   const { data, error } = await supabase.from('species').select('id, slug')
   if (error) throw error
-  return new Map(data.map((s) => [s.id, s.slug as SpeciesId]))
+  const slugs = new Map<string, SpeciesId>()
+  for (const s of data) {
+    if (isSpeciesId(s.slug)) slugs.set(s.id, s.slug)
+  }
+  return slugs
 }
 
 export async function listMapSightings(): Promise<MapSightingGeo[]> {
@@ -28,8 +33,9 @@ export async function listMapSightings(): Promise<MapSightingGeo[]> {
   if (result.error) throw result.error
 
   // View columns are nullable in the generated types; drop any row that is
-  // missing an essential field or whose species can't be resolved (e.g. an
-  // inactive species) — better a missing pin than a crash. flatMap keeps the
+  // missing an essential field or whose species can't be resolved (an
+  // inactive species, or one this build doesn't know) — better a missing pin
+  // than a crash. flatMap keeps the
   // result typed.
   return result.data.flatMap((row) => {
     const speciesId = row.species_id ? slugs.get(row.species_id) : undefined

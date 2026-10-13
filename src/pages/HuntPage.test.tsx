@@ -272,6 +272,9 @@ describe('capture flow (Cazar)', () => {
       target: { files: [new File(['raw'], 'foto.jpg', { type: 'image/jpeg' })] },
     })
     await user.click(await screen.findByRole('button', { name: /Usar foto/ }))
+    for (const name of ['CANDADÍN', 'TURISTOX', 'CHECKINCHU', 'LOCALÍN']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
     await user.click(await screen.findByRole('button', { name: 'KEYMON' }))
     await user.click(screen.getByRole('button', { name: /Ubicación aproximada/ }))
     expect(

@@ -1,0 +1,27 @@
+{
+  "id": "localin",
+  "name": "Localín",
+  "design": "01 · El toldo",
+  "grid": [
+    "............",
+    "..KKKKKKKK..",
+    ".KBBBBBBBBK.",
+    "KKKKKKKKKKKK",
+    "KAAWWAAWWAAK",
+    ".KKKKKKKKKK.",
+    ".KBWWBBWWBK.",
+    ".KBWPBBWPBK.",
+    ".KBBBBBBBBK.",
+    ".KBBBKKBBBK.",
+    ".KBBKAAKBBK.",
+    ".KBBKAKKBBK.",
+    ".KKKKKKKKKK."
+  ],
+  "palette": {
+    "K": "#241a2e",
+    "B": "#62bd75",
+    "A": "#f5b62e",
+    "W": "#fff7ea",
+    "P": "#241a2e"
+  }
+}

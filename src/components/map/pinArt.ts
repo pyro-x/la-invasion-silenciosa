@@ -4,12 +4,12 @@
 // browser turns it into the image.
 import { SPRITES, SPRITE_PALETTES } from '@/components/pixel/sprites'
 import { spriteRects } from '@/components/pixel/spriteShapes'
-import type { SpeciesId } from '@/types/species'
+import { SPECIES_IDS, type SpeciesId } from '@/types/species'
 
 export type PinState = 'validated' | 'pending' | 'selected'
 export type PinColors = { card: string; line: string; warn: string; accent: string }
 
-export const PIN_SPECIES: readonly SpeciesId[] = ['candadin', 'turistox', 'checkinchu', 'keymon']
+export const PIN_SPECIES: readonly SpeciesId[] = SPECIES_IDS
 export const PIN_STATES: readonly PinState[] = ['validated', 'pending', 'selected']
 
 export const pinName = (species: SpeciesId, state: PinState) => `pin-${species}-${state}`

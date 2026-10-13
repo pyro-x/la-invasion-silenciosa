@@ -34,8 +34,9 @@ describe('pinSvg', () => {
     const names = PIN_SPECIES.flatMap((species) =>
       PIN_STATES.map((state) => pinName(species, state)),
     )
-    expect(new Set(names).size).toBe(12)
+    expect(new Set(names).size).toBe(15)
     expect(names).toContain('pin-turistox-selected')
+    expect(names).toContain('pin-localin-pending')
   })
 })
 

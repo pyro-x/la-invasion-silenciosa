@@ -52,6 +52,20 @@ const SPECIES: Species[] = [
     found: 1,
     total: 6,
   },
+  {
+    id: 'localin',
+    dexNumber: '005',
+    name: 'LOCALÍN',
+    rarity: 'frecuente',
+    description:
+      'Donde antes había una panadería, una ferretería o una tienda de barrio, ahora hay maletas. Localín habita antiguos locales comerciales a pie de calle convertidos en alojamientos turísticos.',
+    habitat: 'Bajos comerciales que antes albergaban negocios del barrio.',
+    trackingTip:
+      'Tienen que cumplirse dos cosas: que antes fuera un comercio del barrio y que hoy aloje visitantes. Estar en un bajo, tener la persiana echada o un candado no basta.',
+    points: 10,
+    found: 3,
+    total: 9,
+  },
 ]
 
 export async function listSpecies(): Promise<Species[]> {

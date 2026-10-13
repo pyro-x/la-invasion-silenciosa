@@ -503,6 +503,15 @@ original: se añaden `dex_number`, `rarity`, `habitat` y `tracking_tip`, y
 se elimina `icon` (los sprites pixel-art viven en el código, indexados
 por `slug`). Los valores de `rarity` son copy de producto en español.
 
+El catálogo son datos de referencia versionados en migraciones: las
+cuatro especies iniciales en `0002` y Localín (005) en `0008` (D-066).
+**Añadir una especie** es una migración nueva con su fila más, en el
+mismo PR, su `slug` en `SPECIES_IDS` (`src/types/species.ts`) y su
+sprite; el cliente descarta los avistamientos de una especie cuyo `slug`
+no conoce. Orden de despliegue: primero `supabase db push`, después el
+cliente — el catálogo que ofrece la captura vive en el cliente y, sin la
+fila, el envío falla.
+
 ```ts
 type Species = {
   id: string;
@@ -2521,6 +2530,8 @@ supabase/
     0004_rls_policies_and_storage.sql# LCHP-11 (políticas + vista + bucket)
     0005_sighting_daily_quota.sql    # LCHP-12 (trigger de cuota, D-032/D-041)
     0006_service_role_grants.sql     # LCHP-12 (grants explícitos, D-042)
+    0007_community_verification.sql  # LCHP-15 (verificación comunitaria, D-054)
+    0008_add_localin_species.sql     # LCHP-47 (especie 005 · Localín, D-066)
 
   functions/
     api/                             # implementado en LCHP-12
