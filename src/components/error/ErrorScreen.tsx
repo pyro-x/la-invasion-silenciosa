@@ -2,6 +2,7 @@
 // place of the router's default error dump, and for an unknown address.
 // Inside the shell it fills the page area above the tab bar; `standalone`
 // gives it the app frame when there is no shell around it.
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { PixelSprite } from '@/components/pixel/PixelSprite'
 import { ERROR_SPRITES, ERROR_SPRITE_PALETTES } from '@/components/pixel/errorSprites'
@@ -17,6 +18,15 @@ type ErrorScreenProps =
 export function ErrorScreen(props: ErrorScreenProps) {
   const navigate = useNavigate()
   const { pathname, search, hash } = useLocation()
+
+  const heading = useRef<HTMLHeadingElement>(null)
+
+  // The screen replaces a page under the reader's feet, often while focus
+  // sits on the tab that opened it: moving focus to the title is what makes
+  // a screen reader say what happened.
+  useEffect(() => {
+    heading.current?.focus()
+  }, [])
 
   const copy = ERROR_COPY[props.variant]
   const sprite = props.variant === 'error' ? 'glitch' : 'missing'
@@ -53,7 +63,12 @@ export function ErrorScreen(props: ErrorScreenProps) {
       <div className="eyebrow" style={{ marginTop: 6 }}>
         {copy.eyebrow}
       </div>
-      <h1 className="display" style={{ fontSize: 22, lineHeight: 1.18 }}>
+      <h1
+        ref={heading}
+        tabIndex={-1}
+        className="display"
+        style={{ fontSize: 22, lineHeight: 1.18, outline: 'none' }}
+      >
         {copy.title}
       </h1>
       <p style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 320 }}>{copy.body}</p>

@@ -86,9 +86,22 @@ describe('a render error on a page inside the shell', () => {
     renderRoute('/ranking')
     await user.click(screen.getByRole('button', { name: ERROR_COPY.retry }))
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: ERROR_COPY.error.title })).toBeInTheDocument(),
+      expect(screen.getByRole('heading', { name: ERROR_COPY.error.title })).toHaveFocus(),
     )
     expect(tabBar()).toBeInTheDocument()
+  })
+
+  it('moves focus from the tab that opened the page to the title', async () => {
+    const user = userEvent.setup()
+    broken.ranking = false
+    renderRoute('/mapa')
+    broken.ranking = true
+    const tab = screen.getByRole('link', { name: /ranking/i })
+    await user.click(tab)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: ERROR_COPY.error.title })).toHaveFocus(),
+    )
+    expect(tab).not.toHaveFocus()
   })
 
   it('«Volver al mapa» goes to the map', async () => {
@@ -165,7 +178,7 @@ describe('an unknown address', () => {
   it('shows the not-found variant inside the shell', async () => {
     const user = userEvent.setup()
     renderRoute('/no-existe/de-verdad')
-    expect(screen.getByRole('heading', { name: ERROR_COPY.notFound.title })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: ERROR_COPY.notFound.title })).toHaveFocus()
     expect(within(tabBar()!).getByText('Especies')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: ERROR_COPY.retry })).not.toBeInTheDocument()
     expect(screen.queryByText(new RegExp(ERROR_COPY.referenceLabel))).not.toBeInTheDocument()

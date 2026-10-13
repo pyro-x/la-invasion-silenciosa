@@ -2537,7 +2537,9 @@ navegación. Ahora:
   variantes (`error`, `notFound`). Los textos están en
   `src/components/error/errorCopy.ts` y los dos sprites en
   `src/components/pixel/errorSprites.ts`; no son especies y no pasan por
-  el catálogo. En pantalla nunca aparecen el mensaje ni la traza.
+  el catálogo. En pantalla nunca aparecen el mensaje ni la traza. Al
+  aparecer, el foco pasa al título, para que un lector de pantalla diga
+  lo que ha ocurrido.
 - **Reintentar** vacía la caché de TanStack Query (`resetQueries`) y
   navega con `replace` a la dirección actual: el límite de React Router
   suelta su error cuando cambia el objeto `location`. El cliente
