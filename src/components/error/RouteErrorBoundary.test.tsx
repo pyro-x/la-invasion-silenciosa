@@ -11,6 +11,7 @@ import { queryClient } from '@/lib/queryClient'
 import { APP_VERSION } from '@/lib/version'
 import { renderRoute } from '@/test/render'
 import { ERROR_COPY } from './errorCopy'
+import { RootErrorBoundary } from './RouteErrorBoundary'
 
 const RAW_MESSAGE = "Cannot read properties of undefined (reading 'forEach')"
 
@@ -121,6 +122,33 @@ describe('a render error on a page outside the shell', () => {
     expect(document.body).not.toHaveTextContent('forEach')
     await user.click(screen.getByRole('button', { name: ERROR_COPY.backToMap }))
     expect(await screen.findByText('El mapa')).toBeInTheDocument()
+  })
+})
+
+describe('a thrown value that is not an error', () => {
+  it('shows the error screen and is logged once with the same code', async () => {
+    const thrown: object = Object.create(null)
+    function Hostile(): never {
+      throw thrown
+    }
+    const container = document.createElement('div')
+    document.body.append(container)
+    const router = createMemoryRouter(
+      [{ ErrorBoundary: RootErrorBoundary, children: [{ path: '/', Component: Hostile }] }],
+      { initialEntries: ['/'] },
+    )
+    const root = createRoot(container, rootErrorOptions)
+    await act(async () => {
+      root.render(<RouterProvider router={router} onError={handleRouterError} />)
+    })
+
+    const code = errorReference(new Error('A value that is not an error was thrown'))
+    expect(within(container).getByText(code)).toBeInTheDocument()
+    expect(console.error).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(console.error).mock.calls[0][0]).toContain(`error ${code}`)
+
+    act(() => root.unmount())
+    container.remove()
   })
 })
 

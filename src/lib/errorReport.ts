@@ -19,10 +19,17 @@ export type ErrorReport = {
 // No I, L, O or U: the code is read aloud or typed from a phone screen.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
+// Never throws: it runs inside the error screen and the logger. A value
+// with no usable string form (a null-prototype object, a toString that
+// throws) gets a fixed description.
 export function toError<Thrown>(thrown: Thrown): Error {
   if (thrown instanceof Error) return thrown
   if (isRouteErrorResponse(thrown)) return new Error(`${thrown.status} ${thrown.statusText}`)
-  return new Error(String(thrown))
+  try {
+    return new Error(String(thrown))
+  } catch {
+    return new Error('A value that is not an error was thrown')
+  }
 }
 
 // Derived from the build and the failure, not random: the screen and the
@@ -55,7 +62,8 @@ export function reportError({
     version: APP_VERSION,
     // The pathname only: a query string or a hash is never needed to find
     // the failing screen, and leaving them out keeps the entry free of
-    // whatever a future link might carry.
+    // whatever a future link might carry. This function adds nothing about
+    // the user; the error's own message and stack are logged as thrown.
     route: window.location.pathname,
     source,
     error,

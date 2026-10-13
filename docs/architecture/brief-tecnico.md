@@ -2550,8 +2550,9 @@ navegación. Ahora:
   una entrada de `console.error` por error con: código de referencia,
   versión del build (`APP_VERSION`, la misma del aviso superior), ruta
   (solo `pathname`, sin query ni hash), origen, traza y pila de
-  componentes. Nada sobre el usuario ni su posición, y nada sale del
-  dispositivo. Un servicio de reporte (Sentry o similar) queda fuera del
+  componentes. La función no añade nada sobre el usuario ni su posición;
+  el mensaje y la traza del error se registran tal cual se lanzaron (como
+  ya hacía React por defecto), y nada sale del dispositivo. Un servicio de reporte (Sentry o similar) queda fuera del
   MVP: es una dependencia de terceros que recibiría datos de los
   dispositivos y necesita su propia decisión; se enchufaría en esa
   función.
@@ -2570,9 +2571,11 @@ navegación. Ahora:
   código en cualquier dispositivo con el mismo motor de navegador (los
   mensajes de error cambian entre motores).
 
-No cubierto, conocido: los errores fuera del render (manejadores de
+No cubierto, conocido: una página que lance el valor `undefined` se queda
+sin pantalla (el límite de React Router distingue «sin error» con
+`error !== undefined`); los errores fuera del render (manejadores de
 eventos, promesas) no llegan a los límites ni a estas opciones y siguen
-como estaban, en la consola del navegador; y un error en lo que está
+como estaban, en la consola del navegador; un error en lo que está
 fuera del router (`Providers`, el aviso de datos de ejemplo) o en la
 propia pantalla de error raíz deja la página en blanco, con su entrada en
 consola (`source: uncaught`).

@@ -35,6 +35,17 @@ describe('toError', () => {
     expect(toError(undefined).message).toBe('undefined')
   })
 
+  it('does not throw on a value with no string form', () => {
+    const hostile = {
+      toString(): string {
+        throw new Error('no string for you')
+      },
+    }
+    const bare: object = Object.create(null)
+    expect(toError(bare).message).toBe('A value that is not an error was thrown')
+    expect(toError(hostile).message).toBe('A value that is not an error was thrown')
+  })
+
   it('names a route response by its status', () => {
     expect(toError(new RouteErrorResponse(503, 'Service Unavailable', null)).message).toBe(
       '503 Service Unavailable',
