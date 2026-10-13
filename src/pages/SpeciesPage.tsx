@@ -67,7 +67,7 @@ export function SpeciesPage() {
                   </span>
                 </div>
                 <div style={{ fontSize: 12.5, color: 'var(--ink-dim)', lineHeight: 1.35 }}>
-                  {c.description}
+                  {c.listDescription ?? c.description}
                 </div>
               </div>
               <div className="stack" style={{ alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>

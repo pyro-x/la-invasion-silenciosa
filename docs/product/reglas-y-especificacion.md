@@ -42,6 +42,8 @@ Incorporada en octubre de 2026 (D-066). Las cuatro especies anteriores y sus avi
 
 **Descripción de la ficha:** «Donde antes había una panadería, una ferretería o una tienda de barrio, ahora hay maletas. Localín habita antiguos locales comerciales a pie de calle convertidos en alojamientos turísticos.»
 
+**Descripción corta (solo en el listado de especies):** «Antiguo comercio de barrio convertido en alojamiento turístico.» La ficha de detalle y la ficha del mapa muestran la descripción completa.
+
 **Hábitat:** «Bajos comerciales que antes albergaban negocios del barrio.»
 
 **Pista de rastreo:** «Tienen que cumplirse dos cosas: que antes fuera un comercio del barrio y que hoy aloje visitantes. Estar en un bajo, tener la persiana echada o un candado no basta.»
@@ -139,7 +141,7 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Función técnica:** en móvil, ese toque activa la **pantalla completa**.
 
 ### 1 · Onboarding
-- **Qué hace:** presenta la misión (locución de bienvenida), el guiño a las chisperas de 1808, la **regla de oro** y el sello de la asociación.
+- **Qué hace:** presenta la misión (locución de bienvenida) con las cinco criaturas en la cabecera, el guiño a las chisperas de 1808, la **regla de oro** y el sello de la asociación.
 - **Comportamiento:** se muestra solo la **primera vez** (se recuerda en el dispositivo). Forzable con `?onboarding=1` o desde Tweaks.
 
 ### 2 · Mapa

@@ -33,13 +33,15 @@ export function OnboardingPage() {
 
             <div
               className="center"
-              style={{ gap: 16, margin: '20px 0 6px', justifyContent: 'space-around' }}
+              style={{ gap: 10, margin: '20px 0 6px', justifyContent: 'space-around' }}
             >
-              <CreatureSprite id="candadin" scale={5} style={{ animationDelay: '0s' }} />
+              <CreatureSprite id="candadin" scale={4} />
+              <CreatureSprite id="turistox" scale={4} />
               <div className="floaty">
                 <CreatureSprite id="keymon" scale={6} />
               </div>
-              <CreatureSprite id="turistox" scale={5} />
+              <CreatureSprite id="checkinchu" scale={4} />
+              <CreatureSprite id="localin" scale={4} />
             </div>
 
             <h1

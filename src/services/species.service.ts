@@ -59,6 +59,7 @@ const SPECIES: Species[] = [
     rarity: 'frecuente',
     description:
       'Donde antes había una panadería, una ferretería o una tienda de barrio, ahora hay maletas. Localín habita antiguos locales comerciales a pie de calle convertidos en alojamientos turísticos.',
+    listDescription: 'Antiguo comercio de barrio convertido en alojamiento turístico.',
     habitat: 'Bajos comerciales que antes albergaban negocios del barrio.',
     trackingTip:
       'Tienen que cumplirse dos cosas: que antes fuera un comercio del barrio y que hoy aloje visitantes. Estar en un bajo, tener la persiana echada o un candado no basta.',

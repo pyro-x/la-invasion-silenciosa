@@ -13,6 +13,10 @@ describe('species screen (Pokédex)', () => {
     expect(screen.getByText('18/45')).toBeInTheDocument()
     expect(screen.getByText('#001')).toBeInTheDocument()
     expect(screen.getByText('#005')).toBeInTheDocument()
+    expect(
+      screen.getByText('Antiguo comercio de barrio convertido en alojamiento turístico.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/ahora hay maletas/)).not.toBeInTheDocument()
     expect(screen.getByText('7/12')).toBeInTheDocument()
     expect(
       screen.getByText('Candado o caja de llaves instalada en la vía pública.'),
@@ -45,6 +49,7 @@ describe('species screen (Pokédex)', () => {
     expect(await screen.findByText('LOCALÍN')).toBeInTheDocument()
     expect(screen.getByText('frecuente')).toBeInTheDocument()
     expect(screen.getByText('3/9')).toBeInTheDocument()
+    expect(screen.getByText(/ahora hay maletas/)).toBeInTheDocument()
     expect(
       screen.getByText('Bajos comerciales que antes albergaban negocios del barrio.'),
     ).toBeInTheDocument()
