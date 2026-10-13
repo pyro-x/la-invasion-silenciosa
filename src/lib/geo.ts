@@ -23,7 +23,7 @@ export function isWithinLaLatina(lat: number, lng: number): boolean {
 }
 
 export type GeoFix =
-  | { kind: 'ok'; lat: number; lng: number; accuracyM: number }
+  | { kind: 'ok'; lat: number; lng: number; accuracyM: number; /** When it was read. */ at: number }
   | { kind: 'denied' }
   | { kind: 'unavailable' }
 
@@ -46,6 +46,7 @@ export function getGeoFix(): Promise<GeoFix> {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracyM: position.coords.accuracy,
+          at: Date.now(),
         }),
       // code 1 = PERMISSION_DENIED (the constant itself may be absent in
       // non-browser test environments).

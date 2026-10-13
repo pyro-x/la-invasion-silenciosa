@@ -3,7 +3,7 @@ import { BarrioMap } from './BarrioMap'
 import type { BarrioMapController } from './createBarrioMap'
 import type { MapSightingGeo } from '@/types/sighting'
 
-const calls = vi.hoisted(() => ({ log: [] as string[], fromCentreM: 500 }))
+const calls = vi.hoisted(() => ({ log: [] as string[], fromCentreM: 500, moving: false }))
 
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}))
 
@@ -15,6 +15,7 @@ vi.mock('./createBarrioMap', () => ({
     setHeat: (on) => calls.log.push(`heat ${on}`),
     setMe: (me, rangeM) => calls.log.push(`me ${me ? me.lat : null} ${rangeM}`),
     metresFromCentre: () => calls.fromCentreM,
+    isMoving: () => calls.moving,
     setBottomPadding: (px) => calls.log.push(`padding ${px}`),
     goTo: (target) => calls.log.push(`goTo ${target.id} ${target.lat}`),
     follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
@@ -58,6 +59,7 @@ const base: Props = {
 beforeEach(() => {
   calls.log.length = 0
   calls.fromCentreM = 500
+  calls.moving = false
 })
 
 afterEach(() => {
@@ -181,6 +183,17 @@ describe('BarrioMap', () => {
       vi.advanceTimersByTime(10_001)
       fix()
       expect(onResumeFollow).not.toHaveBeenCalled()
+    })
+
+    it('not under a hand: a drag that outlasts the wait is left alone', () => {
+      const { onResumeFollow, fix } = leftAlone()
+      calls.moving = true
+      vi.advanceTimersByTime(10_001)
+      fix()
+      expect(onResumeFollow).not.toHaveBeenCalled()
+      calls.moving = false
+      fix()
+      expect(onResumeFollow).toHaveBeenCalledTimes(1)
     })
 
     it('not while a creature is open, and picking one counts as touching the map', () => {

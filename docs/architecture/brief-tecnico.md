@@ -1452,6 +1452,30 @@ debajo: «Está a 400 m de ti. Acércate a menos de 85 m para verificar.»,
 ubicación para verificar: hay que estar junto a la criatura.» «Ver
 evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
 
+**Lo que cerró la revisión (ronda 1, D-066 Addendum 1):**
+
+* La ventana de verificación abierta **deja de permitir confirmar** si el
+  vecino sale del radio, o su posición deja de servir, con ella abierta:
+  «Confirmar» se deshabilita y la ventana dice por qué. No se cierra sola
+  (una posición que baila en el borde la haría aparecer y desaparecer).
+* **Fuera de La Latina no se juega aunque la criatura esté al lado:** un
+  vecino justo fuera del marco no verifica una criatura del borde
+  («Estás fuera de La Latina: desde ahí no se puede verificar.») ni
+  registra una con el pin dentro.
+* **El encuadre inicial ya no puede dejar el mapa en el barrio** si la
+  primera posición llegó antes de conocerse la altura de la hoja: tras
+  encuadrar, el mapa vuelve a donde lo había mandado el seguimiento. Sigue
+  descartándose cualquier otro movimiento anterior al encuadre.
+* La posición que cachea la puerta del equipo **conserva la hora en que se
+  leyó**: si pasan minutos entre la puerta y el paso de ubicación, la
+  insignia dice «Posición de hace N min». Una posición antigua avisa, no
+  bloquea (igual que en Alcorqueando).
+* El seguimiento **no vuelve solo mientras el mapa se mueve**: un arrastre
+  o un pellizco que dure más de 10 s no se interrumpe.
+* El regreso del seguimiento se evalúa **cuando llega una posición**, como
+  en Alcorqueando, no con un temporizador: la observación trae una al menos
+  cada 20 s.
+
 **No verificado:** GPS real en las calles de La Latina, ni el aviso de
 permiso en iPhone y Android con este flujo. Queda para el paseo de David
 con la preview.

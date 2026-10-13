@@ -43,8 +43,6 @@ type PendingFly = { lat: number; lng: number; accuracyM: number }
 /** Where the neighbour stands, and when the phone said so. */
 type Fix = PendingFly & { at: number }
 
-const stamped = (fix: PendingFly): Fix => ({ ...fix, at: Date.now() })
-
 const RADIUS = formatMeters(PLAY_RULES.captureRadiusM)
 
 // The two lines under the map, in Alcorqueando's voice.
@@ -112,9 +110,16 @@ export function LocationStep({
       ? { lat: primedFix.lat, lng: primedFix.lng, accuracyM: primedFix.accuracyM }
       : null,
   )
+  // The gate's fix keeps the time it was read at: a photo and a species
+  // later it may be minutes old, and the badge must say so.
   const [fix, setFix] = useState<Fix | null>(() =>
     primedFix?.kind === 'ok'
-      ? stamped({ lat: primedFix.lat, lng: primedFix.lng, accuracyM: primedFix.accuracyM })
+      ? {
+          lat: primedFix.lat,
+          lng: primedFix.lng,
+          accuracyM: primedFix.accuracyM,
+          at: primedFix.at,
+        }
       : null,
   )
 
@@ -129,7 +134,7 @@ export function LocationStep({
     }
     setGeo('granted')
     const next = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM }
-    setFix(stamped(next))
+    setFix({ ...next, at: fix.at })
     pendingFly.current = next
     setFlyTo({ lat: fix.lat, lng: fix.lng })
   }
@@ -158,7 +163,9 @@ export function LocationStep({
   const pin: Presence = fix
     ? presenceAt(fix, position ?? fix, PLAY_RULES.captureRadiusM)
     : { kind: 'unknown' }
-  const canContinue = position !== null && !outOfBounds && pin.kind === 'near'
+  // The barrio's edge is a rule for the neighbour too, not only for the pin.
+  const outside = fix !== null && !isWithinLaLatina(fix.lat, fix.lng)
+  const canContinue = position !== null && !outOfBounds && !outside && pin.kind === 'near'
   const geoMessage = geoMessageFor(geo)
   const { title, note } = describe(fix, position, outOfBounds, pin)
 

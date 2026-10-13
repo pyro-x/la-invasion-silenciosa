@@ -13,12 +13,19 @@ import type { MapSightingGeo } from '@/types/sighting'
 export function VerifyModal({
   sighting,
   speciesName,
+  blocked,
   onClose,
   onResult,
   onReclassify,
 }: {
   sighting: MapSightingGeo
   speciesName: string
+  /**
+   * Why the neighbour may not confirm right now, if so (LCHP-49): they
+   * walked out of the radius, or their position stopped being usable, with
+   * the window already open.
+   */
+  blocked: string | null
   onClose: () => void
   /** Fires once with the transaction's outcome; the caller toasts + closes. */
   onResult: (outcome: VerifyOutcome) => void
@@ -134,6 +141,11 @@ export function VerifyModal({
           <p className="muted" style={{ margin: '0 0 4px', fontSize: 13, textAlign: 'center' }}>
             ¿La criatura está bien clasificada?
           </p>
+          {blocked && (
+            <p role="alert" style={{ margin: '0 0 4px', fontSize: 12.5, textAlign: 'center' }}>
+              {blocked}
+            </p>
+          )}
           {/* Blind confirmations are a golden-rule hole (Codex review, HIGH):
               the neighbor must be LOOKING at the evidence to vouch for it, so
               the action stays disabled until the photo actually rendered. */}
@@ -141,7 +153,11 @@ export function VerifyModal({
             type="button"
             className="btn btn-accent"
             onClick={() => void confirm()}
-            disabled={busy || !(typeof evidence === 'object' && evidence.kind === 'ready')}
+            disabled={
+              busy ||
+              blocked !== null ||
+              !(typeof evidence === 'object' && evidence.kind === 'ready')
+            }
           >
             {busy ? 'Enviando…' : '✔ Confirmar (+5 pts)'}
           </button>

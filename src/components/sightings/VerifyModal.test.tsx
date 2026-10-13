@@ -34,6 +34,7 @@ beforeEach(() => {
 })
 
 function renderModal(overrides?: {
+  blocked?: string | null
   onClose?: () => void
   onResult?: (o: VerifyOutcome) => void
   onReclassify?: () => void
@@ -42,6 +43,7 @@ function renderModal(overrides?: {
     <VerifyModal
       sighting={SIGHTING}
       speciesName="CANDADÍN"
+      blocked={overrides?.blocked ?? null}
       onClose={overrides?.onClose ?? (() => {})}
       onResult={overrides?.onResult ?? (() => {})}
       onReclassify={overrides?.onReclassify ?? (() => {})}
@@ -107,6 +109,18 @@ describe('verification modal', () => {
       await screen.findByText('Este avistamiento aún no tiene foto disponible'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })).toBeDisabled()
+  })
+
+  it('a neighbour who is no longer there cannot confirm, and is told why (LCHP-49)', async () => {
+    const onResult = vi.fn()
+    const user = userEvent.setup()
+    renderModal({ blocked: 'Está a 400 m de ti.', onResult })
+    await screen.findByRole('img', { name: /Evidencia/ })
+    expect(screen.getByRole('alert')).toHaveTextContent('Está a 400 m de ti.')
+    const confirm = screen.getByRole('button', { name: /Confirmar/ })
+    expect(confirm).toBeDisabled()
+    await user.click(confirm)
+    expect(onResult).not.toHaveBeenCalled()
   })
 
   it('Saltar closes; Reclasificar defers (post-MVP)', async () => {

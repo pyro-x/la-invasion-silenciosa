@@ -80,12 +80,12 @@ beforeEach(() => {
 // The neighbour stands in the barrio, 40 m from where the map opens.
 const HERE = { latitude: 40.4116, longitude: -3.7102 }
 
-function stubFix(accuracy: number) {
+function stubFix(accuracy: number, at: { latitude: number; longitude: number } = HERE) {
   vi.stubGlobal('navigator', {
     ...navigator,
     geolocation: {
       getCurrentPosition: (ok: (p: { coords: Record<string, number> }) => void) =>
-        ok({ coords: { ...HERE, accuracy } }),
+        ok({ coords: { ...at, accuracy } }),
     },
   })
 }
@@ -271,6 +271,22 @@ describe('capture flow (Cazar)', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
       )
+    })
+
+    it('a neighbour just outside La Latina registers nothing, even with the pin inside it', async () => {
+      const user = userEvent.setup()
+      // 22 m beyond the barrio's northern margin
+      stubFix(9, { latitude: 40.416, longitude: -3.7102 })
+      renderHunt()
+      await walkToLocation(user)
+      await user.click(await screen.findByRole('button', { name: /Usar mi ubicación/ }))
+      expect(await screen.findByText('Estás fuera de La Latina')).toBeInTheDocument()
+
+      // 33 m south of the fix: inside the barrio, and inside the radius
+      drag.to = { lat: 40.4157, lng: -3.7102 }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      expect(screen.getByText('Estás fuera de La Latina')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
     })
 
     it('a position too vague places no creature, and says how to fix it', async () => {

@@ -747,6 +747,46 @@ describe('map screen', () => {
       expect(screen.queryByText(/para verificar/)).not.toBeInTheDocument()
     })
 
+    it('walking away with the verification window open takes the confirmation away', async () => {
+      getEvidenceUrlMock.mockResolvedValue({
+        kind: 'ready',
+        url: 'https://x/p.jpg',
+        expiresIn: 300,
+      })
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await standAt(user, NEXT_TO_PENDING)
+      await user.click(await screen.findByRole('button', { name: 'Verificar TURISTOX' }))
+      await screen.findByRole('img', { name: /Evidencia/ })
+      const confirm = screen.getByRole('button', { name: /Confirmar \(\+5 pts\)/ })
+      expect(confirm).toBeEnabled()
+      // the next fix puts the neighbour in the plaza, 400 m away
+      const [success] = watchPositionMock.mock.calls.at(-1) ?? []
+      act(() => success?.(geoFix(...PLAZA)))
+      expect(confirm).toBeDisabled()
+      expect(screen.getByRole('alert')).toHaveTextContent('Acércate a menos de 85 m')
+      submitVerificationMock.mockClear()
+      await user.click(confirm)
+      expect(submitVerificationMock).not.toHaveBeenCalled()
+    })
+
+    it('just outside La Latina nobody verifies, however close the creature at its edge', async () => {
+      // inside the barrio's margin, 55 m from a neighbour standing outside it
+      listMapSightingsMock.mockResolvedValue([
+        { ...FAR_PENDING, id: 's-edge', lat: 40.4155, lng: -3.712 },
+      ])
+      const user = userEvent.setup()
+      renderRoute('/mapa')
+      await standAt(user, [40.416, -3.712])
+      await screen.findByText(/Estás fuera de La Latina: puedes mirar/)
+      expect(screen.queryByRole('button', { name: /^Verificar \S/ })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'pin s-edge' }))
+      expect(
+        screen.getByText('Estás fuera de La Latina: desde ahí no se puede verificar.'),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '✔ Verificar' })).toBeDisabled()
+    })
+
     it('following may come back by itself only while no creature is open', async () => {
       const user = userEvent.setup()
       renderRoute('/mapa')

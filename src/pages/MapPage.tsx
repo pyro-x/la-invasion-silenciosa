@@ -157,6 +157,8 @@ function locatePanel(geo: GeoWatchState, outsideBarrio: boolean): LocatePanel | 
   }
 }
 
+const OUTSIDE_BLOCK = 'Estás fuera de La Latina: desde ahí no se puede verificar.'
+
 // Why «Verificar» is not offered, in the neighbour's terms.
 function verifyBlock(presence: Presence): string | null {
   switch (presence.kind) {
@@ -296,19 +298,21 @@ export function MapPage() {
   // A position good enough to measure from. Distances go to the public
   // coordinate of each sighting, the only one the browser has (D-046).
   const here = me !== null && !isVague(me) ? me : null
-  const presenceOf = (s: MapSightingGeo) => presenceAt(me, s, PLAY_RULES.verifyRadiusM)
+  // Outside La Latina nobody verifies, however close to a creature at the
+  // barrio's edge: there the neighbour is a spectator.
+  const blockOf = (s: MapSightingGeo) =>
+    outsideBarrio ? OUTSIDE_BLOCK : verifyBlock(presenceAt(me, s, PLAY_RULES.verifyRadiusM))
   const pending = sightings
     .filter((s) => s.status === 'pending')
     .map((s) => ({
       sighting: s,
       distanceM: here ? roundedDistance(distanceMeters(here, s)) : null,
-      near: presenceOf(s).kind === 'near',
+      near: blockOf(s) === null,
     }))
   // Nearest first; the sort is stable, so creatures the same tens of metres
   // away stay newest first and GPS jitter does not shuffle the list.
   if (here) pending.sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
-  const selPresence: Presence = selS ? presenceOf(selS) : { kind: 'unknown' }
-  const selBlock = verifyBlock(selPresence)
+  const selBlock = selS ? blockOf(selS) : null
 
   // The whole row is the control: the orange counter looks like a button,
   // so it is one.
@@ -600,6 +604,7 @@ export function MapPage() {
         <VerifyModal
           sighting={selS}
           speciesName={speciesName(selS.speciesId)}
+          blocked={selBlock}
           onClose={() => setVerifying(false)}
           onResult={onVerifyResult}
           onReclassify={() => showToast('Reclasificar · próximamente')}

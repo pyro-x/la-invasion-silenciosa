@@ -45,6 +45,8 @@ export type BarrioMapController = {
   setMe: (position: MePosition | null, rangeM?: number | null) => void
   /** Metres from the centre of the visible map to a point. */
   metresFromCentre: (target: LngLat) => number
+  /** The map is moving: a gesture in progress, or an ease of the app's. */
+  isMoving: () => boolean
   /** Space covered by the bottom sheet: the map centres above it. */
   setBottomPadding: (px: number) => void
   /**
@@ -683,6 +685,11 @@ export function createBarrioMap(
   // nothing is, until the map is created again: the camera may still sit on
   // or next to where they are after the dot is gone.
   let userChoseView = false
+  // Where following last sent the camera, until the neighbour or a pin
+  // takes it elsewhere. The opening fit is only fitted once the sheet's
+  // height is known, and a first position can arrive before that: the fit
+  // must not leave the map on the barrio with nothing to bring it back.
+  let followed: { center: [number, number]; zoom?: number } | null = null
   let positionShown = false
   // Where the app is easing to, while it is. Its moveend is the app's even
   // if a gesture landed in the middle (a wheel that interrupts an ease ends
@@ -751,6 +758,7 @@ export function createBarrioMap(
 
   const userMoved = () => {
     intent++
+    followed = null
     focusedOn = null
     userChoseView = true
     handlers.onUserMove()
@@ -899,6 +907,7 @@ export function createBarrioMap(
             duration: 0,
           }),
         )
+        if (followed) ease(followed)
       } else if (step !== null) {
         userStep(step, center ?? undefined)
       }
@@ -906,6 +915,7 @@ export function createBarrioMap(
 
     goTo(target) {
       intent++
+      followed = null
       const spot = drawn.find((s) => s.id === target.id) ?? target
       focusedOn = target.id ?? null
       focusedAt = { lng: spot.lng, lat: spot.lat }
@@ -924,8 +934,13 @@ export function createBarrioMap(
       // carries a zoom on; a pin picked meanwhile keeps the zoom it finds.
       const heading = carriedZoom ?? map.getZoom()
       const zoom = minZoom !== undefined && heading < minZoom ? minZoom : (carriedZoom ?? undefined)
-      ease({ center: [target.lng, target.lat], ...(zoom !== undefined ? { zoom } : {}) })
+      const center: [number, number] = [target.lng, target.lat]
+      const kept = zoom ?? followed?.zoom
+      followed = { center, ...(kept !== undefined ? { zoom: kept } : {}) }
+      ease({ center, ...(zoom !== undefined ? { zoom } : {}) })
     },
+
+    isMoving: () => map.isMoving(),
 
     metresFromCentre(target) {
       const centre = map.getCenter()

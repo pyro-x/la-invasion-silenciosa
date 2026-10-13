@@ -469,6 +469,30 @@ describe('createBarrioMap', () => {
     expect(stored()).toBeNull()
   })
 
+  it('a first position that arrives before the sheet is measured survives the opening fit', () => {
+    const { controller } = mount()
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    controller.setMe(me)
+    controller.follow(me, 17)
+    // the ease has ended by the time the sheet says how tall it is
+    emit('moveend')
+    controller.setBottomPadding(280)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.712, 40.4115], zoom: 17 })
+  })
+
+  it('the opening fit brings back nothing the neighbour or a pin took the map from', () => {
+    const { controller } = mount()
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    controller.follow(me, 17)
+    emit('moveend')
+    userDrag()
+    const before = recorded.eases.length
+    controller.setBottomPadding(280)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(before)
+  })
+
   it('two sheet resizes during one move to a pin both send it again', () => {
     const { controller } = mount()
     controller.setBottomPadding(80)

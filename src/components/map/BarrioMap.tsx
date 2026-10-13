@@ -143,10 +143,13 @@ export function BarrioMap({
   }, [follow, me, followRequest])
 
   // Alcorqueando's rule: a neighbour who dragged the map to look around and
-  // then walked on gets the map back without asking for it.
+  // then walked on gets the map back without asking for it. Judged when a
+  // position arrives, as there: the watch brings one at least every 20 s.
   useEffect(() => {
     const map = controller.current
     if (follow || !mayResumeFollow || !me || !map || rangeM === null) return
+    // A drag or a pinch can last longer than the wait: never under a hand.
+    if (map.isMoving()) return
     if (Date.now() - touchedAt.current < RESUME_IDLE_MS) return
     if (map.metresFromCentre(me) <= rangeM) return
     handlers.current.onResumeFollow()
