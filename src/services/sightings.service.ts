@@ -57,11 +57,6 @@ export async function listMapSightings(): Promise<MapSightingGeo[]> {
   })
 }
 
-export async function listPendingSightings(): Promise<MapSightingGeo[]> {
-  const all = await listMapSightings()
-  return all.filter((s) => s.status === 'pending')
-}
-
 // ---------------------------------------------------------------------------
 // Capture submit (LCHP-14)
 // ---------------------------------------------------------------------------

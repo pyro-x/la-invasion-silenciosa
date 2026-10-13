@@ -1,5 +1,6 @@
 // Thin ribbon shown while the app runs on fake services (D-008/LCHP-19),
-// so nobody mistakes the public preview for real data. Removed in LCHP-13.
+// so nobody mistakes the public preview for real data. Retires with the
+// last fake service (D-048).
 // Hidden under automation so the visual-replica loop screenshots stay clean.
 import { USING_SAMPLE_DATA } from '@/lib/flags'
 import { APP_VERSION } from '@/lib/version'

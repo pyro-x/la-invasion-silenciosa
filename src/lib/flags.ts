@@ -1,5 +1,5 @@
-// App-level flags. USING_SAMPLE_DATA gates the "sample data" ribbon and is
-// flipped off when the map reads real data (LCHP-13).
+// App-level flags. USING_SAMPLE_DATA gates the "sample data" ribbon and
+// stays on until the last fake service goes real (D-048).
 export const USING_SAMPLE_DATA = true
 
 // «Guarda tu cuenta» ships hidden (LCHP-29, D-060): Supabase's built-in

@@ -2,7 +2,6 @@ import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
   buildSightingForm,
   listMapSightings,
-  listPendingSightings,
   submitSighting,
   type NewSightingSubmission,
 } from './sightings.service'
@@ -115,11 +114,6 @@ describe('sightings service · public view → map model', () => {
     const [first] = await listMapSightings()
     expect(first).not.toHaveProperty('reportedBy')
     expect(first).not.toHaveProperty('street')
-  })
-
-  it('listPendingSightings returns only pending', async () => {
-    const pending = await listPendingSightings()
-    expect(pending.map((s) => s.id)).toEqual(['s2'])
   })
 })
 
