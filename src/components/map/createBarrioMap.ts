@@ -20,6 +20,7 @@ import {
   type PinState,
 } from './pinArt'
 import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+import { distanceMeters } from '@/lib/proximity'
 import type { MapSightingGeo } from '@/types/sighting'
 
 export type LngLat = { lat: number; lng: number }
@@ -32,6 +33,8 @@ export type BarrioMapHandlers = {
   onMapTap: () => void
   /** The user — not the app — started moving the map. */
   onUserMove: () => void
+  /** A move the user chose — a gesture, a zoom button, a cluster — ended. */
+  onUserSettled: () => void
 }
 
 export type BarrioMapController = {
@@ -40,7 +43,12 @@ export type BarrioMapController = {
   setSelected: (id: string | null) => void
   /** Density of sightings instead of pins. */
   setHeat: (on: boolean) => void
-  setMe: (position: MePosition | null) => void
+  /** With a range, a ring of that many metres is drawn around the position. */
+  setMe: (position: MePosition | null, rangeM?: number | null) => void
+  /** Metres from the centre of the visible map to a point. */
+  metresFromCentre: (target: LngLat) => number
+  /** The map is moving: a gesture in progress, or an ease of the app's. */
+  isMoving: () => boolean
   /** Space covered by the bottom sheet: the map centres above it. */
   setBottomPadding: (px: number) => void
   /**
@@ -76,6 +84,7 @@ const TAP_SLOP_PX = 14
 
 const ME_AREA = 'me'
 const ME_POINT = 'me-point'
+const ME_RANGE = 'me-range'
 const SIGHTINGS = 'sightings'
 const HEAT = 'sightings-heat'
 const SELECTED = 'sighting-selected'
@@ -231,6 +240,7 @@ export function createBarrioMap(
   let selectedId: string | null = null
   let heat = false
   let me: MePosition | null = null
+  let meRangeM: number | null = null
   // The style has loaded and the position's layers exist.
   let styleReady = false
   // The pin images are registered and the sighting layers exist.
@@ -256,6 +266,15 @@ export function createBarrioMap(
         ? {
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [me.lng, me.lat] },
+            properties: {},
+          }
+        : EMPTY,
+    )
+    source(ME_RANGE)?.setData(
+      me && meRangeM !== null
+        ? {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: circlePolygon(me, meRangeM) },
             properties: {},
           }
         : EMPTY,
@@ -479,11 +498,23 @@ export function createBarrioMap(
   function addMeLayers() {
     map.addSource(ME_AREA, { type: 'geojson', data: EMPTY })
     map.addSource(ME_POINT, { type: 'geojson', data: EMPTY })
+    map.addSource(ME_RANGE, { type: 'geojson', data: EMPTY })
     map.addLayer({
       id: 'me-accuracy',
       type: 'fill',
       source: ME_AREA,
       paint: { 'fill-color': meColor, 'fill-opacity': 0.14, 'fill-outline-color': meColor },
+    })
+    map.addLayer({
+      id: 'me-range',
+      type: 'line',
+      source: ME_RANGE,
+      paint: {
+        'line-color': meColor,
+        'line-width': 2,
+        'line-dasharray': [2, 2.5],
+        'line-opacity': 0.6,
+      },
     })
     map.addLayer({
       id: 'me-halo',
@@ -656,6 +687,11 @@ export function createBarrioMap(
   // nothing is, until the map is created again: the camera may still sit on
   // or next to where they are after the dot is gone.
   let userChoseView = false
+  // Where following last sent the camera, until the neighbour or a pin
+  // takes it elsewhere. The opening fit is only fitted once the sheet's
+  // height is known, and a first position can arrive before that: the fit
+  // must not leave the map on the barrio with nothing to bring it back.
+  let followed: { center: [number, number]; zoom?: number } | null = null
   let positionShown = false
   // Where the app is easing to, while it is. Its moveend is the app's even
   // if a gesture landed in the middle (a wheel that interrupts an ease ends
@@ -724,6 +760,7 @@ export function createBarrioMap(
 
   const userMoved = () => {
     intent++
+    followed = null
     focusedOn = null
     userChoseView = true
     handlers.onUserMove()
@@ -734,6 +771,7 @@ export function createBarrioMap(
   map.on('wheel', userMoved)
   map.on('moveend', () => {
     lookSoon()
+    if (userChoseView) handlers.onUserSettled()
     // A step that was stopped before it arrived — by the app or by the
     // user's own hand — ends at a zoom nobody chose. Arrival is judged
     // against what is reachable now: the window may have changed size on
@@ -797,6 +835,7 @@ export function createBarrioMap(
       .then(
         (zoom) => {
           if (destroyed || mine !== intent) return
+          followed = null
           handlers.onUserMove()
           userStep(zoom, center)
         },
@@ -835,8 +874,9 @@ export function createBarrioMap(
       drawMode()
     },
 
-    setMe(position) {
+    setMe(position, rangeM = null) {
       me = position
+      meRangeM = rangeM
       if (position && !positionShown) {
         positionShown = true
         // Nothing more will be stored, so an older view would come back on
@@ -871,6 +911,7 @@ export function createBarrioMap(
             duration: 0,
           }),
         )
+        if (followed) ease(followed)
       } else if (step !== null) {
         userStep(step, center ?? undefined)
       }
@@ -878,6 +919,7 @@ export function createBarrioMap(
 
     goTo(target) {
       intent++
+      followed = null
       const spot = drawn.find((s) => s.id === target.id) ?? target
       focusedOn = target.id ?? null
       focusedAt = { lng: spot.lng, lat: spot.lat }
@@ -896,7 +938,17 @@ export function createBarrioMap(
       // carries a zoom on; a pin picked meanwhile keeps the zoom it finds.
       const heading = carriedZoom ?? map.getZoom()
       const zoom = minZoom !== undefined && heading < minZoom ? minZoom : (carriedZoom ?? undefined)
-      ease({ center: [target.lng, target.lat], ...(zoom !== undefined ? { zoom } : {}) })
+      const center: [number, number] = [target.lng, target.lat]
+      const kept = zoom ?? followed?.zoom
+      followed = { center, ...(kept !== undefined ? { zoom: kept } : {}) }
+      ease({ center, ...(zoom !== undefined ? { zoom } : {}) })
+    },
+
+    isMoving: () => map.isMoving(),
+
+    metresFromCentre(target) {
+      const centre = map.getCenter()
+      return distanceMeters({ lat: centre.lat, lng: centre.lng }, target)
     },
 
     zoomBy(delta) {

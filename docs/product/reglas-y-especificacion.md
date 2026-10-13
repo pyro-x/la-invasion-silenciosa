@@ -69,12 +69,20 @@ Se documentan **criaturas, nunca personas**. Está prohibido fotografiar:
 La app recuerda esta regla en el onboarding, en el flujo de captura y en la bandeja de validación. Cualquier registro que la incumpla debe descartarse.
 
 ### 3.2. Cómo se juega (bucle principal)
-1. **Explora** el barrio con la app abierta.
+1. **Explora** el barrio con la app abierta: el mapa te sigue mientras caminas.
 2. **Caza** una criatura: haz una foto (solo del objeto/edificio).
 3. **Registra** el avistamiento: foto + ubicación aproximada + categoría.
 4. **Envía** → queda **pendiente de validación**.
 5. La **comunidad verifica** el avistamiento → se valida → sumas los puntos.
 6. También puedes **verificar** hallazgos de otros y **subir vídeos** para redes.
+
+**Se juega en la calle, donde estás.** Una criatura solo se registra estando
+junto a ella (a menos de **50 m**), y solo se verifica estando cerca de donde
+aparece en el mapa (a menos de **85 m**: los 50 m más el margen de la
+ubicación aproximada). Desde casa se puede mirar el mapa y ver las pruebas,
+pero no cazar ni verificar. Si el móvil da una posición poco precisa (peor
+que ± 150 m), tampoco: la app lo dice y explica cómo arreglarlo. Tu posición
+se usa solo en tu móvil para estas comprobaciones; no se envía ni se guarda.
 
 ### 3.3. Qué debe contener cada avistamiento
 - **Foto** de la criatura (sin personas ni datos privados).
@@ -126,6 +134,7 @@ La app recuerda esta regla en el onboarding, en el flujo de captura y en la band
 ```
 
 - **Pendiente:** recién enviado; se muestra con marcador de aviso (parpadea en el mapa) y aparece en "Cerca de ti · por verificar".
+- **Verificar es haberlo visto allí:** quien confirma tiene que estar cerca de la criatura (ver §3.2). Verificar no es opinar sobre una foto desde lejos.
 - **Validado:** confirmado por la comunidad; suma al autor y pesa más en el mapa de calor.
 - **Descartado:** incumple la regla de oro o es erróneo; puede reclasificarse a otra criatura antes de descartar.
 
@@ -149,7 +158,11 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Interacciones:**
   - Toggle **Avistamientos / Mapa de calor**.
   - Tocar un pin → ficha rápida (criatura, calle, autor, estado); si está pendiente, botón **Verificar**.
-  - Lista **"Cerca de ti · por verificar"** con scroll propio (el mapa queda fijo y se adapta a la altura disponible).
+  - Lista **"Cerca de ti · por verificar"** con scroll propio (el mapa queda fijo y se adapta a la altura disponible), **ordenada por distancia a ti**, con la distancia en cada fila («a 80 m · hace 35 min»). Sin posición se ordena por fecha y se titula «En el barrio».
+  - **El mapa te sigue:** se abre sobre tu posición, a nivel de calle, y se mueve contigo. Si lo arrastras para mirar otra zona deja de seguirte, y vuelve solo cuando llevas un rato sin tocarlo y te has alejado más de 85 m del centro del mapa (nunca mientras tengas una ficha abierta). Alrededor de tu punto se dibuja el círculo dentro del cual puedes verificar, y junto al título la precisión de tu posición («± 12 m»; «Posición de hace 3 min» si es antigua).
+  - **Sin posición el mapa la pide**, nunca al cargar por su cuenta: «Para jugar, el mapa tiene que saber dónde estás.» + **Usar mi ubicación**. Quien solo quiera mirar puede cerrar el aviso.
+  - Tocar una fila o un pin lejano **lleva el mapa hasta él**, pero **Verificar** solo se ofrece dentro del radio; fuera, la ficha dice por qué («Está a 400 m de ti. Acércate a menos de 85 m para verificar.»). **Ver evidencia** funciona desde cualquier sitio.
+  - Fuera de La Latina se puede mirar, no jugar: «Estás fuera de La Latina: puedes mirar el mapa, pero para cazar o verificar hay que estar en el barrio.»
 - **Mapa de calor:** densidad real — cada avistamiento es un foco que se intensifica (amarillo → naranja → rojo) donde se solapan. Cuentan todos, también los pendientes; los validados pesan más.
 
 ### 3 · Especies (Pokédex)
@@ -160,7 +173,7 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 Flujo de **4 pasos**:
 1. **Captura** — visor de cámara + recordatorio de privacidad → disparar / repetir / usar foto.
 2. **Identificar** — elegir la especie (Candadín / Turistox / Checkinchu / Keymon / Localín).
-3. **Ubicación** — mapa con ubicación aproximada + toggle de privacidad ("solo guardamos ubicación aproximada").
+3. **Ubicación** — mapa con ubicación aproximada + toggle de privacidad ("solo guardamos ubicación aproximada"). **Hace falta tu posición:** el pin se puede ajustar a mano, pero solo a menos de 50 m de donde estás («Ese punto está a 120 m de ti. El máximo son 50 m.»). Sin posición, o con una poco precisa, no se puede continuar.
 4. **Revisar y enviar** — resumen (foto, especie, ubicación, estado pendiente) → enviar.
 - **Salida:** pantalla de éxito con **+10 pts pendientes de validación** y vuelta al mapa; el avistamiento queda **pendiente**. Los puntos se consolidan solo cuando se valida.
 
@@ -180,6 +193,15 @@ Flujo de **4 pasos**:
 - **Qué hace:** muestra el avistamiento de otro vecino (foto, criatura, calle, autor) y pregunta si está bien clasificado.
 - **Acciones:** **Confirmar (+5)** · Reclasificar · Saltar.
 - **Recordatorio:** comprobar que no aparezcan personas ni datos privados.
+- **Solo se abre estando cerca** de la criatura (§3.2).
+
+### 8 · Pantalla de error y dirección desconocida
+- **Qué hace:** si una pantalla falla al dibujarse, el vecino ve una pantalla propia de la app, nunca el volcado técnico del error. Si la pantalla que falla es una de las de la barra inferior, la barra sigue ahí y se puede salir por cualquiera de sus destinos.
+- **Contenido (fallo inesperado):** una criatura «con interferencias», el aviso «Algo ha fallado», el título «Se nos ha colado un bicho», el texto «Este no sale en el catálogo: es un fallo de la app, no tuyo. Prueba otra vez o vuelve al mapa.». Nada técnico a la vista: ni el mensaje del error ni ningún código.
+- **Acciones:** **Reintentar** (vuelve a dibujar la pantalla, sin recargar la página) · **Volver al mapa**. Si la que ha fallado es el propio mapa, la segunda acción es **Ir al inicio**.
+- **Dirección desconocida:** una silueta vacía con ojos, «Página no encontrada», «Aquí no hay ninguna criatura», «Esta dirección no existe o ha cambiado de sitio. En el mapa sí hay rastro.» y **Volver al mapa**. Sin Reintentar.
+- **Código del fallo:** la app calcula un código corto para cada fallo (el mismo fallo en la misma versión da el mismo código), pero **no se enseña en pantalla**: hoy no hay dónde consultarlo. Queda en el registro técnico del dispositivo y volverá a la pantalla cuando exista un sitio donde buscarlo. No identifica al vecino ni su ubicación, y no se envía a ningún sitio.
+- Textos y dibujos propuestos en LCHP-52, pendientes del visto bueno de David.
 
 ### + Modo asociación (herramienta interna) (POST - VMP)
 Panel para la organización, con dos pestañas:

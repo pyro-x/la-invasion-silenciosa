@@ -4,7 +4,8 @@ import {
   gateSeenBefore,
   iosRememberTip,
   isIos,
-  locationDenialGuidance,
+  locationSettingsGuidance,
+  precisionGuidance,
   markGateSeen,
 } from '@/lib/permissions'
 
@@ -43,16 +44,19 @@ describe('platform detection', () => {
 describe('denial guidance points to the real settings path per platform', () => {
   it('iOS: Privacidad y seguridad → Localización → Sitios web de Safari (NOT «Ajustes → Safari»)', () => {
     stubNavigator({ userAgent: IPHONE_UA })
-    const guidance = locationDenialGuidance()
+    const guidance = locationSettingsGuidance()
     expect(guidance).toContain('Privacidad y seguridad')
     expect(guidance).toContain('Sitios web de Safari')
-    expect(guidance).toContain('pin a mano')
+    // since LCHP-49 there is no pin placed by hand to fall back on
+    expect(guidance).not.toContain('a mano')
+    expect(precisionGuidance()).toContain('Ubicación exacta')
     expect(cameraDenialGuidance()).toContain('Ajustes del sitio web')
   })
 
   it('elsewhere: the browser padlock', () => {
     stubNavigator({ userAgent: ANDROID_UA })
-    expect(locationDenialGuidance()).toContain('candado')
+    expect(locationSettingsGuidance()).toContain('candado')
+    expect(precisionGuidance()).toContain('precisión alta')
     expect(cameraDenialGuidance()).toContain('candado')
   })
 

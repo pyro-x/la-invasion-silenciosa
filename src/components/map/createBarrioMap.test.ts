@@ -308,11 +308,12 @@ const sighting = (
 const mounted: BarrioMapController[] = []
 
 function mount() {
-  const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0 }
+  const calls = { picked: [] as string[], mapTaps: 0, userMoves: 0, userSettled: 0 }
   const controller = createBarrioMap(document.createElement('div'), {
     onPick: (id) => calls.picked.push(id),
     onMapTap: () => calls.mapTaps++,
     onUserMove: () => calls.userMoves++,
+    onUserSettled: () => calls.userSettled++,
   })
   mounted.push(controller)
   return { controller, calls }
@@ -467,6 +468,58 @@ describe('createBarrioMap', () => {
     emit('moveend')
     userDrag()
     expect(stored()).toBeNull()
+  })
+
+  it('a first position that arrives before the sheet is measured survives the opening fit', () => {
+    const { controller } = mount()
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    controller.setMe(me)
+    controller.follow(me, 17)
+    // the ease has ended by the time the sheet says how tall it is
+    emit('moveend')
+    const before = recorded.eases.length
+    controller.setBottomPadding(280)
+    expect(recorded.fits).toHaveLength(1)
+    // one more ease, after the fit, back to where following had sent the map
+    expect(recorded.eases).toHaveLength(before + 1)
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.712, 40.4115], zoom: 17 })
+  })
+
+  it('a pin picked before the sheet is measured is not undone by the opening fit', () => {
+    const { controller } = mount()
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+    emit('moveend')
+    controller.goTo({ lat: 40.411, lng: -3.709 })
+    emit('moveend')
+    const before = recorded.eases.length
+    controller.setBottomPadding(280)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(before)
+  })
+
+  it("tells when a move of the user's has ended, and says nothing of the app's own", () => {
+    const { controller, calls } = mount()
+    controller.setBottomPadding(200)
+    controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+    emit('moveend')
+    expect(calls.userSettled).toBe(0)
+    userDrag()
+    expect(calls.userSettled).toBe(1)
+    controller.zoomBy(1)
+    emit('moveend')
+    expect(calls.userSettled).toBe(2)
+  })
+
+  it('the opening fit brings back nothing the neighbour or a pin took the map from', () => {
+    const { controller } = mount()
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    controller.follow(me, 17)
+    emit('moveend')
+    userDrag()
+    const before = recorded.eases.length
+    controller.setBottomPadding(280)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.eases).toHaveLength(before)
   })
 
   it('two sheet resizes during one move to a pin both send it again', () => {
@@ -860,6 +913,7 @@ describe('createBarrioMap', () => {
       await mountReady()
       expect(recorded.layers.map((layer) => layer.id)).toEqual([
         'me-accuracy',
+        'me-range',
         'me-halo',
         'me-dot',
         'sighting-heat',
@@ -941,6 +995,24 @@ describe('createBarrioMap', () => {
       expect(stored()).not.toBeNull()
     })
 
+    it('a cluster opened before the sheet is measured is not undone by the opening fit', async () => {
+      const { controller } = await mountReady()
+      controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
+      emit('moveend')
+      recorded.hits = [
+        {
+          geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
+          properties: { cluster_id: 9 },
+        },
+      ]
+      tap(-3.711, 40.412)
+      await vi.waitFor(() => expect(recorded.eases).toHaveLength(2))
+      emit('moveend')
+      controller.setBottomPadding(280)
+      expect(recorded.fits).toHaveLength(1)
+      expect(recorded.eases).toHaveLength(2)
+    })
+
     it('a sheet resize while a cluster opens sends the move again, centre included', async () => {
       const { controller } = await mountReady()
       controller.setBottomPadding(80)
@@ -1006,6 +1078,28 @@ describe('createBarrioMap', () => {
       controller.setMe(null)
       expect(lastData('me-point')).toMatchObject({ type: 'FeatureCollection' })
       expect(lastData('me')).toMatchObject({ type: 'FeatureCollection' })
+    })
+
+    it('draws the ring of the radius the neighbour can act in, only when given one', async () => {
+      const { controller } = await mountReady()
+      const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+      controller.setMe(me)
+      expect(lastData('me-range')).toMatchObject({ type: 'FeatureCollection' })
+      controller.setMe(me, 85)
+      const ring = lastData('me-range') as { geometry: { type: string; coordinates: number[][] } }
+      expect(ring.geometry.type).toBe('LineString')
+      // the ring's northernmost point is 85 m up from the position
+      const top = Math.max(...ring.geometry.coordinates.map(([, lat]) => lat))
+      expect((top - me.lat) * 111_320).toBeCloseTo(85, 0)
+      controller.setMe(null, 85)
+      expect(lastData('me-range')).toMatchObject({ type: 'FeatureCollection' })
+    })
+
+    it('says how far a point is from the centre of the map', () => {
+      const { controller } = mount()
+      // the stub's centre is -3.71, 40.411
+      expect(controller.metresFromCentre({ lat: 40.411, lng: -3.71 })).toBe(0)
+      expect(controller.metresFromCentre({ lat: 40.412, lng: -3.71 })).toBeCloseTo(111.2, 0)
     })
   })
 

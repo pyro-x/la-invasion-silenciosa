@@ -32,19 +32,21 @@ export async function cameraPermissionState(): Promise<CameraPermission> {
 }
 
 /** Correct recovery path per platform (the old copy sent iOS users to
- * «Ajustes → Safari», which has no location entry — David hit this live). */
-export function locationDenialGuidance(): string {
-  return isIos()
-    ? 'Sin permiso de ubicación. En el iPhone: Ajustes → Privacidad y seguridad → Localización → Sitios web de Safari → «Preguntar» (o en Safari: ᴀA → Ajustes del sitio web → Ubicación). O coloca el pin a mano arrastrando el mapa.'
-    : 'Sin permiso de ubicación. Permítela desde el candado de la barra del navegador — o coloca el pin a mano arrastrando el mapa.'
-}
-
-/** The same recovery path for the map's «dónde estoy», where there is no
- * pin to place by hand. */
+ * «Ajustes → Safari», which has no location entry — David hit this live).
+ * The same for the map and for capture: since LCHP-49 neither offers a pin
+ * placed by hand as a way out. */
 export function locationSettingsGuidance(): string {
   return isIos()
     ? 'Sin permiso de ubicación. En el iPhone: Ajustes → Privacidad y seguridad → Localización → Sitios web de Safari → «Preguntar» (o en Safari: ᴀA → Ajustes del sitio web → Ubicación).'
     : 'Sin permiso de ubicación. Permítela desde el candado de la barra del navegador.'
+}
+
+/** What to do about a position too vague to play with (Alcorqueando's
+ * «imprecise» help, in one line). */
+export function precisionGuidance(): string {
+  return isIos()
+    ? 'En el iPhone: Ajustes → Privacidad y seguridad → Localización → Sitios web de Safari → activa «Ubicación exacta». Y sal a la calle, lejos de portales.'
+    : 'Activa la precisión alta en los ajustes de ubicación del teléfono y sal a la calle, lejos de portales.'
 }
 
 export function cameraDenialGuidance(): string {
