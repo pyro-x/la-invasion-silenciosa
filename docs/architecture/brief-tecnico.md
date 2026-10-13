@@ -2702,6 +2702,70 @@ src/
     globals.css
 ```
 
+### Errores de render: pantalla propia y registro en consola (LCHP-52, D-068) `Decidido`
+
+Antes ninguna ruta declaraba un límite de error, y cualquier error de
+render (o una URL desconocida) mostraba la página por defecto de React
+Router: «Unexpected Application Error!» con la traza a la vista y sin
+navegación. Ahora:
+
+- **Dos límites de error de ruta** en `src/app/router.tsx`. Uno en una
+  ruta raíz sin path, que lo recoge todo, y otro en una ruta sin path
+  dentro de `AppShell`, que envuelve las páginas con barra inferior: si
+  una de ellas falla, la barra sigue en pantalla. Una ruta `*` dentro del
+  shell muestra la variante de dirección desconocida, también con barra.
+- **Una sola pantalla**, `src/components/error/ErrorScreen.tsx`, con dos
+  variantes (`error`, `notFound`). Los textos están en
+  `src/components/error/errorCopy.ts` y los dos sprites en
+  `src/components/pixel/errorSprites.ts`; no son especies y no pasan por
+  el catálogo. En pantalla nunca aparecen el mensaje, la traza ni el
+  código de referencia. Al
+  aparecer, el foco pasa al título, para que un lector de pantalla diga
+  lo que ha ocurrido.
+- **Reintentar** vacía la caché de TanStack Query (`resetQueries`) y
+  navega con `replace` a la dirección actual: el límite de React Router
+  suelta su error cuando cambia el objeto `location`. El cliente
+  de consultas vive en `src/lib/queryClient.ts` y la pantalla lo importa:
+  no depende de ningún contexto de React, para poder dibujarse falte lo
+  que falte por encima. No recarga la
+  página: sin service worker, una recarga sin cobertura cambiaría nuestra
+  pantalla por la de «sin conexión» del navegador.
+- **Registro: una función**, `reportError` (`src/lib/errorReport.ts`), y
+  una entrada de `console.error` por error con: código de referencia,
+  versión del build (`APP_VERSION`, la misma del aviso superior), ruta
+  (solo `pathname`, sin query ni hash), origen, traza y pila de
+  componentes. La función no añade nada sobre el usuario ni su posición;
+  el mensaje y la traza del error se registran tal cual se lanzaron (como
+  ya hacía React por defecto), y nada sale del dispositivo. Un servicio de reporte (Sentry o similar) queda fuera del
+  MVP: es una dependencia de terceros que recibiría datos de los
+  dispositivos y necesita su propia decisión; se enchufaría en esa
+  función.
+- **Por dónde entran los errores** (`src/app/errorHandlers.ts`): las
+  opciones `onUncaughtError`, `onCaughtError` y `onRecoverableError` de
+  `createRoot` (React 19) para todo error de render, y la prop `onError`
+  de `RouterProvider` para los que React no ve (loaders, navegación).
+  React Router también pasa por `onError` los errores de render que
+  recoge su límite, con `errorInfo`; esos se descartan ahí, y así cada
+  error se registra una vez. Pasar `onError` además silencia el
+  `console.error` propio de React Router.
+- **El código de referencia** son seis caracteres (`XXX-XXX`, alfabeto
+  sin I, L, O ni U) de un hash FNV-1a de versión, nombre y mensaje del
+  error. Es determinista: el mismo fallo en la misma versión da el mismo
+  código en cualquier dispositivo con el mismo motor de navegador (los
+  mensajes de error cambian entre motores), así que dos avisos del mismo
+  fallo se reconocen como el mismo. **Solo va en la entrada de consola**
+  (D-068 Addendum 4): no se muestra al vecino mientras no haya dónde
+  consultarlo, y es la clave que usaría un servicio de reporte.
+
+No cubierto, conocido: una página que lance el valor `undefined` se queda
+sin pantalla (el límite de React Router distingue «sin error» con
+`error !== undefined`); los errores fuera del render (manejadores de
+eventos, promesas) no llegan a los límites ni a estas opciones y siguen
+como estaban, en la consola del navegador; un error en lo que está
+fuera del router (`Providers`, el aviso de datos de ejemplo) o en la
+propia pantalla de error raíz deja la página en blanco, con su entrada en
+consola (`source: uncaught`).
+
 ## 34. Estructura Supabase propuesta
 
 ```text
