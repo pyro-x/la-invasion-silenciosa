@@ -42,7 +42,7 @@ Incorporada en octubre de 2026 (D-066). Las cuatro especies anteriores y sus avi
 
 **Descripción de la ficha:** «Donde antes había una panadería, una ferretería o una tienda de barrio, ahora hay maletas. Localín habita antiguos locales comerciales a pie de calle convertidos en alojamientos turísticos.»
 
-**Descripción corta (solo en el listado de especies):** «Antiguo comercio de barrio convertido en alojamiento turístico.» La ficha de detalle y la ficha del mapa muestran la descripción completa.
+**Descripción corta (listado de especies y ficha del avistamiento en el mapa):** «Antiguo comercio de barrio convertido en alojamiento turístico.» La ficha de detalle de la especie muestra la descripción completa.
 
 **Hábitat:** «Bajos comerciales que antes albergaban negocios del barrio.»
 

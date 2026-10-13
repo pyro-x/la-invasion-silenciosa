@@ -1155,7 +1155,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
     llevan un **aro que parpadea al ritmo de los pines pendientes**: une el
     aro naranja del mapa con su significado sin añadir nada a la pantalla;
   * la **ficha del avistamiento** dice qué es el bicho (la `description`
-    de la especie, la misma del catálogo), y si está pendiente añade
+    de la especie, la misma del catálogo — o su `shortDescription` si
+    la tiene, como en el listado de especies, D-066), y si está pendiente
+    añade
     «Parpadea en el mapa hasta que otros vecinos lo confirmen.»;
   * la referencia completa es la pestaña «Especies», que ya está en
     pantalla bajo la ficha: no se repite con un enlace.

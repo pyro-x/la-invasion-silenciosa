@@ -18,8 +18,8 @@ export type Species = {
   rarity: Rarity
   /** What it is (Spanish product copy). */
   description: string
-  /** One-line version for the species list, when `description` is too long for a row. */
-  listDescription?: string
+  /** One-line version for the species list and the map sheet, when `description` is too long there. */
+  shortDescription?: string
   habitat: string
   trackingTip: string
   /** Points awarded to the author when a sighting is validated. */
