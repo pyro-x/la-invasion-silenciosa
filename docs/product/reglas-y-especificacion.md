@@ -86,7 +86,9 @@ se usa solo en tu móvil para estas comprobaciones; no se envía ni se guarda.
 
 ### 3.3. Qué debe contener cada avistamiento
 - **Foto** de la criatura (sin personas ni datos privados).
-- **Ubicación aproximada** (por privacidad, no se guarda la posición exacta).
+- **Ubicación** del pin. Por privacidad, en el mapa solo se muestra una
+  ubicación aproximada. La exacta la guarda la asociación de forma privada,
+  para su registro del barrio: no aparece en ninguna pantalla ni se comparte.
 - **Categoría** (Candadín / Turistox / Checkinchu / Keymon / Localín).
 
 ---
