@@ -170,7 +170,7 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Ficha de detalle:** sprite grande, qué es, hábitat, pista de rastreo, rareza y puntos que otorga.
 
 ### 4 · Cazar / Registrar (botón central)
-**La puerta:** al entrar, la app necesita la cámara y tu ubicación. Si falta alguna, una pantalla lo explica («¡Prepara tu equipo!») y un solo toque pide las dos; el permiso nunca se pide al cargar, y la app espera a tener tu posición antes de seguir. **Sin ubicación no se puede cazar:** si la deniegas, la app explica cómo activarla y te deja volver al mapa. Sin cámara sí se puede seguir (cámara del sistema o galería).
+**La puerta:** al entrar, la app necesita la cámara y tu ubicación. Si falta alguna, una pantalla lo explica («¡Prepara tu equipo!») y un solo toque pide las dos; el permiso nunca se pide al cargar. Si eres tú quien la pide con ese toque, la app espera la respuesta antes de seguir; si el navegador ya la tenía concedida de otra vez, el flujo sigue mientras el móvil la busca y el paso 3 espera a tenerla. **Sin ubicación no se puede cazar:** si la deniegas, la app explica cómo activarla y te deja volver al mapa. Sin cámara sí se puede seguir (cámara del sistema o galería).
 
 Flujo de **4 pasos**:
 1. **Captura** — visor de cámara + recordatorio de privacidad → disparar / repetir / usar foto.

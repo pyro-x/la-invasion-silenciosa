@@ -1580,7 +1580,8 @@ tu ubicación.» y nada que reintentar. De ninguna se pasa. No hay
 al visor; si la posición se deniega mientras tanto, el stream se
 cierra (sin luz de cámara detrás de la guía) y el visor se reabre solo
 al pasar la puerta; una petición de cámara sin respuesta se da por
-perdida a los 15 s. En Android con los dos permisos recordados no hay
+perdida a los 15 s (si el navegador la concede después, ese stream se
+cierra al llegar: ya nadie lo espera). En Android con los dos permisos recordados no hay
 puerta; en iOS re-aparece por sesión (WebKit no persiste el permiso de
 cámara, bug 215884, y Safari no confirma el de ubicación) — un diálogo
 nativo nunca interrumpe a mitad de acción. Pasada la puerta no vuelve

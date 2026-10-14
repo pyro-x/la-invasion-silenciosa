@@ -98,13 +98,24 @@ export function HuntPage() {
     setArming(true)
     // A request the browser never answers must not hold the door shut:
     // after the limit the system camera and the gallery take over (D-050).
-    const streamPromise: Promise<MediaStream | null> = navigator.mediaDevices?.getUserMedia
-      ? Promise.race([
-          navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).catch(() => null),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), CAMERA_WAIT_MS)),
-        ])
+    // getUserMedia cannot be cancelled, so a stream granted after the limit
+    // is stopped on arrival: nobody is waiting for it any more.
+    const request: Promise<MediaStream | null> = navigator.mediaDevices?.getUserMedia
+      ? navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).catch(() => null)
       : Promise.resolve(null)
-    void streamPromise.then((stream) => {
+    let gaveUp = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        gaveUp = true
+        resolve(null)
+      }, CAMERA_WAIT_MS)
+    })
+    void request.then((stream) => {
+      clearTimeout(timer)
+      if (gaveUp) stream?.getTracks().forEach((track) => track.stop())
+    })
+    void Promise.race([request, deadline]).then((stream) => {
       if (!aliveRef.current) {
         stream?.getTracks().forEach((track) => track.stop())
         return

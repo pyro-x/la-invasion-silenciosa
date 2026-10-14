@@ -608,6 +608,37 @@ describe('capture flow (Cazar)', () => {
       expect(getUserMedia).toHaveBeenCalledTimes(2)
     })
 
+    it('a camera the browser grants after the door gave up on it is stopped on arrival', async () => {
+      vi.useFakeTimers()
+      try {
+        firstVisit()
+        cameraStateMock.mockResolvedValue('prompt')
+        const stopTrack = vi.fn()
+        const requests: Array<(stream: MediaStream) => void> = []
+        stubNavigator({
+          mediaDevices: {
+            getUserMedia: () => new Promise<MediaStream>((resolve) => requests.push(resolve)),
+          },
+        })
+        renderHunt()
+        await act(() => vi.advanceTimersByTimeAsync(0))
+        fireEvent.click(screen.getByRole('button', { name: /Activar cámara y ubicación/ }))
+        expect(requests).toHaveLength(1)
+
+        // 15 s without an answer: the door stops waiting for the camera
+        await act(() => vi.advanceTimersByTimeAsync(15_000))
+        expect(screen.queryByText('¡Prepara tu equipo!')).not.toBeInTheDocument()
+        expect(screen.getByLabelText(/Galería/)).toBeInTheDocument()
+
+        // ...and the browser grants it afterwards: nobody wants it any more
+        act(() => requests[0](fakeCamera(stopTrack)))
+        await act(() => vi.advanceTimersByTimeAsync(0))
+        expect(stopTrack).toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('a camera denial is not a wall: the photo step opens with the system camera and the gallery', async () => {
       const user = userEvent.setup()
       firstVisit()
