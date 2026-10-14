@@ -20,6 +20,7 @@ import {
   type PinState,
 } from './pinArt'
 import { LA_LATINA_BOUNDS, LA_LATINA_MAX_BOUNDS, tileProvider } from './tileProvider'
+import { keepMapSession, mapSession } from '@/lib/mapSession'
 import { distanceMeters } from '@/lib/proximity'
 import type { MapSightingGeo } from '@/types/sighting'
 
@@ -205,7 +206,9 @@ export function createBarrioMap(
   container: HTMLElement,
   handlers: BarrioMapHandlers,
 ): BarrioMapController {
-  const saved = readView()
+  // The view this map had before the screen was left (memory only) comes
+  // before the one the neighbour once chose and storage remembers.
+  const saved = mapSession().view ?? readView()
   const map = new maplibregl.Map({
     container,
     style: tileProvider.style,
@@ -683,16 +686,17 @@ export function createBarrioMap(
 
   // Only a view the user chose is remembered. The app's own moves — the
   // opening fit, a padding change, easing to a pin, following — are never
-  // written to storage. And once the user's position has been on this map,
-  // nothing is, until the map is created again: the camera may still sit on
-  // or next to where they are after the dot is gone.
+  // written to storage. And once the user's position has been on a map,
+  // nothing is, until the page is loaded again: the camera may still sit on
+  // or next to where they are after the dot is gone, and the next map opens
+  // on the view this one is left with.
   let userChoseView = false
   // Where following last sent the camera, until the neighbour or a pin
   // takes it elsewhere. The opening fit is only fitted once the sheet's
   // height is known, and a first position can arrive before that: the fit
   // must not leave the map on the barrio with nothing to bring it back.
   let followed: { center: [number, number]; zoom?: number } | null = null
-  let positionShown = false
+  let positionShown = mapSession().located
   // Where the app is easing to, while it is. Its moveend is the app's even
   // if a gesture landed in the middle (a wheel that interrupts an ease ends
   // it with the app's centre, not the user's).
@@ -879,6 +883,7 @@ export function createBarrioMap(
       meRangeM = rangeM
       if (position && !positionShown) {
         positionShown = true
+        keepMapSession({ located: true })
         // Nothing more will be stored, so an older view would come back on
         // every visit, however the neighbour moves the map now.
         forgetView()
@@ -965,6 +970,17 @@ export function createBarrioMap(
 
     destroy() {
       destroyed = true
+      // A map left before its opening frame has no view of its own yet. One
+      // left mid-move is kept where it was going.
+      if (framed) {
+        const centre = map.getCenter()
+        keepMapSession({
+          view: {
+            center: flight?.center ?? stepCenter ?? [centre.lng, centre.lat],
+            zoom: carriedZoom !== null ? reachable(carriedZoom) : map.getZoom(),
+          },
+        })
+      }
       if (lookTimer !== null) window.clearTimeout(lookTimer)
       dropTwins()
       reducedMotion?.removeEventListener('change', lookForPending)

@@ -7,7 +7,12 @@
 // user gesture. Two paths start it without a tap — resuming on arrival and
 // restarting on return from the background — and both only when the browser
 // says it will not ask.
+//
+// Stopping the watch is not forgetting (LCHP-56, D-071): the last position
+// may wait in memory, under the rules of mapSession.ts, for the watch to be
+// resumed. It is never in the state while no watch runs.
 import { useSyncExternalStore } from 'react'
+import { retentionLeftMs } from '@/lib/mapSession'
 
 export type GeoPosition = { lat: number; lng: number; accuracyM: number; at: number }
 
@@ -30,6 +35,9 @@ const GRANTED_KEY = 'lis.geo.granted'
 
 let state: GeoWatchState = { kind: 'idle', position: null }
 let lastPosition: GeoPosition | null = null
+// `lastPosition` belongs to a watch that was stopped, and nothing shows it.
+let retained = false
+let forgetTimer: ReturnType<typeof setTimeout> | undefined
 let watchId: number | null = null
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 // Bumped on every start and stop: a callback from an earlier watch — the
@@ -64,8 +72,16 @@ function grantedBefore(): boolean {
   }
 }
 
+function forgetPosition() {
+  lastPosition = null
+  retained = false
+  clearTimeout(forgetTimer)
+}
+
 function onPosition(result: GeolocationPosition) {
   rememberGranted(true)
+  retained = false
+  clearTimeout(forgetTimer)
   lastPosition = {
     lat: result.coords.latitude,
     lng: result.coords.longitude,
@@ -81,7 +97,7 @@ function onError(error: GeolocationPositionError) {
   if (error.code === 1) {
     rememberGranted(false)
     halt()
-    lastPosition = null
+    forgetPosition()
     set({ kind: 'denied', position: null })
     return
   }
@@ -114,23 +130,46 @@ function halt() {
   clearInterval(refreshTimer)
 }
 
-/** Stops watching and forgets what was on screen: whoever reads the state
- * next (a later visit to the map) must not see a position nobody is
- * updating, possibly after the permission was revoked. */
+/** Stops watching and takes the position out of the state: whoever reads
+ * it next must not see a position nobody is updating, possibly after the
+ * permission was revoked. The position itself may wait, unseen, for a watch
+ * resumed with the browser's word that the permission still stands. */
 export function stopGeoWatch() {
   halt()
-  lastPosition = null
+  const left = lastPosition ? retentionLeftMs(lastPosition) : 0
+  if (left > 0) {
+    retained = true
+    clearTimeout(forgetTimer)
+    forgetTimer = setTimeout(forgetPosition, left)
+  } else {
+    forgetPosition()
+  }
   if (state.kind !== 'idle') set({ kind: 'idle', position: null })
 }
 
-/** Call from a tap. Starts (or restarts) the watch. */
-export function startGeoWatch() {
+function forgetRetained() {
+  if (retained) forgetPosition()
+}
+
+// A position that waited for this watch is shown only when the browser has
+// just said the permission stands; a tap gets a fresh search instead.
+function begin(permissionConfirmed: boolean) {
   const api = geolocation()
   if (!api) {
+    forgetRetained()
     set({ kind: 'unsupported', position: null })
     return
   }
   halt()
+  if (retained) {
+    const usable = permissionConfirmed && lastPosition !== null && retentionLeftMs(lastPosition) > 0
+    if (usable) {
+      retained = false
+      clearTimeout(forgetTimer)
+    } else {
+      forgetPosition()
+    }
+  }
   const mine = generation
   if (hasRecentPosition() && lastPosition) set({ kind: 'ok', position: lastPosition })
   else set({ kind: 'searching', position: null })
@@ -148,17 +187,31 @@ export function startGeoWatch() {
   refreshTimer = setInterval(refreshQuietly, REFRESH_MS)
 }
 
-/** Starts without a tap only when the browser says it will not ask again. */
+/** Call from a tap. Starts (or restarts) the watch. */
+export function startGeoWatch() {
+  begin(false)
+}
+
+/** Starts without a tap only when the browser says it will not ask again.
+ * Any other answer also drops a position kept from an earlier watch. */
 export async function resumeGeoWatchIfGranted(): Promise<void> {
-  if (watchId !== null || !grantedBefore() || !navigator.permissions?.query) return
+  if (watchId !== null) return
+  if (!grantedBefore() || !navigator.permissions?.query) {
+    forgetRetained()
+    return
+  }
   const asked = generation
+  let granted = false
   try {
     const status = await navigator.permissions.query({ name: 'geolocation' })
-    // The map may have been left while the browser was answering.
-    if (asked === generation && status.state === 'granted') startGeoWatch()
+    granted = status.state === 'granted'
   } catch {
     // Some Safari versions have no geolocation entry in the Permissions API.
   }
+  // The screen may have been left while the browser was answering.
+  if (asked !== generation) return
+  if (granted) begin(true)
+  else forgetRetained()
 }
 
 // Phones pause a watch while the page is in the background, so it is
@@ -178,17 +231,20 @@ async function restartAfterBackground(): Promise<void> {
   }
   if (mine !== generation) return
   if (granted) {
-    startGeoWatch()
+    begin(true)
     return
   }
   halt()
-  lastPosition = null
+  forgetPosition()
   set({ kind: 'paused', position: null })
 }
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && watchId !== null) void restartAfterBackground()
+    // With no watch running, a kept position does not outlive a trip to
+    // the background: nobody knows how long the page was away.
+    if (watchId === null) forgetRetained()
+    else if (document.visibilityState === 'visible') void restartAfterBackground()
   })
 }
 
@@ -208,6 +264,6 @@ export function useGeoWatch(): GeoWatchState {
 /** Test seam: back to a cold module. */
 export function resetGeoWatchForTests() {
   halt()
-  lastPosition = null
+  forgetPosition()
   state = { kind: 'idle', position: null }
 }

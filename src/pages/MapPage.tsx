@@ -38,6 +38,7 @@ import { Toast } from '@/components/ui/Toast'
 import { formatAge } from '@/lib/age'
 import { isWithinLaLatina } from '@/lib/geo'
 import { resumeGeoWatchIfGranted, startGeoWatch, stopGeoWatch, useGeoWatch } from '@/lib/geoWatch'
+import { keepMapSession, mapSession } from '@/lib/mapSession'
 import {
   distanceMeters,
   formatMeters,
@@ -134,14 +135,19 @@ export function MapPage() {
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [zoomStep, setZoomStep] = useState<{ delta: number } | null>(null)
   // On from the start: the first fix takes the map to the neighbour, with
-  // or without a tap (a watch resumed on arrival is followed too).
-  const [following, setFollowing] = useState(true)
+  // or without a tap (a watch resumed on arrival is followed too). Coming
+  // back from another screen, it is as the neighbour left it (LCHP-56).
+  const [following, setFollowing] = useState(() => mapSession().following)
+  useEffect(() => {
+    keepMapSession({ following })
+  }, [following])
   const [pickCount, setPickCount] = useState(0)
   const [locateCount, setLocateCount] = useState(0)
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null)
   const geo = useGeoWatch()
 
   // Resuming never prompts: it only starts when the browser already granted.
+  // Leaving stops the watch; what may outlive it is mapSession.ts's call.
   useEffect(() => {
     void resumeGeoWatchIfGranted()
     return stopGeoWatch

@@ -6,6 +6,7 @@ import {
   type BarrioMapController,
 } from './createBarrioMap'
 import { ARRIVAL_MS, blinkOpacity } from './blink'
+import { keepMapSession, mapSession } from '@/lib/mapSession'
 import type { MapSightingGeo } from '@/types/sighting'
 
 type MapEvent = { originalEvent?: Event; point?: { x: number; y: number } }
@@ -1776,6 +1777,102 @@ describe('createBarrioMap', () => {
       userDrag()
       expect(stored()).not.toBeNull()
     })
+  })
+})
+
+describe('the view kept between visits to the map (LCHP-56)', () => {
+  const ME = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+  // The screen is left: its map is destroyed and hears nothing more.
+  const leave = (controller: BarrioMapController) => {
+    controller.destroy()
+    mounted.splice(mounted.indexOf(controller), 1)
+    for (const type of Object.keys(recorded.handlers)) delete recorded.handlers[type]
+  }
+
+  it('opens where the last map was left, and does not fit the barrio again', () => {
+    const first = mount().controller
+    first.setBottomPadding(300)
+    recorded.zoom = 16.4
+    leave(first)
+    const second = mount().controller
+    expect(recorded.options[1]).toMatchObject({ center: [-3.71, 40.411], zoom: 16.4 })
+    expect(recorded.options[1]?.bounds).toBeUndefined()
+    second.setBottomPadding(300)
+    expect(recorded.fits).toHaveLength(1)
+    expect(recorded.paddings.at(-1)?.bottom).toBe(300)
+  })
+
+  it('a map left before its opening frame keeps no view: the next one fits the barrio', () => {
+    leave(mount().controller)
+    expect(mapSession().view).toBeNull()
+    const second = mount().controller
+    expect(recorded.options[1]?.bounds).toBeDefined()
+    second.setBottomPadding(300)
+    expect(recorded.fits).toHaveLength(1)
+  })
+
+  it('a map left while following is kept where it was going, not where it had got to', () => {
+    const first = mount().controller
+    first.setBottomPadding(300)
+    first.follow(ME, 17)
+    leave(first)
+    expect(mapSession().view).toEqual({ center: [-3.712, 40.4115], zoom: 17 })
+  })
+
+  it('a map left during a zoom step is kept at the zoom the step was heading for', () => {
+    const first = mount().controller
+    first.setBottomPadding(300)
+    first.zoomBy(1)
+    leave(first)
+    expect(mapSession().view).toEqual({ center: [-3.71, 40.411], zoom: 16 })
+  })
+
+  it('comes before the view storage remembers', () => {
+    localStorage.setItem('lis.map.view', JSON.stringify({ center: [-3.709, 40.412], zoom: 14 }))
+    keepMapSession({ view: { center: [-3.712, 40.4115], zoom: 17 } })
+    mount()
+    expect(recorded.options[0]).toMatchObject({ center: [-3.712, 40.4115], zoom: 17 })
+  })
+
+  it('once a position has been on a map, no later map stores a view either', () => {
+    const first = mount().controller
+    first.setBottomPadding(300)
+    first.setMe(ME)
+    leave(first)
+    const second = mount().controller
+    userDrag()
+    expect(stored()).toBeNull()
+    second.zoomBy(1)
+    emit('moveend')
+    expect(stored()).toBeNull()
+    leave(second)
+    mount()
+    userDrag()
+    expect(stored()).toBeNull()
+  })
+
+  it('with no position ever shown, a later map still stores the view the neighbour chooses', () => {
+    const first = mount().controller
+    first.setBottomPadding(300)
+    leave(first)
+    mount()
+    userDrag()
+    expect(stored()).not.toBeNull()
+  })
+
+  it('keeps the view in memory only: leaving writes nothing to storage', () => {
+    const local = vi.spyOn(localStorage, 'setItem')
+    const session = vi.spyOn(sessionStorage, 'setItem')
+    const first = mount().controller
+    first.setBottomPadding(300)
+    first.setMe(ME)
+    first.follow(ME, 17)
+    emit('moveend')
+    leave(first)
+    mount().controller.setMe(ME)
+    expect(mapSession().view).not.toBeNull()
+    expect(local).not.toHaveBeenCalled()
+    expect(session).not.toHaveBeenCalled()
   })
 })
 
