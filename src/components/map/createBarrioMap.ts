@@ -801,8 +801,11 @@ export function createBarrioMap(
 
   // A gesture is under way: what ends it is the neighbour's own centre.
   let gesture = false
+  let pressed = false
+  let afterPress: { center: [number, number]; zoom?: number } | null = null
   const userMoved = () => {
     gesture = true
+    afterPress = null
     intent++
     followed = null
     focusedOn = null
@@ -813,15 +816,26 @@ export function createBarrioMap(
     if (event.originalEvent) userMoved()
   })
   map.on('wheel', userMoved)
-  // In the picker the map is the neighbour's from the press: a fix arriving
-  // before the first move must not ease it out from under the finger.
+  // In the picker a fix that arrives while a finger is down waits for it to
+  // lift: easing then would cancel a drag MapLibre has not started yet. If
+  // the finger moved the map, the map is the neighbour's and the fix is
+  // dropped (`userMoved`); a tap lets it land.
   if (picker) {
-    const pressed = () => {
-      followed = null
-      handlers.onUserMove()
+    const press = () => {
+      pressed = true
     }
-    map.on('mousedown', pressed)
-    map.on('touchstart', pressed)
+    const lift = () => {
+      if (!pressed) return
+      pressed = false
+      const waiting = afterPress
+      afterPress = null
+      if (waiting) ease(waiting)
+    }
+    map.on('mousedown', press)
+    map.on('touchstart', press)
+    map.on('mouseup', lift)
+    map.on('touchend', lift)
+    map.on('touchcancel', lift)
   }
   map.on('moveend', () => {
     lookSoon()
@@ -998,7 +1012,9 @@ export function createBarrioMap(
       const center: [number, number] = [target.lng, target.lat]
       const kept = zoom ?? followed?.zoom
       followed = { center, ...(kept !== undefined ? { zoom: kept } : {}) }
-      ease({ center, ...(zoom !== undefined ? { zoom } : {}) })
+      const to = { center, ...(zoom !== undefined ? { zoom } : {}) }
+      if (pressed) afterPress = to
+      else ease(to)
     },
 
     isMoving: () => map.isMoving(),

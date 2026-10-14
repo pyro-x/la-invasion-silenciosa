@@ -91,7 +91,6 @@ vi.mock('@/components/map/PickerMap', () => ({
         <button aria-label="drag the map" onClick={() => gesture(drag.to, 17)} />
         <button aria-label="pinch the map out" onClick={() => gesture(centre.current, 14)} />
         <button aria-label="pinch the map to 16" onClick={() => gesture(centre.current, 16)} />
-        <button aria-label="press the map" onClick={onUserMove} />
         <button aria-label="land the flight" onClick={land} />
       </div>
     )
@@ -430,25 +429,6 @@ describe('capture flow (Cazar)', () => {
       expect(await screen.findByText('± 5 m')).toBeInTheDocument()
       expect(screen.getByText('Tu posición')).toBeInTheDocument()
       expect(flights()).toBe(before + 2)
-    })
-
-    it('a fix after the press, before the first move, does not move the map', async () => {
-      const user = userEvent.setup()
-      renderHunt()
-      await walkToLocation(user)
-      await screen.findByText('Tu posición')
-      const before = flights()
-
-      await user.click(screen.getByRole('button', { name: 'press the map' }))
-      act(() =>
-        watcher().success(geoFix({ latitude: 40.4116 + 30 / 111_195, longitude: -3.7102 }, 7)),
-      )
-      await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
-      expect(flights()).toBe(before)
-      // the move that follows is the neighbour's
-      drag.to = { lat: 40.4118, lng: -3.7102 }
-      await user.click(screen.getByRole('button', { name: 'drag the map' }))
-      expect(await screen.findByText(/Pin ajustado a mano · a \d+ m de ti/)).toBeInTheDocument()
     })
 
     it('the zoom rule waits for a flight to land: no «Acerca el mapa» on the way', async () => {

@@ -1910,28 +1910,49 @@ describe('picker mode (LCHP-36)', () => {
     expect(centres.at(-1)?.byUser).toBe(true)
   })
 
-  it('a press is the neighbour taking the map, before any move; the barrio map waits for the move', () => {
+  it('a fix during a tap waits for the lift, then lands; a tap alone hands nothing over', () => {
     const onUserMove = vi.fn()
-    mountPicker(HERE, onUserMove)
+    const { controller, centres } = mountPicker(HERE, onUserMove)
     emit('load')
+    const before = recorded.eases.length
     emit('touchstart')
-    expect(onUserMove).toHaveBeenCalledTimes(1)
-    emit('mousedown')
-    expect(onUserMove).toHaveBeenCalledTimes(2)
+    controller.follow({ lat: 40.412, lng: -3.71 }, 17)
+    expect(recorded.eases).toHaveLength(before)
+    emit('touchend')
+    expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.412], zoom: 17 })
+    emit('moveend')
+    expect(centres.at(-1)?.byUser).toBe(false)
+    expect(onUserMove).not.toHaveBeenCalled()
+  })
 
-    const onBarrioMove = vi.fn()
-    mounted.push(
-      createBarrioMap(document.createElement('div'), {
-        onPick: () => {},
-        onMapTap: () => {},
-        onUserMove: onBarrioMove,
-        onUserSettled: () => {},
-      }),
-    )
+  it("a fix during a press that becomes a drag is dropped: the map is the hand's", () => {
+    const { controller } = mountPicker()
     emit('load')
-    emit('touchstart')
+    const before = recorded.eases.length
     emit('mousedown')
-    expect(onBarrioMove).not.toHaveBeenCalled()
+    controller.follow({ lat: 40.412, lng: -3.71 }, 17)
+    emit('movestart', { originalEvent: new Event('mousemove') })
+    emit('mouseup')
+    emit('moveend')
+    expect(recorded.eases).toHaveLength(before)
+    // the next fix, with no finger down, moves the map as asked
+    controller.follow(HERE, 17)
+    expect(recorded.eases).toHaveLength(before + 1)
+  })
+
+  it('the barrio map does not hold a fix for a press', () => {
+    const controller = createBarrioMap(document.createElement('div'), {
+      onPick: () => {},
+      onMapTap: () => {},
+      onUserMove: () => {},
+      onUserSettled: () => {},
+    })
+    mounted.push(controller)
+    emit('load')
+    const before = recorded.eases.length
+    emit('mousedown')
+    controller.follow(HERE, 17)
+    expect(recorded.eases).toHaveLength(before + 1)
   })
 
   it('a stored view is neither read for the opening nor forgotten by the position', () => {

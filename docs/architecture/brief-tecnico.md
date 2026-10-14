@@ -1614,9 +1614,11 @@ la posición a la que se le envió es GPS con esa precisión; si no, es a
 mano. El mapa SIGUE al vecino: cada posición nueva lo recentra
 (ignorando saltos menores de 0,7 m o de la mitad del error de esa
 posición) y re-etiqueta el pin como GPS, hasta que el vecino toma el
-mapa — lo pulsa, lo arrastra, lo pellizca o usa la rueda; el
-seguimiento se corta al pulsarlo, antes de que se mueva, así que una
-posición que llegue a mitad de gesto o durante su inercia no mueve
+mapa — lo arrastra, lo pellizca o usa la rueda; el seguimiento se
+corta en cuanto el mapa se mueve bajo el dedo, y una posición que llegue
+con el dedo puesto espera a que lo levante (si lo movió, se descarta; si
+solo fue un toque, el mapa va a ella), así que una posición que llegue a
+mitad de gesto o durante su inercia no mueve nada y un toque no cambia
 nada. Desde entonces el pin es suyo (manual, sin
 precisión) y la observación solo lo juzga: alejarse 60 m retira
 «Revisa y envía» con «Ese punto está a 60 m de ti. El máximo son
