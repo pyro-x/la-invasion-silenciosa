@@ -253,7 +253,7 @@ describe('BarrioMap', () => {
       expect(moves()).toEqual(['follow 40.4115 17'])
     })
 
-    it('a view chosen by hand is not taken back by the first position: coming back is a touch', () => {
+    it('after coming back, a first position within the wait does not bring following back', () => {
       vi.useFakeTimers()
       keepMapSession({ view, zoomSpent: true, following: false })
       const onResumeFollow = vi.fn()

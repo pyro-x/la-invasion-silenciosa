@@ -1566,7 +1566,12 @@ la app, volver al mapa es volver a donde estaba.**
 Se guardan dos cosas **solo en memoria** (`src/lib/mapSession.ts`, donde
 vive toda la política y sus constantes). Nada de esto se escribe en
 `localStorage`, `sessionStorage` ni IndexedDB, ni va a un registro ni a
-ninguna petición; recargar o cerrar la app lo borra.
+ninguna petición; recargar o cerrar la app lo borra. La única excepción es
+la de siempre (ver «Privacidad de la posición del vecino», arriba): el mapa
+pide las teselas del basemap que tiene en pantalla, así que una vista
+recuperada vuelve a pedir las de las mismas celdas de ~1,7×1,3 km que ya
+había pedido (o las toma de la caché del navegador). No es una petición
+nueva de información: es la misma vista.
 
 **La vista del mapa** (centro, zoom, si seguía al vecino y si ya se le
 había dado el acercamiento a z17):
