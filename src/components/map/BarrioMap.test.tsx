@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { render } from '@testing-library/react'
 import { BarrioMap } from './BarrioMap'
 import type { BarrioMapController, BarrioMapHandlers } from './createBarrioMap'
+import { keepMapSession, mapSession } from '@/lib/mapSession'
 import type { MapSightingGeo } from '@/types/sighting'
 
 const calls = vi.hoisted(() => ({
@@ -191,6 +192,80 @@ describe('BarrioMap', () => {
     calls.fromCentreM = 0.3
     view.rerender(<BarrioMap {...base} me={{ ...me }} follow />)
     expect(calls.log.filter((line) => line.startsWith('follow'))).toEqual([])
+  })
+
+  describe('coming back to the map (LCHP-56)', () => {
+    const me = { lat: 40.4115, lng: -3.712, accuracyM: 12 }
+    const view = { center: [-3.712, 40.4115] as [number, number], zoom: 16 }
+    const moves = () => calls.log.filter((line) => line.startsWith('follow'))
+
+    it('leaving says whether the zoom-in was spent, and whether the street zoom is still owed', () => {
+      const spent = render(<BarrioMap {...base} me={me} follow />)
+      spent.unmount()
+      expect(mapSession()).toMatchObject({ zoomSpent: true, streetOwed: false })
+
+      const owed = render(<BarrioMap {...base} me={{ ...me, accuracyM: 400 }} follow />)
+      owed.unmount()
+      expect(mapSession()).toMatchObject({ zoomSpent: true, streetOwed: true })
+
+      const unused = render(<BarrioMap {...base} />)
+      unused.unmount()
+      expect(mapSession()).toMatchObject({ zoomSpent: false, streetOwed: false })
+    })
+
+    it('a map opened on the view it was left with only recentres: the zoom-in is not given twice', () => {
+      keepMapSession({ view, zoomSpent: true })
+      const back = render(<BarrioMap {...base} follow />)
+      back.rerender(<BarrioMap {...base} me={me} follow />)
+      expect(moves()).toEqual(['follow 40.4115 undefined'])
+    })
+
+    it('a position that has not moved off the kept view does not move the map at all', () => {
+      keepMapSession({ view, zoomSpent: true })
+      calls.fromCentreM = 0
+      render(<BarrioMap {...base} me={me} follow />)
+      expect(moves()).toEqual([])
+    })
+
+    it('a tap on «Ir a mi posición» after coming back still zooms in', () => {
+      keepMapSession({ view, zoomSpent: true })
+      const back = render(<BarrioMap {...base} me={me} follow />)
+      back.rerender(<BarrioMap {...base} me={me} follow followRequest={1} />)
+      expect(moves()).toEqual(['follow 40.4115 undefined', 'follow 40.4115 17'])
+    })
+
+    it('the street zoom a vague position left owed is given by the first good one after coming back', () => {
+      keepMapSession({ view, zoomSpent: true, streetOwed: true })
+      const back = render(<BarrioMap {...base} me={{ ...me, accuracyM: 400 }} follow />)
+      back.rerender(<BarrioMap {...base} me={me} follow />)
+      expect(moves()).toEqual(['follow 40.4115 undefined', 'follow 40.4115 17'])
+    })
+
+    it('a zoom-in never given is still given: the map was left before any position', () => {
+      keepMapSession({ view, zoomSpent: false })
+      render(<BarrioMap {...base} me={me} follow />)
+      expect(moves()).toEqual(['follow 40.4115 17'])
+    })
+
+    it('without a kept view a spent zoom-in means nothing: a fresh map zooms in', () => {
+      keepMapSession({ view: null, zoomSpent: true })
+      render(<BarrioMap {...base} me={me} follow />)
+      expect(moves()).toEqual(['follow 40.4115 17'])
+    })
+
+    it('after coming back, a first position within the wait does not bring following back', () => {
+      vi.useFakeTimers()
+      keepMapSession({ view, zoomSpent: true, following: false })
+      const onResumeFollow = vi.fn()
+      const back = render(<BarrioMap {...base} onResumeFollow={onResumeFollow} />)
+      vi.advanceTimersByTime(3_000)
+      back.rerender(<BarrioMap {...base} me={me} onResumeFollow={onResumeFollow} />)
+      expect(onResumeFollow).not.toHaveBeenCalled()
+      expect(moves()).toEqual([])
+      vi.advanceTimersByTime(10_001)
+      back.rerender(<BarrioMap {...base} me={{ ...me }} onResumeFollow={onResumeFollow} />)
+      expect(onResumeFollow).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('following comes back by itself', () => {

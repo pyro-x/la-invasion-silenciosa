@@ -197,6 +197,183 @@ describe('geoWatch', () => {
     expect(result.current.kind).toBe('searching')
   })
 
+  describe('a position kept across screens (LCHP-56)', () => {
+    let T0 = 0
+    const locateAndLeave = () => {
+      act(() => startGeoWatch())
+      act(() => watcher().success(fix(40.4115, -3.712, 12)))
+      act(() => stopGeoWatch())
+    }
+    const stubNavigator = (permissions: { query: typeof permissionsQuery } | undefined) =>
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        geolocation: { watchPosition, clearWatch, getCurrentPosition },
+        permissions,
+      })
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+      T0 = Date.now()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('comes back at once, with the time and accuracy it was read with, when the browser confirms the grant', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      expect(result.current).toEqual({ kind: 'idle', position: null })
+      vi.setSystemTime(T0 + 45_000)
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current).toEqual({
+        kind: 'ok',
+        position: { lat: 40.4115, lng: -3.712, accuracyM: 12, at: T0 },
+      })
+      expect(watchPosition).toHaveBeenCalledTimes(2)
+    })
+
+    it('gives way to the first fresh fix, late as it may be', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      vi.setSystemTime(T0 + 20_000)
+      expect(result.current.position?.at).toBe(T0)
+      act(() => watcher().success(fix(40.4118, -3.7121, 8)))
+      expect(result.current).toEqual({
+        kind: 'ok',
+        position: { lat: 40.4118, lng: -3.7121, accuracyM: 8, at: T0 + 20_000 },
+      })
+    })
+
+    it('is not brought back once it is two minutes old', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      vi.setSystemTime(T0 + 2 * 60_000)
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current).toEqual({ kind: 'searching', position: null })
+    })
+
+    it('is dropped from memory when its time is up, with nobody asking', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      vi.advanceTimersByTime(2 * 60_000)
+      vi.setSystemTime(T0)
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current.kind).toBe('searching')
+    })
+
+    it('counts its age from when it was read, across more than one visit', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      vi.setSystemTime(T0 + 70_000)
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current.kind).toBe('ok')
+      act(() => stopGeoWatch())
+      vi.setSystemTime(T0 + 125_000)
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current).toEqual({ kind: 'searching', position: null })
+    })
+
+    it.each<[string, () => void]>([
+      ['would ask again', () => permissionsQuery.mockResolvedValue({ state: 'prompt' })],
+      ['says it is denied', () => permissionsQuery.mockResolvedValue({ state: 'denied' })],
+      ['cannot say', () => permissionsQuery.mockRejectedValue(new TypeError('no entry'))],
+      ['has no Permissions API', () => stubNavigator(undefined)],
+    ])('is not shown, and is forgotten, when the browser %s', async (_name, arrange) => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      arrange()
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current).toEqual({ kind: 'idle', position: null })
+      expect(watchPosition).toHaveBeenCalledTimes(1)
+      expect(getCurrentPosition).not.toHaveBeenCalled()
+
+      stubNavigator({ query: permissionsQuery })
+      permissionsQuery.mockReset()
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current.position).toBeNull()
+    })
+
+    it('is not shown on a tap: a tap searches afresh, also while the browser is still answering', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      let answer: (status: { state: PermissionState }) => void = () => {}
+      permissionsQuery.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+      const resuming = resumeGeoWatchIfGranted()
+      act(() => startGeoWatch())
+      expect(result.current).toEqual({ kind: 'searching', position: null })
+      answer({ state: 'granted' })
+      await act(() => resuming)
+      expect(result.current).toEqual({ kind: 'searching', position: null })
+      expect(watchPosition).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not outlive a trip to the background with no watch running', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      document.dispatchEvent(new Event('visibilitychange'))
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current).toEqual({ kind: 'searching', position: null })
+    })
+
+    it('is not kept when it lies outside La Latina', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      act(() => startGeoWatch())
+      act(() => watcher().success(fix(41.3874, 2.1686, 12)))
+      act(() => stopGeoWatch())
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current).toEqual({ kind: 'searching', position: null })
+    })
+
+    it('is forgotten by a denial that arrives after it was shown again', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      act(() => watcher().fail(failure(1)))
+      expect(result.current).toEqual({ kind: 'denied', position: null })
+      act(() => stopGeoWatch())
+      await act(() => resumeGeoWatchIfGranted())
+      expect(result.current.position).toBeNull()
+      expect(watchPosition).toHaveBeenCalledTimes(2)
+    })
+
+    it('once shown again it is the watch’s own: a tap on «Ir a mi posición» keeps it on screen', async () => {
+      const { result } = renderHook(() => useGeoWatch())
+      locateAndLeave()
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      act(() => startGeoWatch())
+      expect(result.current.position).toMatchObject({ lat: 40.4115, at: T0 })
+    })
+
+    it('writes nothing of it to storage: only the mark that the permission was granted', async () => {
+      const written = vi.spyOn(localStorage, 'setItem')
+      const inSession = vi.spyOn(sessionStorage, 'setItem')
+      locateAndLeave()
+      permissionsQuery.mockResolvedValue({ state: 'granted' })
+      await act(() => resumeGeoWatchIfGranted())
+      act(() => stopGeoWatch())
+      expect(written.mock.calls).not.toHaveLength(0)
+      expect(
+        written.mock.calls.every(([key, value]) => key === 'lis.geo.granted' && value === '1'),
+      ).toBe(true)
+      expect(Object.keys(localStorage)).toEqual(['lis.geo.granted'])
+      expect(inSession).not.toHaveBeenCalled()
+      written.mockRestore()
+      inSession.mockRestore()
+    })
+  })
+
   describe('resuming without a tap', () => {
     it('never starts for someone who has not granted before', async () => {
       permissionsQuery.mockResolvedValue({ state: 'granted' })
