@@ -23,8 +23,10 @@ type Props = {
   me: MePosition | null
   /** Metres the pin may be from the neighbour: drawn as a ring around `me`. */
   rangeM: number
-  /** Space covered by the dock: the map centres above it. */
-  bottomPadding: number
+  /** Space covered by the header card and the dock: the map centres between them. */
+  padding: { top: number; bottom: number }
+  /** The neighbour took the map: a gesture started. */
+  onUserMove: () => void
   /** The centre settled: on load and after every move; `byUser` for a gesture. */
   onCenterChanged: (center: LngLat, byUser: boolean, zoom: number) => void
 }
@@ -34,16 +36,17 @@ export function PickerMap({
   flyTo,
   me,
   rangeM,
-  bottomPadding,
+  padding,
+  onUserMove,
   onCenterChanged,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const controller = useRef<BarrioMapController | null>(null)
-  const onCenterChangedRef = useRef(onCenterChanged)
+  const handlers = useRef({ onUserMove, onCenterChanged })
   const [opensAt] = useState(initialCenter)
 
   useEffect(() => {
-    onCenterChangedRef.current = onCenterChanged
+    handlers.current = { onUserMove, onCenterChanged }
   })
 
   useEffect(() => {
@@ -53,9 +56,10 @@ export function PickerMap({
       {
         onPick: () => {},
         onMapTap: () => {},
-        onUserMove: () => {},
+        onUserMove: () => handlers.current.onUserMove(),
         onUserSettled: () => {},
-        onCenterChanged: (center, byUser, zoom) => onCenterChangedRef.current(center, byUser, zoom),
+        onCenterChanged: (center, byUser, zoom) =>
+          handlers.current.onCenterChanged(center, byUser, zoom),
       },
       { mode: 'picker', center: opensAt ?? undefined, zoom: PICK_ZOOM },
     )
@@ -71,8 +75,8 @@ export function PickerMap({
   }, [me, rangeM])
 
   useEffect(() => {
-    controller.current?.setBottomPadding(bottomPadding)
-  }, [bottomPadding])
+    controller.current?.setBottomPadding(padding.bottom, padding.top)
+  }, [padding.bottom, padding.top])
 
   useEffect(() => {
     if (flyTo) controller.current?.follow(flyTo, PICK_ZOOM)

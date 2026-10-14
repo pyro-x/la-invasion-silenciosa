@@ -1897,6 +1897,38 @@ describe('picker mode (LCHP-36)', () => {
     expect(centres.slice(1).map((c) => c.byUser)).toEqual([false, true, true])
   })
 
+  it("an ease that stops a gesture is the app's landing, not the neighbour's", () => {
+    const { controller, centres } = mountPicker()
+    emit('load')
+    // a drag under way, no moveend for it yet
+    emit('movestart', { originalEvent: new Event('touchstart') })
+    controller.follow(HERE, 17)
+    emit('moveend')
+    expect(centres.at(-1)?.byUser).toBe(false)
+    // and the next gesture is still the neighbour's
+    userDrag()
+    expect(centres.at(-1)?.byUser).toBe(true)
+  })
+
+  it('a stored view is neither read for the opening nor forgotten by the position', () => {
+    const remembered = JSON.stringify({ center: [-3.709, 40.412], zoom: 14 })
+    localStorage.setItem('lis.map.view', remembered)
+    const { controller } = mountPicker(null)
+    expect(recorded.options.at(-1)).toMatchObject({ bounds: expect.anything() })
+    emit('load')
+    controller.setMe({ ...HERE, accuracyM: 9 }, 50)
+    expect(stored()).toBe(remembered)
+  })
+
+  it('the header card is padding too: the map centres between it and the dock', () => {
+    const { controller } = mountPicker()
+    emit('load')
+    controller.setBottomPadding(220, 80)
+    expect(recorded.paddings.at(-1)).toEqual({ top: 80, left: 0, right: 0, bottom: 220 })
+    controller.follow(HERE, 17)
+    expect(recorded.eases.at(-1)).toMatchObject({ padding: { top: 80, bottom: 220 } })
+  })
+
   it('«Volver a mi posición» eases to the position at street zoom, above the dock', () => {
     const { controller } = mountPicker()
     emit('load')

@@ -690,14 +690,20 @@ body {
 /* ============ CAPTURE STEP 3 (LCHP-36, D-071) ============
    The map is the screen; the reticle at its visible centre is the pin; the
    dock at the bottom says what the pin is worth. --dock-h is the height the
-   dock covers, kept in sync from the step so the reticle and the map's
-   padding agree (Alcorqueando's marking screen). */
+   dock covers and --top-h the height the header card covers, kept in sync
+   from the step so the reticle and the map's padding agree (Alcorqueando's
+   marking screen, with the header counted too). */
 .hunt-map {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  --top-h: 0px;
   --dock-h: 0px;
   --map-edge: 12px;
+}
+/* While the stamp plays the pin is taken: no gesture moves it. */
+.hunt-map-canvas.is-stamping {
+  pointer-events: none;
 }
 .hunt-map-canvas {
   position: absolute;
@@ -717,7 +723,7 @@ body {
 .reticle {
   position: absolute;
   left: 50%;
-  top: calc((100% - var(--dock-h)) / 2);
+  top: calc(var(--top-h) + (100% - var(--top-h) - var(--dock-h)) / 2);
   z-index: 2;
   width: 72px;
   height: 72px;

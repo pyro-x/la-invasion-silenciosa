@@ -1605,20 +1605,27 @@ centro del mapa que el dock deja libre (top: calc((100% − dock) / 2));
 la cabecera (título, ✕, indicador de pasos) flota arriba en una
 tarjeta y el dock flota abajo con la línea de estado, la precisión,
 «📡 Volver a mi posición», «▸ Revisa y envía» y la frase de
-privacidad; la altura del dock es el padding inferior del mapa, así
-que el centro del mapa — el pin (D-052) — es el centro de lo visible.
-El mapa SIGUE al vecino: cada posición nueva lo recentra (ignorando
-saltos de menos de 0,7 m) y re-etiqueta el pin como GPS con la
-precisión de esa posición, hasta que el vecino arrastra el mapa — desde
-entonces el pin es suyo (manual, sin precisión) y la observación solo
-lo juzga: alejarse 60 m retira «Revisa y envía» con «Ese punto está a
-60 m de ti. El máximo son 50 m.» y pone la retícula en rojo;
+privacidad; lo que cubren la tarjeta y el dock es el padding del mapa,
+así que el centro del mapa — el pin (D-052) — es el centro de lo que
+queda visible entre ambos. El pin es siempre el centro en el que el
+mapa se asienta, lo haya llevado quien lo haya llevado: si aterriza en
+la posición a la que se le envió es GPS con esa precisión; si no, es a
+mano. El mapa SIGUE al vecino: cada posición nueva lo recentra
+(ignorando saltos menores de 0,7 m o de la mitad del error de esa
+posición) y re-etiqueta el pin como GPS, hasta que el vecino toma el
+mapa — arrastre, pellizco o rueda; el seguimiento se corta al empezar
+el gesto, así que una posición que llegue a mitad de gesto o durante
+su inercia no mueve nada. Desde entonces el pin es suyo (manual, sin
+precisión) y la observación solo lo juzga: alejarse 60 m retira
+«Revisa y envía» con «Ese punto está a 60 m de ti. El máximo son
+50 m.» y pone la retícula en naranja (el color de aviso del tema);
 «Volver a mi posición» recentra y devuelve el seguimiento. El
 seguimiento no vuelve solo: aquí el vecino está apuntando. Con el mapa
 alejado por debajo del zoom 16 no se continúa («Acerca el mapa hasta
 ver la calle»), como el minMarkZoom de Alcorqueando. Al confirmar, la
-retícula hace el sello (420 ms; sin animación con reduced motion) y
-pasa a la revisión. Una posición perdida (permiso retirado, pausa al
+retícula hace el sello (420 ms, el mapa no admite gestos mientras; sin
+animación con reduced motion) y pasa a la revisión si el pin sigue
+valiendo. Una posición perdida (permiso retirado, pausa al
 volver de segundo plano, sin señal) muestra en el dock el mismo aviso
 que la puerta y que /mapa (LocationNotice), con «Reintentar» /
 «Usar mi ubicación» como el toque que reinicia la observación.

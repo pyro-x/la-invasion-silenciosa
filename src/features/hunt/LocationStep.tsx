@@ -1,11 +1,12 @@
 // Location step (LCHP-14, LCHP-49, LCHP-54, LCHP-36): the map is the
 // screen, the reticle at its visible centre is the pin, and the dock at the
 // bottom says what the pin is worth (Alcorqueando's marking screen, D-058).
-// The position is always the map's centre (D-052). The map opens on the
+// The position is always the map's settled centre (D-052), whatever brought
+// it there; GPS or by hand is only its tag. The map opens on the
 // neighbour's live position — the gate secured it before the photo, and the
 // watch keeps it up to date while the step is open — and follows each new
-// fix until the neighbour drags (then the pin is theirs: `manual`, no
-// accuracy claim). A creature is registered where the neighbour stands
+// fix until the neighbour takes the map (then the pin is theirs: `manual`,
+// no accuracy claim). A creature is registered where the neighbour stands
 // (D-069): the pin can be nudged inside the radius drawn around them, not
 // dragged across the barrio, and without a position good enough, or with
 // the map zoomed out past the street, the step does not continue. The exact
@@ -14,6 +15,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -56,11 +58,12 @@ const RADIUS = formatMeters(PLAY_RULES.captureRadiusM)
 // Below this the centre of the map is a block, not a doorway (Alcorqueando's
 // minMarkZoom).
 const MIN_PICK_ZOOM = 16
-// GPS noise of a few decimetres is not worth a map move.
+// GPS jitter is not worth a map move: the floor is BarrioMap's noise rule,
+// and a vaguer fix wobbles more, so half its own error is ignored too.
 const NOISE_M = 0.7
-// The reticle's stamp on confirm (Alcorqueando's keyframes), before the step
-// gives way to the review.
-const STAMP_MS = 380
+// The reticle's stamp on confirm (Alcorqueando's keyframes, the same 420 ms
+// as the CSS animation), before the step gives way to the review.
+const STAMP_MS = 420
 
 // The two lines of the dock, in Alcorqueando's voice.
 function describe(
@@ -116,9 +119,8 @@ function describe(
   return { title: 'Tu posición', note: aim }
 }
 
-// easeTo lands exactly on the target unless maxBounds clamps it; anything
-// closer than ~10 m is the fly settling, not the initial-load report.
-const FLY_MATCH_EPSILON = 1e-4
+// easeTo lands exactly on its target; a flight stopped on the way does not.
+const FLY_MATCH_EPSILON = 1e-6
 
 const lessMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
 
@@ -133,11 +135,14 @@ export function LocationStep({
   const me = geo.kind === 'ok' ? geo.position : null
   const [flyTo, setFlyTo] = useState<Target | null>(null)
   const [zoom, setZoom] = useState<number | null>(null)
+  // The map is on its way to a position: its zoom is not the neighbour's yet.
+  const [flying, setFlying] = useState(false)
   // The map opens on the position the step finds; read once, like the map does.
   const [opensAt] = useState<Target | null>(() => (me ? { lat: me.lat, lng: me.lng } : null))
-  // The GPS target in flight: programmatic settles are only tagged as a GPS
-  // position when they land ON the target — the map's initial-load report
-  // (also programmatic) must not steal the tag unless it opened there.
+  // The GPS target the map was sent to. A programmatic settle ON it is a GPS
+  // position with that fix's accuracy; any other settled centre is the pin
+  // as it is. The target stays armed until the neighbour takes the map, so
+  // a flight stopped halfway by the next one does not steal the landing.
   const pendingFly = useRef<PendingFly | null>(
     me ? { lat: me.lat, lng: me.lng, accuracyM: me.accuracyM } : null,
   )
@@ -159,12 +164,12 @@ export function LocationStep({
       accuracyM: pendingFly.current.accuracyM,
       source: 'gps',
     })
-    // the ref stays armed: the map's load report lands on it and is a no-op
   }, [opensAt])
 
   function goTo(target: GeoPosition) {
     pendingFly.current = { lat: target.lat, lng: target.lng, accuracyM: target.accuracyM }
     followedTo.current = { lat: target.lat, lng: target.lng }
+    setFlying(true)
     setFlyTo({ lat: target.lat, lng: target.lng })
   }
 
@@ -173,30 +178,34 @@ export function LocationStep({
   useEffect(() => {
     if (!me || !following.current) return
     const last = followedTo.current
-    if (last && distanceMeters(last, me) < NOISE_M) return
+    if (last && distanceMeters(last, me) < Math.max(NOISE_M, me.accuracyM / 2)) return
     goTo(me)
   }, [me])
 
+  // A gesture starts: the map is the neighbour's from here, and nothing the
+  // watch delivers meanwhile moves it.
+  function onUserMove() {
+    following.current = false
+    pendingFly.current = null
+    setFlying(false)
+  }
+
   function onCenterChanged(center: Target, byUser: boolean, atZoom: number) {
     setZoom(atZoom)
+    if (byUser) onUserMove()
     const target = pendingFly.current
-    if (!byUser && target) {
-      const landed =
-        Math.abs(center.lat - target.lat) < FLY_MATCH_EPSILON &&
-        Math.abs(center.lng - target.lng) < FLY_MATCH_EPSILON
-      if (landed) {
-        pendingFly.current = null
-        onPositionChanged({ ...center, accuracyM: target.accuracyM, source: 'gps' })
-      }
-      // Not landed yet (initial-load report on the barrio frame, or the fly
-      // got clamped by the map bounds): wait — the user's own drag always
-      // takes over below.
-      return
-    }
-    if (!byUser) return
-    pendingFly.current = null
-    following.current = false
-    onPositionChanged({ ...center, accuracyM: null, source: 'manual' })
+    const landed =
+      !byUser &&
+      target !== null &&
+      Math.abs(center.lat - target.lat) < FLY_MATCH_EPSILON &&
+      Math.abs(center.lng - target.lng) < FLY_MATCH_EPSILON
+    if (landed) setFlying(false)
+    // The settled centre is the pin, whatever brought it there (D-052).
+    onPositionChanged(
+      landed
+        ? { ...center, accuracyM: target.accuracyM, source: 'gps' }
+        : { ...center, accuracyM: null, source: 'manual' },
+    )
   }
 
   function recenter() {
@@ -205,32 +214,54 @@ export function LocationStep({
     goTo(me)
   }
 
-  // The dock's height is the map's bottom padding, so the map's centre — the
-  // pin — is the centre of what the dock leaves visible (Alcorqueando's
-  // syncDockHeight).
+  // The header card and the dock cover the map top and bottom: their heights
+  // are the map's padding, so the map's centre — the pin — is the centre of
+  // what stays visible, and the reticle sits there (Alcorqueando's
+  // syncDockHeight, with the header counted too).
   const hostRef = useRef<HTMLDivElement>(null)
+  const topRef = useRef<HTMLDivElement>(null)
   const dockRef = useRef<HTMLDivElement>(null)
-  const [dockH, setDockH] = useState(0)
+  const [covered, setCovered] = useState({ top: 0, bottom: 0 })
   useEffect(() => {
     const host = hostRef.current
+    const top = topRef.current
     const dock = dockRef.current
-    if (!host || !dock) return
+    if (!host || !top || !dock) return
     const measure = () => {
-      const covered = Math.max(
-        0,
-        Math.round(host.getBoundingClientRect().bottom - dock.getBoundingClientRect().top),
+      const frame = host.getBoundingClientRect()
+      const next = {
+        top: Math.max(0, Math.round(top.getBoundingClientRect().bottom - frame.top)),
+        bottom: Math.max(0, Math.round(frame.bottom - dock.getBoundingClientRect().top)),
+      }
+      setCovered((current) =>
+        current.top === next.top && current.bottom === next.bottom ? current : next,
       )
-      setDockH((current) => (current === covered ? current : covered))
     }
     measure()
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measure)
+    observer.observe(top)
     observer.observe(dock)
     observer.observe(host)
     return () => observer.disconnect()
   }, [])
 
-  // The stamp plays, then the review takes over.
+  const outOfBounds = position !== null && !isWithinLaLatina(position.lat, position.lng)
+  // While the map is still on its way to the position there is no pin to judge.
+  const pin: Presence = me
+    ? presenceAt(me, position ?? me, PLAY_RULES.captureRadiusM)
+    : { kind: 'unknown' }
+  // The barrio's edge is a rule for the neighbour too, not only for the pin.
+  const outside = me !== null && !isWithinLaLatina(me.lat, me.lng)
+  const zoomedOut = !flying && zoom !== null && zoom < MIN_PICK_ZOOM
+  const canContinue =
+    position !== null && !outOfBounds && !outside && !zoomedOut && pin.kind === 'near'
+  const canContinueRef = useRef(canContinue)
+  useEffect(() => {
+    canContinueRef.current = canContinue
+  })
+
+  // The stamp plays, then the review takes over — if the pin still holds.
   const [stamping, setStamping] = useState(false)
   const stampTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(stampTimer.current), [])
@@ -241,19 +272,12 @@ export function LocationStep({
       return
     }
     setStamping(true)
-    stampTimer.current = setTimeout(onNext, STAMP_MS)
+    stampTimer.current = setTimeout(() => {
+      if (canContinueRef.current) onNext()
+      else setStamping(false)
+    }, STAMP_MS)
   }
 
-  const outOfBounds = position !== null && !isWithinLaLatina(position.lat, position.lng)
-  // While the map is still on its way to the position there is no pin to judge.
-  const pin: Presence = me
-    ? presenceAt(me, position ?? me, PLAY_RULES.captureRadiusM)
-    : { kind: 'unknown' }
-  // The barrio's edge is a rule for the neighbour too, not only for the pin.
-  const outside = me !== null && !isWithinLaLatina(me.lat, me.lng)
-  const zoomedOut = zoom !== null && zoom < MIN_PICK_ZOOM
-  const canContinue =
-    position !== null && !outOfBounds && !outside && !zoomedOut && pin.kind === 'near'
   // Vague and outside are the dock's lines below; the notice is for a
   // position that is missing altogether.
   const panel = me ? null : locatePanel(geo, false)
@@ -266,11 +290,18 @@ export function LocationStep({
     pin,
   )
   const far = me !== null && !canContinue
-  const dockVars: CSSProperties & Record<'--dock-h', string> = { '--dock-h': `${dockH}px` }
+  const mePoint = useMemo(
+    () => (me ? { lat: me.lat, lng: me.lng, accuracyM: me.accuracyM } : null),
+    [me],
+  )
+  const coverVars: CSSProperties & Record<'--top-h' | '--dock-h', string> = {
+    '--top-h': `${covered.top}px`,
+    '--dock-h': `${covered.bottom}px`,
+  }
 
   return (
-    <div ref={hostRef} className="hunt-map" style={dockVars}>
-      <div className="hunt-map-canvas">
+    <div ref={hostRef} className="hunt-map" style={coverVars}>
+      <div className={'hunt-map-canvas' + (stamping ? ' is-stamping' : '')}>
         <Suspense
           fallback={
             <div className="panel center" style={{ position: 'absolute', inset: 0 }}>
@@ -281,15 +312,16 @@ export function LocationStep({
           <PickerMap
             initialCenter={opensAt}
             flyTo={flyTo}
-            me={me ? { lat: me.lat, lng: me.lng, accuracyM: me.accuracyM } : null}
+            me={mePoint}
             rangeM={PLAY_RULES.captureRadiusM}
-            bottomPadding={dockH}
+            padding={covered}
+            onUserMove={onUserMove}
             onCenterChanged={onCenterChanged}
           />
         </Suspense>
       </div>
 
-      <div className="hunt-map-top">
+      <div ref={topRef} className="hunt-map-top">
         <div className="panel hunt-map-card stack" style={{ gap: 10 }}>
           {header}
         </div>
@@ -316,7 +348,7 @@ export function LocationStep({
         </svg>
       </div>
 
-      <div ref={dockRef} className="hunt-dock" aria-label="Situar la criatura">
+      <section ref={dockRef} className="hunt-dock" aria-label="Situar la criatura">
         {panel && <LocationNotice panel={panel} onAction={onLocate} />}
         <div className="row" style={{ gap: 8, justifyContent: 'space-between' }}>
           <span className="hunt-dock-lead">{title}</span>
@@ -342,7 +374,7 @@ export function LocationStep({
         <p className="hunt-dock-fine">
           Por privacidad, en el mapa solo se muestra una ubicación aproximada.
         </p>
-      </div>
+      </section>
     </div>
   )
 }

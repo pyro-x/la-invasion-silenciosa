@@ -67,8 +67,8 @@ export type BarrioMapController = {
   metresFromCentre: (target: LngLat) => number
   /** The map is moving: a gesture in progress, or an ease of the app's. */
   isMoving: () => boolean
-  /** Space covered by the bottom sheet: the map centres above it. */
-  setBottomPadding: (px: number) => void
+  /** Space covered by the bottom sheet (and, for a picker, the header card): the map centres between them. */
+  setBottomPadding: (px: number, topPx?: number) => void
   /**
    * Eases to a point, at the zoom the map has. With the id of a sighting, to
    * where that sighting is drawn, which need not be its own coordinate.
@@ -715,7 +715,8 @@ export function createBarrioMap(
     })
   })
 
-  const padding = () => ({ top: 0, left: 0, right: 0, bottom: bottomPx })
+  let topPx = 0
+  const padding = () => ({ top: topPx, left: 0, right: 0, bottom: bottomPx })
 
   // Only a view the user chose is remembered. The app's own moves — the
   // opening fit, a padding change, easing to a pin, following — are never
@@ -763,8 +764,11 @@ export function createBarrioMap(
 
   const ease = (to: { center: [number, number]; zoom?: number }) => {
     // easeTo stops the previous ease itself, but only after `flight` is
-    // set below: its moveend would then be taken for this one's.
+    // set below: its moveend would then be taken for this one's. A gesture
+    // stopped here ends without a moveend: it must not be read into the
+    // app's own landing.
     map.stop()
+    gesture = false
     userChoseView = false
     flight = to
     carriedZoom = to.zoom ?? null
@@ -773,6 +777,7 @@ export function createBarrioMap(
   const jump = (change: () => void) => {
     // This drops a gesture in progress without a moveend for it.
     map.stop()
+    gesture = false
     userChoseView = false
     jumping = true
     change()
@@ -927,8 +932,9 @@ export function createBarrioMap(
       drawMe()
     },
 
-    setBottomPadding(px) {
+    setBottomPadding(px, top = 0) {
       bottomPx = px
+      topPx = top
       lookSoon()
       // Zero is "not measured yet", not a height.
       const opening = !framed && px > 0

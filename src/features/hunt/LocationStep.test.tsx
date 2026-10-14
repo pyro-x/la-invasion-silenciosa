@@ -5,7 +5,7 @@ import { LocationStep } from './LocationStep'
 // The MapLibre picker needs WebGL; the step's own logic does not. The stub
 // reports the barrio frame's centre on load, as the real map does when it
 // could not open where it was asked to.
-const reported = vi.hoisted(() => ({ centre: { lat: 40.4118, lng: -3.7105 } }))
+const reported = vi.hoisted(() => ({ centre: { lat: 40.4118, lng: -3.7105 }, sent: false }))
 vi.mock('@/components/map/PickerMap', () => ({
   PICK_ZOOM: 17,
   PickerMap: ({
@@ -13,10 +13,18 @@ vi.mock('@/components/map/PickerMap', () => ({
   }: {
     onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean, zoom: number) => void
   }) => {
-    onCenterChanged(reported.centre, false, 17)
+    // the load report, once, as the real map's
+    if (!reported.sent) {
+      reported.sent = true
+      onCenterChanged(reported.centre, false, 17)
+    }
     return <div data-testid="picker-map" />
   },
 }))
+
+beforeEach(() => {
+  reported.sent = false
+})
 
 const noop = () => {}
 const HERE = { lat: 40.4116, lng: -3.7102, accuracyM: 9, at: Date.now() }
@@ -37,7 +45,7 @@ describe('location step', () => {
     expect(screen.queryByText('± 9 m')).not.toBeInTheDocument()
   })
 
-  it('the position it opens on is its position at once; a settle elsewhere is not taken for it', async () => {
+  it('the position it opens on is its position at once; a settle elsewhere is the pin, by hand', async () => {
     const onPositionChanged = vi.fn()
     render(
       <LocationStep
@@ -50,14 +58,19 @@ describe('location step', () => {
       />,
     )
     await screen.findByTestId('picker-map')
-    // the opening position, tagged GPS with its accuracy — and nothing for
-    // the map's report of a centre that is not it
-    expect(onPositionChanged).toHaveBeenCalledTimes(1)
+    // the opening position, tagged GPS with its accuracy; the map's report of
+    // another centre is the pin where it settled, with no GPS claim (D-052)
+    expect(onPositionChanged).toHaveBeenCalledTimes(2)
     expect(onPositionChanged).toHaveBeenCalledWith({
       lat: HERE.lat,
       lng: HERE.lng,
       accuracyM: 9,
       source: 'gps',
+    })
+    expect(onPositionChanged).toHaveBeenCalledWith({
+      ...reported.centre,
+      accuracyM: null,
+      source: 'manual',
     })
   })
 

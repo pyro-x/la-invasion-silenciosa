@@ -40,44 +40,49 @@ vi.mock('@/components/map/PickerMap', () => ({
   PickerMap: ({
     initialCenter,
     flyTo,
+    onUserMove,
     onCenterChanged,
   }: {
     initialCenter: { lat: number; lng: number } | null
     flyTo: { lat: number; lng: number } | null
+    onUserMove: () => void
     onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean, zoom: number) => void
   }) => {
     const sent = useRef(false)
     const flown = useRef<{ lat: number; lng: number } | null>(null)
+    const flights = useRef(0)
     const centre = useRef(initialCenter ?? { lat: 40.4118, lng: -3.7105 })
     useEffect(() => {
       if (!sent.current) {
         sent.current = true
         onCenterChanged(centre.current, false, 17)
       }
-      // a new object is a new fly, as in the real map
+      // a new object is a new fly, as in the real map: the flight before it,
+      // stopped on the way, settles 8 m short first, then this one lands
       if (flyTo && flown.current !== flyTo) {
         flown.current = flyTo
+        flights.current++
+        onCenterChanged({ lat: flyTo.lat - 8 / 111_195, lng: flyTo.lng }, false, 17)
         centre.current = flyTo
         onCenterChanged(flyTo, false, 17)
       }
     })
+    const gesture = (to: { lat: number; lng: number }, zoom: number) => {
+      onUserMove()
+      centre.current = to
+      onCenterChanged(to, true, zoom)
+    }
     return (
-      <div data-testid="picker-map">
-        <button
-          aria-label="drag the map"
-          onClick={() => {
-            centre.current = drag.to
-            onCenterChanged(drag.to, true, 17)
-          }}
-        />
-        <button
-          aria-label="pinch the map out"
-          onClick={() => onCenterChanged(centre.current, true, 14)}
-        />
+      <div data-testid="picker-map" data-flights={flights.current}>
+        <button aria-label="drag the map" onClick={() => gesture(drag.to, 17)} />
+        <button aria-label="pinch the map out" onClick={() => gesture(centre.current, 14)} />
+        <button aria-label="pinch the map to 16" onClick={() => gesture(centre.current, 16)} />
       </div>
     )
   },
 }))
+
+const flights = () => Number(screen.getByTestId('picker-map').getAttribute('data-flights'))
 
 const submitMock = vi.fn<(s: NewSightingSubmission) => Promise<SubmitSightingResult>>()
 vi.mock('@/services/sightings.service', () => ({
@@ -377,6 +382,75 @@ describe('capture flow (Cazar)', () => {
         lng: -3.7102,
         accuracyM: 7,
       })
+    })
+
+    it("a fix during the neighbour's gesture does not move the map; «Volver a mi posición» hands it back", async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      const before = flights()
+
+      // the neighbour takes the map 22 m north...
+      drag.to = { lat: 40.4118, lng: -3.7102 }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      await screen.findByText('Pin ajustado a mano · a 22 m de ti')
+      // ...and the phone reports them 30 m north meanwhile: the pin stays theirs
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 30 / 111_195, longitude: -3.7102 }, 7)),
+      )
+      expect(await screen.findByText(/Pin ajustado a mano · a \d+ m de ti/)).toBeInTheDocument()
+      expect(flights()).toBe(before)
+
+      // back to the position: the watch has the map again, and the next fix moves it
+      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(flights()).toBe(before + 1)
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }, 5)),
+      )
+      expect(await screen.findByText('± 5 m')).toBeInTheDocument()
+      expect(screen.getByText('Tu posición')).toBeInTheDocument()
+      expect(flights()).toBe(before + 2)
+    })
+
+    it('GPS jitter moves nothing: a fix within the noise rule keeps the pin, a real step moves it', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      const before = flights()
+
+      // 0.3 m north: jitter
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 0.3 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+      expect(flights()).toBe(before)
+      // 3 m north: still under half of a ± 9 m error
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 3 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+      expect(flights()).toBe(before)
+      // 6 m north: a step
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 6 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      await waitFor(() => expect(flights()).toBe(before + 1))
+    })
+
+    it('at zoom 16 the street is still in sight: the pin can be used', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      await user.click(screen.getByRole('button', { name: 'pinch the map to 16' }))
+      // a pinch takes the map: the pin is by hand now, where it was
+      expect(await screen.findByText('Pin ajustado a mano · a 0 m de ti')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
     })
 
     it('the map zoomed out past the street places no creature, and says so', async () => {
