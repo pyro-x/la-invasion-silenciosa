@@ -71,3 +71,9 @@ while working on something else.
 **Problem:** `reglas-y-especificacion.md` §3.3 still reads «Ubicación aproximada (por privacidad, no se guarda la posición exacta)»; since D-049 the server keeps the exact coordinate privately and snaps only the public one.
 **Context:** found in LCHP-54 while replacing the location step's sentence «guardamos solo una ubicación aproximada» (same false claim) with «en el mapa solo se muestra una ubicación aproximada».
 **Proposal:** one docs PR rewording §3.3 to D-049 in the association's terms; check §6 for the same claim (LCHP-48 covers §6 «Mapa»).
+
+## [LCHP-57] — `var(--bad)` is used for error text but no such token exists
+
+**Problem:** three error texts (photo step, review submit error, registration panel) are styled with `color: var(--bad)`; the theme defines no `--bad`, so they inherit the surrounding colour.
+**Context:** found in LCHP-36 while styling the reticle's far state with the same token; the reticle uses `--warn` instead.
+**Proposal:** add `--bad` to the theme (a red picked with David) or switch the three usages to `--warn`; one small PR with a before/after.

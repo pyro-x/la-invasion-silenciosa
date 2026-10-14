@@ -147,7 +147,7 @@ export function BarrioMap({
   }, [me, rangeM])
 
   useEffect(() => {
-    controller.current?.setBottomPadding(bottomPadding)
+    controller.current?.setPadding(bottomPadding)
   }, [bottomPadding])
 
   useEffect(() => {

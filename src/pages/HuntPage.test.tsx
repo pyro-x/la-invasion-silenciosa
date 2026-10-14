@@ -30,40 +30,74 @@ vi.mock('@/lib/permissions', async (importOriginal) => {
 
 // Where the neighbour's finger leaves the pin when a test drags the map.
 const drag = vi.hoisted(() => ({ to: { lat: 40.4116, lng: -3.7102 } }))
+// How the mock map flies: the zoom it is at when a flight is cut short, and
+// whether the landing waits for «land the flight».
+const flight = vi.hoisted(() => ({ shortZoom: 17, hold: false }))
 
 // The MapLibre picker needs WebGL; the stub reports its opening centre once
 // (the position it was given, or the barrio frame) and, when a fly is
-// requested, its landing — like the real map.
-vi.mock('@/components/map/LocationPickerMap', () => ({
-  LocationPickerMap: ({
+// requested, its landing — like the real map. Its buttons stand in for the
+// neighbour's gestures.
+vi.mock('@/components/map/PickerMap', () => ({
+  PICK_ZOOM: 17,
+  PickerMap: ({
     initialCenter,
     flyTo,
+    onUserMove,
     onCenterChanged,
   }: {
     initialCenter: { lat: number; lng: number } | null
     flyTo: { lat: number; lng: number } | null
-    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
+    onUserMove: () => void
+    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean, zoom: number) => void
   }) => {
     const sent = useRef(false)
     const flown = useRef<{ lat: number; lng: number } | null>(null)
+    const flights = useRef(0)
+    const held = useRef<{ lat: number; lng: number } | null>(null)
+    const centre = useRef(initialCenter ?? { lat: 40.4118, lng: -3.7105 })
     useEffect(() => {
       if (!sent.current) {
         sent.current = true
-        onCenterChanged(initialCenter ?? { lat: 40.4118, lng: -3.7105 }, false)
+        onCenterChanged(centre.current, false, 17)
       }
-      // a new object is a new fly, as in the real map
+      // a new object is a new fly, as in the real map: the flight before it,
+      // stopped on the way, settles 8 m short first, then this one lands
       if (flyTo && flown.current !== flyTo) {
         flown.current = flyTo
-        onCenterChanged(flyTo, false)
+        flights.current++
+        onCenterChanged({ lat: flyTo.lat - 8 / 111_195, lng: flyTo.lng }, false, flight.shortZoom)
+        if (flight.hold) {
+          held.current = flyTo
+          return
+        }
+        centre.current = flyTo
+        onCenterChanged(flyTo, false, 17)
       }
     })
+    const land = () => {
+      if (!held.current) return
+      centre.current = held.current
+      held.current = null
+      onCenterChanged(centre.current, false, 17)
+    }
+    const gesture = (to: { lat: number; lng: number }, zoom: number) => {
+      onUserMove()
+      centre.current = to
+      onCenterChanged(to, true, zoom)
+    }
     return (
-      <div data-testid="picker-map">
-        <button aria-label="drag the map" onClick={() => onCenterChanged(drag.to, true)} />
+      <div data-testid="picker-map" data-flights={flights.current}>
+        <button aria-label="drag the map" onClick={() => gesture(drag.to, 17)} />
+        <button aria-label="pinch the map out" onClick={() => gesture(centre.current, 14)} />
+        <button aria-label="pinch the map to 16" onClick={() => gesture(centre.current, 16)} />
+        <button aria-label="land the flight" onClick={land} />
       </div>
     )
   },
 }))
+
+const flights = () => Number(screen.getByTestId('picker-map').getAttribute('data-flights'))
 
 const submitMock = vi.fn<(s: NewSightingSubmission) => Promise<SubmitSightingResult>>()
 vi.mock('@/services/sightings.service', () => ({
@@ -83,6 +117,8 @@ const permissionsQueryMock = vi.fn<() => Promise<{ state: PermissionState }>>()
 const HERE = { latitude: 40.4116, longitude: -3.7102 }
 // About 60 m north of HERE: outside the capture radius.
 const SIXTY_M_NORTH = { latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }
+// About 90 m north of HERE: 68 m from a pin placed 22 m north.
+const NINETY_M_NORTH = { latitude: 40.4116 + 90 / 111_195, longitude: -3.7102 }
 
 function geoFix(
   { latitude, longitude }: { latitude: number; longitude: number },
@@ -155,6 +191,8 @@ function fakeCamera(stopTrack = vi.fn()) {
 }
 
 beforeEach(() => {
+  flight.shortZoom = 17
+  flight.hold = false
   resetGeoWatchForTests()
   submitMock.mockReset()
   processPhotoMock.mockClear()
@@ -187,10 +225,13 @@ async function walkToLocation(user: ReturnType<typeof userEvent.setup>) {
 
 async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
   await walkToLocation(user)
-  // step 3 opens on the position the watch already has: no tap
+  // step 3 opens on the position the watch already has: no tap. The way on
+  // opens once the (lazy) picker has reported its opening centre, and the
+  // review once the reticle's stamp has played.
   expect(await screen.findByText('Tu posición')).toBeInTheDocument()
   await waitFor(() => expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
+  await screen.findByRole('button', { name: /Enviar al registro/ })
 }
 
 describe('capture flow (Cazar)', () => {
@@ -276,7 +317,7 @@ describe('capture flow (Cazar)', () => {
       )
       // the prompt no longer belongs to this step
       expect(screen.queryByRole('button', { name: /Usar mi ubicación/ })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Volver a mi posición/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Mi posición/ })).toBeInTheDocument()
     })
 
     it('the pin can be nudged near the neighbour: sent as placed by hand, with no accuracy claim', async () => {
@@ -292,7 +333,7 @@ describe('capture flow (Cazar)', () => {
       expect(await screen.findByText('Pin ajustado a mano · a 22 m de ti')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
-      await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+      await user.click(await screen.findByRole('button', { name: /Enviar al registro/ }))
       await waitFor(() => expect(submitMock).toHaveBeenCalled())
       expect(submitMock.mock.calls[0][0]).toMatchObject({
         lat: 40.4118,
@@ -315,7 +356,7 @@ describe('capture flow (Cazar)', () => {
       ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
 
-      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      await user.click(screen.getByRole('button', { name: /Mi posición/ }))
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
       )
@@ -336,32 +377,182 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
     })
 
-    it('walking away re-judges the pin where it is; «Volver a mi posición» brings it back with its accuracy', async () => {
+    it('the map follows the neighbour until they take it: each fix recentres the pin with its accuracy', async () => {
+      const user = userEvent.setup()
+      submitMock.mockResolvedValue({ kind: 'created', id: 'followed' })
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+
+      // the neighbour walks 22 m north: the pin goes with them
+      act(() => watcher().success(geoFix({ latitude: 40.4118, longitude: -3.7102 }, 7)))
+      expect(await screen.findByText('± 7 m')).toBeInTheDocument()
+      expect(screen.getByText('Tu posición')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+      await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
+      await user.click(await screen.findByRole('button', { name: /Enviar al registro/ }))
+      await waitFor(() => expect(submitMock).toHaveBeenCalled())
+      expect(submitMock.mock.calls[0][0]).toMatchObject({
+        lat: 40.4118,
+        lng: -3.7102,
+        accuracyM: 7,
+      })
+    })
+
+    it("a fix during the neighbour's gesture does not move the map; «Mi posición» hands it back", async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      const before = flights()
+
+      // the neighbour takes the map 22 m north...
+      drag.to = { lat: 40.4118, lng: -3.7102 }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      await screen.findByText('Pin ajustado a mano · a 22 m de ti')
+      // ...and the phone reports them 30 m north meanwhile: the pin stays theirs
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 30 / 111_195, longitude: -3.7102 }, 7)),
+      )
+      expect(await screen.findByText(/Pin ajustado a mano · a \d+ m de ti/)).toBeInTheDocument()
+      expect(flights()).toBe(before)
+
+      // back to the position: the watch has the map again, and the next fix moves it
+      await user.click(screen.getByRole('button', { name: /Mi posición/ }))
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(flights()).toBe(before + 1)
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }, 5)),
+      )
+      expect(await screen.findByText('± 5 m')).toBeInTheDocument()
+      expect(screen.getByText('Tu posición')).toBeInTheDocument()
+      expect(flights()).toBe(before + 2)
+    })
+
+    it('the zoom rule waits for a flight to land: no «Acerca el mapa» on the way', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+
+      flight.shortZoom = 14
+      flight.hold = true
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 30 / 111_195, longitude: -3.7102 }, 7)),
+      )
+      await waitFor(() => expect(screen.getByText('± 7 m')).toBeInTheDocument())
+      expect(screen.queryByText('Acerca el mapa hasta ver la calle')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'land the flight' }))
+      expect(await screen.findByText('Tu posición')).toBeInTheDocument()
+      expect(screen.queryByText('Acerca el mapa hasta ver la calle')).not.toBeInTheDocument()
+    })
+
+    it('a pin that stops holding during the stamp keeps the step open', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      drag.to = { lat: 40.4118, lng: -3.7102 }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+
+      await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
+      // the neighbour walks 90 m away while the stamp plays: the pin is 68 m off
+      act(() => watcher().success(geoFix(NINETY_M_NORTH, 9)))
+      await act(() => new Promise((resolve) => setTimeout(resolve, 600)))
+      expect(screen.queryByRole('button', { name: /Enviar al registro/ })).not.toBeInTheDocument()
+      expect(screen.getByText('¿Dónde está la criatura?')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+    })
+
+    it('GPS jitter moves nothing: a fix within the noise rule keeps the pin, a real step moves it', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      const before = flights()
+
+      // 0.3 m north: jitter
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 0.3 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+      expect(flights()).toBe(before)
+      // 3 m north: still under half of a ± 9 m error
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 3 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+      expect(flights()).toBe(before)
+      // 6 m north: a step
+      act(() =>
+        watcher().success(geoFix({ latitude: 40.4116 + 6 / 111_195, longitude: -3.7102 }, 9)),
+      )
+      await waitFor(() => expect(flights()).toBe(before + 1))
+    })
+
+    it('at zoom 16 the street is still in sight: the pin can be used', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+      await user.click(screen.getByRole('button', { name: 'pinch the map to 16' }))
+      // a pinch takes the map: the pin is by hand now, where it was
+      expect(await screen.findByText('Pin ajustado a mano · a 0 m de ti')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+    })
+
+    it('the map zoomed out past the street places no creature, and says so', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+
+      await user.click(screen.getByRole('button', { name: 'pinch the map out' }))
+      expect(await screen.findByText('Acerca el mapa hasta ver la calle')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(screen.getByTestId('reticle')).toHaveClass('is-far')
+    })
+
+    it('walking away from a pin placed by hand re-judges it; «Mi posición» brings it back with its accuracy', async () => {
       const user = userEvent.setup()
       submitMock.mockResolvedValue({ kind: 'created', id: 'returned' })
       renderHunt()
       await walkToLocation(user)
       await screen.findByText('Tu posición')
 
-      // the phone reports the neighbour 60 m north of the pin
-      act(() => watcher().success(geoFix(SIXTY_M_NORTH, 7)))
+      // the pin is placed by hand 22 m north; the map is the neighbour's now
+      drag.to = { lat: 40.4118, lng: -3.7102 }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      await screen.findByText('Pin ajustado a mano · a 22 m de ti')
+      expect(screen.getByTestId('reticle')).not.toHaveClass('is-far')
+
+      // the phone reports the neighbour 90 m north of where they stood
+      act(() => watcher().success(geoFix(NINETY_M_NORTH, 7)))
       expect(
-        await screen.findByText(/Ese punto está a 6\d m de ti\. El máximo son 50 m\./),
+        await screen.findByText(/Ese punto está a \d\d m de ti\. El máximo son 50 m\./),
       ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(screen.getByTestId('reticle')).toHaveClass('is-far')
 
-      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      await user.click(screen.getByRole('button', { name: /Mi posición/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
       )
       await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
-      await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+      await user.click(await screen.findByRole('button', { name: /Enviar al registro/ }))
       await waitFor(() => expect(submitMock).toHaveBeenCalled())
       // the pin went back to the newest position, with that position's accuracy
       expect(submitMock.mock.calls[0][0]).toMatchObject({
-        lat: SIXTY_M_NORTH.latitude,
-        lng: SIXTY_M_NORTH.longitude,
+        lat: NINETY_M_NORTH.latitude,
+        lng: NINETY_M_NORTH.longitude,
         accuracyM: 7,
       })
     })
@@ -391,7 +582,7 @@ describe('capture flow (Cazar)', () => {
       expect(guidance).not.toHaveTextContent('a mano')
       expect(screen.getByText('Activa tu ubicación para situar la criatura')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-      expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Mi posición/ })).not.toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Reintentar' }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
@@ -487,7 +678,7 @@ describe('capture flow (Cazar)', () => {
       await walkToLocation(user)
       expect(await screen.findByText('Buscando tu posición…')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-      expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Mi posición/ })).not.toBeInTheDocument()
 
       act(() => watcher().success(geoFix(HERE, 9)))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()

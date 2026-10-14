@@ -1,11 +1,15 @@
 // The one module that talks to MapLibre for the barrio map (LCHP-34),
 // modelled on Alcorqueando's mapview.js: a framework-free factory returning
-// a small API, so React (BarrioMap.tsx) only pushes state in and the screen
-// never touches the map library.
+// a small API, so React (BarrioMap.tsx, PickerMap.tsx) only pushes state in
+// and the screen never touches the map library.
 //
 // Sightings are map data (LCHP-35): one clustered GeoJSON source drawn by
 // symbol layers, all of them again as a heat map, and the picked one on
 // its own so a cluster can never hide it.
+//
+// In picker mode (LCHP-36, the capture step) the same controller opens where
+// it is asked, remembers no view and draws no sightings: only the basemap
+// and the neighbour's position, with the radius a pin may be nudged in.
 import maplibregl from 'maplibre-gl'
 import { addAttribution } from './attribution'
 import { ARRIVAL_MS, arrivalOpacities, blinkDelayMs } from './blink'
@@ -36,6 +40,20 @@ export type BarrioMapHandlers = {
   onUserMove: () => void
   /** A move the user chose — a gesture, a zoom button, a cluster — ended. */
   onUserSettled: () => void
+  /**
+   * The centre settled: on load and after every move. `byUser` for a
+   * gesture of the neighbour's (a drag, a pinch, a wheel) — not for a zoom
+   * button, not for the app's own moves.
+   */
+  onCenterChanged?: (center: LngLat, byUser: boolean, zoom: number) => void
+}
+
+export type BarrioMapOptions = {
+  /** `picker`: the capture step's map. The default is the barrio screen. */
+  mode?: 'barrio' | 'picker'
+  /** Where a picker opens; the barrio frame without it. */
+  center?: LngLat
+  zoom?: number
 }
 
 export type BarrioMapController = {
@@ -50,8 +68,8 @@ export type BarrioMapController = {
   metresFromCentre: (target: LngLat) => number
   /** The map is moving: a gesture in progress, or an ease of the app's. */
   isMoving: () => boolean
-  /** Space covered by the bottom sheet: the map centres above it. */
-  setBottomPadding: (px: number) => void
+  /** Space covered by the bottom sheet (and, for a picker, the header card): the map centres between them. */
+  setPadding: (px: number, topPx?: number) => void
   /**
    * Eases to a point, at the zoom the map has. With the id of a sighting, to
    * where that sighting is drawn, which need not be its own coordinate.
@@ -76,6 +94,8 @@ const UNDER_TWIN: maplibregl.ExpressionSpecification = [
 ]
 
 const VIEW_KEY = 'lis.map.view'
+// Street level for the picker: the radius a pin may be nudged in fills it.
+const PICKER_ZOOM = 17
 // Height of the floating mode switch the opening frame stays below.
 const TOP_CHROME_PX = 64
 // How much a sighting counts in the heat map, by status.
@@ -205,15 +225,22 @@ export function circlePolygon({ lat, lng }: LngLat, radiusM: number, steps = 48)
 export function createBarrioMap(
   container: HTMLElement,
   handlers: BarrioMapHandlers,
+  options: BarrioMapOptions = {},
 ): BarrioMapController {
+  const picker = options.mode === 'picker'
   // The view this map had before the screen was left (memory only) comes
-  // before the one the neighbour once chose and storage remembers.
-  const saved = mapSession().view ?? readView()
+  // before the one the neighbour once chose and storage remembers. The
+  // picker opens where it is told and has neither.
+  const saved = picker ? null : (mapSession().view ?? readView())
+  const opensAt: { center: [number, number]; zoom: number } | null =
+    picker && options.center
+      ? { center: [options.center.lng, options.center.lat], zoom: options.zoom ?? PICKER_ZOOM }
+      : saved
   const map = new maplibregl.Map({
     container,
     style: tileProvider.style,
-    ...(saved
-      ? { center: saved.center, zoom: saved.zoom }
+    ...(opensAt
+      ? { center: opensAt.center, zoom: opensAt.zoom }
       : { bounds: LA_LATINA_BOUNDS, fitBoundsOptions: { padding: 16 } }),
     maxBounds: LA_LATINA_MAX_BOUNDS,
     attributionControl: false,
@@ -249,7 +276,14 @@ export function createBarrioMap(
   // The pin images are registered and the sighting layers exist.
   let pinsReady = false
   // A restored view is the user's own framing; only a fresh map is fitted.
-  let framed = saved !== null
+  // A picker opens where it is told, or on the barrio with no fit to wait for.
+  let framed = picker || saved !== null
+
+  const report = (byUser: boolean) => {
+    if (!handlers.onCenterChanged) return
+    const centre = map.getCenter()
+    handlers.onCenterChanged({ lat: centre.lat, lng: centre.lng }, byUser, map.getZoom())
+  }
 
   const source = (id: string) => map.getSource<maplibregl.GeoJSONSource>(id)
 
@@ -671,6 +705,9 @@ export function createBarrioMap(
     addMeLayers()
     styleReady = true
     drawMe()
+    report(false)
+    // A picker shows no sightings: nothing more to add.
+    if (picker) return
     // The pin layers wait for their images: a symbol laid out before its
     // image exists is left blank until the tile is laid out again.
     void registerPins().then(() => {
@@ -682,7 +719,8 @@ export function createBarrioMap(
     })
   })
 
-  const padding = () => ({ top: 0, left: 0, right: 0, bottom: bottomPx })
+  let topPx = 0
+  const padding = () => ({ top: topPx, left: 0, right: 0, bottom: bottomPx })
 
   // Only a view the user chose is remembered. The app's own moves — the
   // opening fit, a padding change, easing to a pin, following — are never
@@ -731,8 +769,11 @@ export function createBarrioMap(
 
   const ease = (to: { center: [number, number]; zoom?: number }) => {
     // easeTo stops the previous ease itself, but only after `flight` is
-    // set below: its moveend would then be taken for this one's.
+    // set below: its moveend would then be taken for this one's. A gesture
+    // stopped here ends without a moveend: it must not be read into the
+    // app's own landing.
     map.stop()
+    gesture = false
     userChoseView = false
     flight = to
     carriedZoom = to.zoom ?? null
@@ -741,6 +782,7 @@ export function createBarrioMap(
   const jump = (change: () => void) => {
     // This drops a gesture in progress without a moveend for it.
     map.stop()
+    gesture = false
     userChoseView = false
     jumping = true
     change()
@@ -762,7 +804,13 @@ export function createBarrioMap(
     map.easeTo({ ...(center ? { center } : {}), zoom, duration: center ? 450 : 250 })
   }
 
+  // A gesture is under way: what ends it is the neighbour's own centre.
+  let gesture = false
+  let pressed = false
+  let afterPress: { center: [number, number]; zoom?: number } | null = null
   const userMoved = () => {
+    gesture = true
+    afterPress = null
     intent++
     followed = null
     focusedOn = null
@@ -773,8 +821,31 @@ export function createBarrioMap(
     if (event.originalEvent) userMoved()
   })
   map.on('wheel', userMoved)
+  // In the picker a fix that arrives while a finger is down waits for it to
+  // lift: easing then would cancel a drag MapLibre has not started yet. If
+  // the finger moved the map, the map is the neighbour's and the fix is
+  // dropped (`userMoved`); a tap lets it land.
+  if (picker) {
+    const press = () => {
+      pressed = true
+    }
+    const lift = () => {
+      if (!pressed) return
+      pressed = false
+      const waiting = afterPress
+      afterPress = null
+      if (waiting) ease(waiting)
+    }
+    map.on('mousedown', press)
+    map.on('touchstart', press)
+    map.on('mouseup', lift)
+    map.on('touchend', lift)
+    map.on('touchcancel', lift)
+  }
   map.on('moveend', () => {
     lookSoon()
+    report(gesture)
+    gesture = false
     if (userChoseView) handlers.onUserSettled()
     // A step that was stopped before it arrived — by the app or by the
     // user's own hand — ends at a zoom nobody chose. Arrival is judged
@@ -791,7 +862,7 @@ export function createBarrioMap(
     if (cutStep) return
     if (!userChoseView) return
     userChoseView = false
-    if (positionShown) return
+    if (picker || positionShown) return
     const center = map.getCenter()
     writeView({ center: [center.lng, center.lat], zoom: map.getZoom() })
   })
@@ -886,13 +957,14 @@ export function createBarrioMap(
         keepMapSession({ located: true })
         // Nothing more will be stored, so an older view would come back on
         // every visit, however the neighbour moves the map now.
-        forgetView()
+        if (!picker) forgetView()
       }
       drawMe()
     },
 
-    setBottomPadding(px) {
+    setPadding(px, top = 0) {
       bottomPx = px
+      topPx = top
       lookSoon()
       // Zero is "not measured yet", not a height.
       const opening = !framed && px > 0
@@ -946,7 +1018,9 @@ export function createBarrioMap(
       const center: [number, number] = [target.lng, target.lat]
       const kept = zoom ?? followed?.zoom
       followed = { center, ...(kept !== undefined ? { zoom: kept } : {}) }
-      ease({ center, ...(zoom !== undefined ? { zoom } : {}) })
+      const to = { center, ...(zoom !== undefined ? { zoom } : {}) }
+      if (pressed) afterPress = to
+      else ease(to)
     },
 
     isMoving: () => map.isMoving(),
@@ -971,8 +1045,9 @@ export function createBarrioMap(
     destroy() {
       destroyed = true
       // A map left before its opening frame has no view of its own yet. One
-      // left mid-move is kept where it was going.
-      if (framed) {
+      // left mid-move is kept where it was going. The picker's view is the
+      // capture spot, not the barrio map's: it keeps nothing.
+      if (framed && !picker) {
         const centre = map.getCenter()
         keepMapSession({
           view: {
