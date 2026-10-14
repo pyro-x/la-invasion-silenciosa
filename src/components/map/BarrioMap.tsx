@@ -10,6 +10,7 @@ import {
   type LngLat,
   type MePosition,
 } from './createBarrioMap'
+import { keepMapSession, mapSession } from '@/lib/mapSession'
 import { isVague } from '@/lib/proximity'
 import type { MapSightingGeo } from '@/types/sighting'
 
@@ -84,9 +85,11 @@ export function BarrioMap({
   const streetOwed = useRef(false)
   // When the neighbour last moved the map or changed what is picked.
   const touchedAt = useRef(0)
+  const latestRequest = useRef(followRequest)
 
   useEffect(() => {
     handlers.current = { onPick, onMapTap, onUserMove, onResumeFollow }
+    latestRequest.current = followRequest
   })
 
   useEffect(() => {
@@ -105,10 +108,22 @@ export function BarrioMap({
       },
     })
     controller.current = created
+    // A map that opens on the view it was left with (LCHP-56) carries on
+    // from there: the zoom-in already given is not given again.
+    const left = mapSession()
+    if (left.view) {
+      if (left.zoomSpent) zoomedFor.current = latestRequest.current
+      streetOwed.current = left.streetOwed
+    }
     return () => {
+      keepMapSession({
+        zoomSpent: zoomedFor.current === latestRequest.current,
+        streetOwed: streetOwed.current,
+      })
       created.destroy()
       controller.current = null
-      // The next controller owes the zoom-in again (StrictMode's remount).
+      // The next controller owes the zoom-in again (StrictMode's remount),
+      // unless it opens on the view this one leaves.
       zoomedFor.current = null
       streetOwed.current = false
     }
