@@ -1696,7 +1696,7 @@ centro del mapa que dejan libre la tarjeta y el dock (top: calc(tarjeta +
 (100% − tarjeta − dock) / 2));
 la cabecera (título, ✕, indicador de pasos) flota arriba en una
 tarjeta y el dock flota abajo con la línea de estado, la precisión,
-«📡 Volver a mi posición», «▸ Revisa y envía» y la frase de
+«Mi posición» (con el icono de localizar de /mapa), «▸ Revisa y envía» y la frase de
 privacidad; lo que cubren la tarjeta y el dock es el padding del mapa,
 así que el centro del mapa — el pin (D-052) — es el centro de lo que
 queda visible entre ambos. El pin es siempre el centro en el que el
@@ -1714,7 +1714,7 @@ nada. Desde entonces el pin es suyo (manual, sin
 precisión) y la observación solo lo juzga: alejarse 60 m retira
 «Revisa y envía» con «Ese punto está a 60 m de ti. El máximo son
 50 m.» y pone la retícula en naranja (el color de aviso del tema);
-«Volver a mi posición» recentra y devuelve el seguimiento. El
+«Mi posición» recentra y devuelve el seguimiento. El
 seguimiento no vuelve solo: aquí el vecino está apuntando. Con el mapa
 alejado por debajo del zoom 16 no se continúa («Acerca el mapa hasta
 ver la calle»), como el minMarkZoom de Alcorqueando. Al confirmar, la

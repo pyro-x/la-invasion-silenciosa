@@ -21,6 +21,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
+import { LocateFixed } from 'lucide-react'
 import { LocationNotice } from '@/components/map/LocationNotice'
 import { locatePanel } from '@/components/map/locatePanel'
 import { PrecisionBadge } from '@/components/map/PrecisionBadge'
@@ -357,8 +358,14 @@ export function LocationStep({
         <div className="hunt-dock-note">{note}</div>
         <div className="row" style={{ gap: 8 }}>
           {me && (
-            <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={recenter}>
-              📡 Volver a mi posición
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ flex: 1, gap: 8, whiteSpace: 'nowrap' }}
+              onClick={recenter}
+            >
+              <LocateFixed size={18} aria-hidden />
+              Mi posición
             </button>
           )}
           <button

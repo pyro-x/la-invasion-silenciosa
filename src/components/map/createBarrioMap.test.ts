@@ -2083,7 +2083,7 @@ describe('picker mode (LCHP-36)', () => {
     expect(recorded.eases.at(-1)).toMatchObject({ padding: { top: 80, bottom: 220 } })
   })
 
-  it('«Volver a mi posición» eases to the position at street zoom, above the dock', () => {
+  it('«Mi posición» eases to the position at street zoom, above the dock', () => {
     const { controller } = mountPicker()
     emit('load')
     controller.setPadding(220)

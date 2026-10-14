@@ -317,7 +317,7 @@ describe('capture flow (Cazar)', () => {
       )
       // the prompt no longer belongs to this step
       expect(screen.queryByRole('button', { name: /Usar mi ubicación/ })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Volver a mi posición/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Mi posición/ })).toBeInTheDocument()
     })
 
     it('the pin can be nudged near the neighbour: sent as placed by hand, with no accuracy claim', async () => {
@@ -356,7 +356,7 @@ describe('capture flow (Cazar)', () => {
       ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
 
-      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      await user.click(screen.getByRole('button', { name: /Mi posición/ }))
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
       )
@@ -401,7 +401,7 @@ describe('capture flow (Cazar)', () => {
       })
     })
 
-    it("a fix during the neighbour's gesture does not move the map; «Volver a mi posición» hands it back", async () => {
+    it("a fix during the neighbour's gesture does not move the map; «Mi posición» hands it back", async () => {
       const user = userEvent.setup()
       renderHunt()
       await walkToLocation(user)
@@ -420,7 +420,7 @@ describe('capture flow (Cazar)', () => {
       expect(flights()).toBe(before)
 
       // back to the position: the watch has the map again, and the next fix moves it
-      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      await user.click(screen.getByRole('button', { name: /Mi posición/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
       expect(flights()).toBe(before + 1)
       act(() =>
@@ -520,7 +520,7 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByTestId('reticle')).toHaveClass('is-far')
     })
 
-    it('walking away from a pin placed by hand re-judges it; «Volver a mi posición» brings it back with its accuracy', async () => {
+    it('walking away from a pin placed by hand re-judges it; «Mi posición» brings it back with its accuracy', async () => {
       const user = userEvent.setup()
       submitMock.mockResolvedValue({ kind: 'created', id: 'returned' })
       renderHunt()
@@ -541,7 +541,7 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
       expect(screen.getByTestId('reticle')).toHaveClass('is-far')
 
-      await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
+      await user.click(screen.getByRole('button', { name: /Mi posición/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
@@ -582,7 +582,7 @@ describe('capture flow (Cazar)', () => {
       expect(guidance).not.toHaveTextContent('a mano')
       expect(screen.getByText('Activa tu ubicación para situar la criatura')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-      expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Mi posición/ })).not.toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Reintentar' }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
@@ -678,7 +678,7 @@ describe('capture flow (Cazar)', () => {
       await walkToLocation(user)
       expect(await screen.findByText('Buscando tu posición…')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
-      expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Mi posición/ })).not.toBeInTheDocument()
 
       act(() => watcher().success(geoFix(HERE, 9)))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()

@@ -90,7 +90,7 @@ describe('location step', () => {
       screen.queryByText('Activa tu ubicación para situar la criatura'),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /Volver a mi posición|Usar mi ubicación/ }),
+      screen.queryByRole('button', { name: /Mi posición|Usar mi ubicación/ }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
   })
@@ -111,7 +111,7 @@ describe('location step', () => {
     expect(
       await screen.findByText('Para seguir jugando, el mapa tiene que volver a saber dónde estás.'),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Volver a mi posición/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Mi posición/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Usar mi ubicación' }))
     expect(onLocate).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
