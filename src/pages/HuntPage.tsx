@@ -130,6 +130,8 @@ export function HuntPage() {
   // A stream granted while the position is refused would keep the camera
   // light on behind the guidance: it is released, and the viewfinder opens
   // again by itself once the door passes (the permission is already given).
+  // Judged again when a stream arrives (`cameraArmed`): the refusal may
+  // have come first.
   const refused =
     geo.kind === 'denied' ||
     geo.kind === 'unavailable' ||
@@ -139,7 +141,7 @@ export function HuntPage() {
     if (passed || !refused) return
     primedStreamRef.current?.getTracks().forEach((track) => track.stop())
     primedStreamRef.current = null
-  }, [passed, refused])
+  }, [passed, refused, cameraArmed])
 
   function takePrimedStream(): MediaStream | null {
     const stream = primedStreamRef.current

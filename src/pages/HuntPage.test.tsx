@@ -608,6 +608,30 @@ describe('capture flow (Cazar)', () => {
       expect(getUserMedia).toHaveBeenCalledTimes(2)
     })
 
+    it('a camera granted after the position was already refused is released on arrival', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      cameraStateMock.mockResolvedValue('prompt')
+      phoneHolds()
+      const stopTrack = vi.fn()
+      let grant: (stream: MediaStream) => void = () => {}
+      stubNavigator({
+        mediaDevices: {
+          getUserMedia: () => new Promise<MediaStream>((resolve) => (grant = resolve)),
+        },
+      })
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+      // the position is refused first...
+      act(() => watcher().fail(geoFailure(1)))
+      await screen.findByText(/candado de la barra/)
+      // ...and the camera answers afterwards, well before the limit
+      act(() => grant(fakeCamera(stopTrack)))
+      await waitFor(() => expect(stopTrack).toHaveBeenCalled())
+      expect(screen.getByText(/candado de la barra/)).toBeInTheDocument()
+    })
+
     it('a camera the browser grants after the door gave up on it is stopped on arrival', async () => {
       vi.useFakeTimers()
       try {
