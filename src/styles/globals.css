@@ -32,6 +32,7 @@
   --color-accent-3: #ff8000;
   --color-good: #2f7d4a;
   --color-warn: #e07a16;
+  --color-bad: #a00000;
 
   --font-body: 'Space Grotesk', system-ui, sans-serif;
   --font-mono: 'Space Mono', monospace;
@@ -53,6 +54,8 @@
   --accent3: #ff8000;
   --good: #2f7d4a;
   --warn: #e07a16;
+  /* error text: the accent red, not --warn, whose orange is ~3:1 on the cards */
+  --bad: #a00000;
   --bw: 2px;
   --radius: 18px;
   --shadow: 0 5px 16px rgba(74, 22, 12, 0.13);
