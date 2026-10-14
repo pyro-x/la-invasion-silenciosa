@@ -6,13 +6,14 @@ import { LocationStep } from './LocationStep'
 // reports the barrio frame's centre on load, as the real map does when it
 // could not open where it was asked to.
 const reported = vi.hoisted(() => ({ centre: { lat: 40.4118, lng: -3.7105 } }))
-vi.mock('@/components/map/LocationPickerMap', () => ({
-  LocationPickerMap: ({
+vi.mock('@/components/map/PickerMap', () => ({
+  PICK_ZOOM: 17,
+  PickerMap: ({
     onCenterChanged,
   }: {
-    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
+    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean, zoom: number) => void
   }) => {
-    onCenterChanged(reported.centre, false)
+    onCenterChanged(reported.centre, false, 17)
     return <div data-testid="picker-map" />
   },
 }))
@@ -24,6 +25,7 @@ describe('location step', () => {
   it('shows the age of the position, not a fresh error, once it is old', async () => {
     render(
       <LocationStep
+        header={null}
         position={null}
         geo={{ kind: 'ok', position: { ...HERE, at: Date.now() - 3 * 60_000 } }}
         onPositionChanged={noop}
@@ -39,6 +41,7 @@ describe('location step', () => {
     const onPositionChanged = vi.fn()
     render(
       <LocationStep
+        header={null}
         position={null}
         geo={{ kind: 'ok', position: HERE }}
         onPositionChanged={onPositionChanged}
@@ -61,6 +64,7 @@ describe('location step', () => {
   it('a watch still searching says so, and offers nothing to tap yet', async () => {
     render(
       <LocationStep
+        header={null}
         position={null}
         geo={{ kind: 'searching', position: null }}
         onPositionChanged={noop}
@@ -83,6 +87,7 @@ describe('location step', () => {
     const onLocate = vi.fn()
     render(
       <LocationStep
+        header={null}
         position={null}
         geo={{ kind: 'paused', position: null }}
         onPositionChanged={noop}

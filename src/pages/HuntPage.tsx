@@ -239,201 +239,208 @@ export function HuntPage() {
     )
   }
 
+  const header = (
+    <>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div>
+          <div className="eyebrow">Nuevo avistamiento</div>
+          <div className="scr-title" style={{ fontSize: 18 }}>
+            {STEP_TITLES[state.step]}
+          </div>
+        </div>
+        <Link to="/mapa" aria-label="Cerrar" className="chip chip-ghost">
+          ✕
+        </Link>
+      </div>
+
+      {/* step indicator: completed segments navigate back without losing data */}
+      {!showGate && (
+        <div className="row" style={{ gap: 6 }}>
+          {([0, 1, 2, 3] as const).map((step) => (
+            <button
+              key={step}
+              type="button"
+              aria-label={`Paso ${step + 1}`}
+              disabled={step >= state.step}
+              onClick={() => dispatch({ type: 'STEP_SELECTED', step })}
+              className="grow"
+              style={{
+                height: 6,
+                borderRadius: 3,
+                border: 'none',
+                padding: 0,
+                cursor: step < state.step ? 'pointer' : 'default',
+                background: step <= state.step ? 'var(--accent)' : 'var(--line)',
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <Frame>
-      <div className="pad stack" style={{ gap: 16 }}>
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <div className="eyebrow">Nuevo avistamiento</div>
-            <div className="scr-title" style={{ fontSize: 18 }}>
-              {STEP_TITLES[state.step]}
-            </div>
-          </div>
-          <Link to="/mapa" aria-label="Cerrar" className="chip chip-ghost">
-            ✕
-          </Link>
-        </div>
+      {state.step === 2 ? (
+        <LocationStep
+          header={header}
+          position={state.position}
+          geo={geo}
+          onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
+          onLocate={startGeoWatch}
+          onNext={() => dispatch({ type: 'NEXT' })}
+        />
+      ) : (
+        <div className="pad stack" style={{ gap: 16 }}>
+          {header}
 
-        {/* step indicator: completed segments navigate back without losing data */}
-        {!showGate && (
-          <div className="row" style={{ gap: 6 }}>
-            {([0, 1, 2, 3] as const).map((step) => (
+          {showGate && (
+            <EquipmentGate
+              geo={geo}
+              cameraReady={cameraReady}
+              located={located}
+              waitingForFix={waitingForFix}
+              arming={arming}
+              onArm={armEquipment}
+            />
+          )}
+
+          {!showGate && checked && state.step === 0 && (
+            <PhotoStep
+              photo={state.photo}
+              autoStart={autoStartCamera}
+              takePrimedStream={takePrimedStream}
+              onPhotoReady={(photo) => dispatch({ type: 'PHOTO_READY', photo })}
+              onRetake={() => {
+                if (state.photo) URL.revokeObjectURL(state.photo.previewUrl)
+                dispatch({ type: 'PHOTO_CLEARED' })
+              }}
+              onConfirm={() => dispatch({ type: 'NEXT' })}
+            />
+          )}
+
+          {state.step === 1 && (
+            <div className="stack" style={{ gap: 12 }}>
+              <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+                ¿Qué has encontrado?
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {species?.map((sp) => (
+                  <button
+                    key={sp.id}
+                    className="panel pad"
+                    onClick={() => dispatch({ type: 'SPECIES_SELECTED', speciesId: sp.id })}
+                    style={{
+                      padding: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                      borderColor: state.speciesId === sp.id ? 'var(--accent)' : 'var(--line)',
+                      background: state.speciesId === sp.id ? 'var(--card2)' : 'var(--card)',
+                    }}
+                  >
+                    <CreatureSprite id={sp.id} scale={4} />
+                    <span className="display" style={{ fontSize: 9 }}>
+                      {sp.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
               <button
-                key={step}
-                type="button"
-                aria-label={`Paso ${step + 1}`}
-                disabled={step >= state.step}
-                onClick={() => dispatch({ type: 'STEP_SELECTED', step })}
-                className="grow"
-                style={{
-                  height: 6,
-                  borderRadius: 3,
-                  border: 'none',
-                  padding: 0,
-                  cursor: step < state.step ? 'pointer' : 'default',
-                  background: step <= state.step ? 'var(--accent)' : 'var(--line)',
-                }}
-              />
-            ))}
-          </div>
-        )}
+                className="btn btn-cta"
+                disabled={!isStepComplete(state, 1)}
+                style={{ opacity: isStepComplete(state, 1) ? 1 : 0.45 }}
+                onClick={() => dispatch({ type: 'NEXT' })}
+              >
+                ▸ Sitúala en el mapa
+              </button>
+            </div>
+          )}
 
-        {showGate && (
-          <EquipmentGate
-            geo={geo}
-            cameraReady={cameraReady}
-            located={located}
-            waitingForFix={waitingForFix}
-            arming={arming}
-            onArm={armEquipment}
-          />
-        )}
-
-        {!showGate && checked && state.step === 0 && (
-          <PhotoStep
-            photo={state.photo}
-            autoStart={autoStartCamera}
-            takePrimedStream={takePrimedStream}
-            onPhotoReady={(photo) => dispatch({ type: 'PHOTO_READY', photo })}
-            onRetake={() => {
-              if (state.photo) URL.revokeObjectURL(state.photo.previewUrl)
-              dispatch({ type: 'PHOTO_CLEARED' })
-            }}
-            onConfirm={() => dispatch({ type: 'NEXT' })}
-          />
-        )}
-
-        {state.step === 1 && (
-          <div className="stack" style={{ gap: 12 }}>
-            <p className="muted" style={{ margin: 0, fontSize: 14 }}>
-              ¿Qué has encontrado?
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {species?.map((sp) => (
-                <button
-                  key={sp.id}
-                  className="panel pad"
-                  onClick={() => dispatch({ type: 'SPECIES_SELECTED', speciesId: sp.id })}
+          {state.step === 3 && state.speciesId !== null && (
+            <div className="stack" style={{ gap: 12 }}>
+              <div className="panel pad" style={{ padding: 14, display: 'flex', gap: 14 }}>
+                <div
+                  className="photo-ph center"
                   style={{
-                    padding: 12,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 8,
-                    cursor: 'pointer',
-                    borderColor: state.speciesId === sp.id ? 'var(--accent)' : 'var(--line)',
-                    background: state.speciesId === sp.id ? 'var(--card2)' : 'var(--card)',
+                    width: 84,
+                    height: 84,
+                    flexShrink: 0,
+                    position: 'relative',
+                    overflow: 'hidden',
                   }}
                 >
-                  <CreatureSprite id={sp.id} scale={4} />
-                  <span className="display" style={{ fontSize: 9 }}>
-                    {sp.name}
+                  {state.photo ? (
+                    <img
+                      src={state.photo.previewUrl}
+                      alt="Foto del avistamiento"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : (
+                    <CreatureSprite id={state.speciesId} scale={4} />
+                  )}
+                </div>
+                <div className="grow stack" style={{ gap: 6, justifyContent: 'center' }}>
+                  <span className="display" style={{ fontSize: 12 }}>
+                    {species?.find((sp) => sp.id === state.speciesId)?.name}
                   </span>
-                </button>
-              ))}
-            </div>
-            <button
-              className="btn btn-cta"
-              disabled={!isStepComplete(state, 1)}
-              style={{ opacity: isStepComplete(state, 1) ? 1 : 0.45 }}
-              onClick={() => dispatch({ type: 'NEXT' })}
-            >
-              ▸ Sitúala en el mapa
-            </button>
-          </div>
-        )}
-
-        {state.step === 2 && (
-          <LocationStep
-            position={state.position}
-            geo={geo}
-            onPositionChanged={(position) => dispatch({ type: 'POSITION_CHANGED', position })}
-            onLocate={startGeoWatch}
-            onNext={() => dispatch({ type: 'NEXT' })}
-          />
-        )}
-
-        {state.step === 3 && state.speciesId !== null && (
-          <div className="stack" style={{ gap: 12 }}>
-            <div className="panel pad" style={{ padding: 14, display: 'flex', gap: 14 }}>
-              <div
-                className="photo-ph center"
-                style={{
-                  width: 84,
-                  height: 84,
-                  flexShrink: 0,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {state.photo ? (
-                  <img
-                    src={state.photo.previewUrl}
-                    alt="Foto del avistamiento"
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
-                ) : (
-                  <CreatureSprite id={state.speciesId} scale={4} />
-                )}
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
+                    La Latina · Ubicación aproximada
+                  </span>
+                  <span className="chip chip-warn" style={{ alignSelf: 'flex-start' }}>
+                    Por verificar
+                  </span>
+                </div>
               </div>
-              <div className="grow stack" style={{ gap: 6, justifyContent: 'center' }}>
-                <span className="display" style={{ fontSize: 12 }}>
-                  {species?.find((sp) => sp.id === state.speciesId)?.name}
-                </span>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--ink-dim)' }}>
-                  La Latina · Ubicación aproximada
-                </span>
-                <span className="chip chip-warn" style={{ alignSelf: 'flex-start' }}>
-                  Por verificar
-                </span>
-              </div>
-            </div>
-            <PrivacyNote />
-            {sendBlock && (
-              <div
-                className="panel panel-2 pad stack"
-                role="status"
-                style={{ padding: 12, gap: 10, fontSize: 12.5, color: 'var(--ink-dim)' }}
-              >
-                <span>{sendBlock}</span>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => dispatch({ type: 'STEP_SELECTED', step: 2 })}
+              <PrivacyNote />
+              {sendBlock && (
+                <div
+                  className="panel panel-2 pad stack"
+                  role="status"
+                  style={{ padding: 12, gap: 10, fontSize: 12.5, color: 'var(--ink-dim)' }}
                 >
-                  ◂ Volver a situarla
-                </button>
-              </div>
-            )}
-            {state.submitError && (
-              <div
-                className="panel pad"
-                role="alert"
-                style={{ padding: 12, fontSize: 12.5, color: 'var(--bad)' }}
+                  <span>{sendBlock}</span>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => dispatch({ type: 'STEP_SELECTED', step: 2 })}
+                  >
+                    ◂ Volver a situarla
+                  </button>
+                </div>
+              )}
+              {state.submitError && (
+                <div
+                  className="panel pad"
+                  role="alert"
+                  style={{ padding: 12, fontSize: 12.5, color: 'var(--bad)' }}
+                >
+                  {state.submitError}
+                </div>
+              )}
+              <button
+                className="btn btn-accent"
+                onClick={() => void submit()}
+                disabled={state.sending || sendBlock !== null}
               >
-                {state.submitError}
-              </div>
-            )}
-            <button
-              className="btn btn-accent"
-              onClick={() => void submit()}
-              disabled={state.sending || sendBlock !== null}
-            >
-              {state.sending
-                ? 'Enviando…'
-                : state.submitError
-                  ? '⟳ Reintentar'
-                  : '▲ Enviar al registro'}
-            </button>
-          </div>
-        )}
-      </div>
+                {state.sending
+                  ? 'Enviando…'
+                  : state.submitError
+                    ? '⟳ Reintentar'
+                    : '▲ Enviar al registro'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </Frame>
   )
 }

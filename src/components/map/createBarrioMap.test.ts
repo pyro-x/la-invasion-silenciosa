@@ -1828,3 +1828,85 @@ describe('circlePolygon', () => {
     }
   })
 })
+
+describe('picker mode (LCHP-36)', () => {
+  const HERE = { lat: 40.4116, lng: -3.7102 }
+  function mountPicker(center: { lat: number; lng: number } | null = HERE) {
+    const centres: { center: { lat: number; lng: number }; byUser: boolean; zoom: number }[] = []
+    const controller = createBarrioMap(
+      document.createElement('div'),
+      {
+        onPick: () => {},
+        onMapTap: () => {},
+        onUserMove: () => {},
+        onUserSettled: () => {},
+        onCenterChanged: (at, byUser, zoom) => centres.push({ center: at, byUser, zoom }),
+      },
+      { mode: 'picker', center: center ?? undefined, zoom: 17 },
+    )
+    mounted.push(controller)
+    return { controller, centres }
+  }
+
+  it('opens where it is asked, not on the saved view, and never writes one', () => {
+    const remembered = JSON.stringify({ center: [-3.709, 40.412], zoom: 14 })
+    localStorage.setItem('lis.map.view', remembered)
+    const { centres } = mountPicker()
+    expect(recorded.options.at(-1)).toMatchObject({ center: [-3.7102, 40.4116], zoom: 17 })
+    emit('load')
+    userDrag()
+    expect(stored()).toBe(remembered)
+    expect(centres.map((c) => c.byUser)).toEqual([false, true])
+  })
+
+  it('without a position it opens on the barrio, with no fit to wait for', () => {
+    const { controller } = mountPicker(null)
+    expect(recorded.options.at(-1)).toMatchObject({ bounds: expect.anything() })
+    emit('load')
+    controller.setBottomPadding(200)
+    expect(recorded.fits).toHaveLength(0)
+    expect(recorded.paddings.at(-1)).toEqual({ top: 0, left: 0, right: 0, bottom: 200 })
+  })
+
+  it('draws the position and its radius, and nothing of the sightings', async () => {
+    const { controller } = mountPicker()
+    emit('load')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(recorded.layers.map((layer) => layer.id)).toEqual([
+      'me-accuracy',
+      'me-range',
+      'me-halo',
+      'me-dot',
+    ])
+    expect(recorded.images).toHaveLength(0)
+    expect(recorded.sources['sightings']).toBeUndefined()
+    controller.setMe({ ...HERE, accuracyM: 9 }, 50)
+    expect(lastData('me-range')).toMatchObject({ geometry: { type: 'LineString' } })
+    // the position never forgets a view here: the barrio map's is the barrio map's
+    expect(stored()).toBeNull()
+  })
+
+  it("a zoom button is the app's move; a drag and a wheel are the neighbour's", () => {
+    const { controller, centres } = mountPicker()
+    emit('load')
+    controller.zoomBy(1)
+    emit('moveend')
+    userDrag()
+    emit('wheel')
+    emit('moveend')
+    expect(centres.slice(1).map((c) => c.byUser)).toEqual([false, true, true])
+  })
+
+  it('«Volver a mi posición» eases to the position at street zoom, above the dock', () => {
+    const { controller } = mountPicker()
+    emit('load')
+    controller.setBottomPadding(220)
+    recorded.zoom = 14
+    controller.follow(HERE, 17)
+    expect(recorded.eases.at(-1)).toMatchObject({
+      center: [-3.7102, 40.4116],
+      zoom: 17,
+      padding: { bottom: 220 },
+    })
+  })
+})

@@ -33,33 +33,47 @@ const drag = vi.hoisted(() => ({ to: { lat: 40.4116, lng: -3.7102 } }))
 
 // The MapLibre picker needs WebGL; the stub reports its opening centre once
 // (the position it was given, or the barrio frame) and, when a fly is
-// requested, its landing — like the real map.
-vi.mock('@/components/map/LocationPickerMap', () => ({
-  LocationPickerMap: ({
+// requested, its landing — like the real map. Its buttons stand in for the
+// neighbour's gestures.
+vi.mock('@/components/map/PickerMap', () => ({
+  PICK_ZOOM: 17,
+  PickerMap: ({
     initialCenter,
     flyTo,
     onCenterChanged,
   }: {
     initialCenter: { lat: number; lng: number } | null
     flyTo: { lat: number; lng: number } | null
-    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean) => void
+    onCenterChanged: (center: { lat: number; lng: number }, byUser: boolean, zoom: number) => void
   }) => {
     const sent = useRef(false)
     const flown = useRef<{ lat: number; lng: number } | null>(null)
+    const centre = useRef(initialCenter ?? { lat: 40.4118, lng: -3.7105 })
     useEffect(() => {
       if (!sent.current) {
         sent.current = true
-        onCenterChanged(initialCenter ?? { lat: 40.4118, lng: -3.7105 }, false)
+        onCenterChanged(centre.current, false, 17)
       }
       // a new object is a new fly, as in the real map
       if (flyTo && flown.current !== flyTo) {
         flown.current = flyTo
-        onCenterChanged(flyTo, false)
+        centre.current = flyTo
+        onCenterChanged(flyTo, false, 17)
       }
     })
     return (
       <div data-testid="picker-map">
-        <button aria-label="drag the map" onClick={() => onCenterChanged(drag.to, true)} />
+        <button
+          aria-label="drag the map"
+          onClick={() => {
+            centre.current = drag.to
+            onCenterChanged(drag.to, true, 17)
+          }}
+        />
+        <button
+          aria-label="pinch the map out"
+          onClick={() => onCenterChanged(centre.current, true, 14)}
+        />
       </div>
     )
   },
@@ -83,6 +97,8 @@ const permissionsQueryMock = vi.fn<() => Promise<{ state: PermissionState }>>()
 const HERE = { latitude: 40.4116, longitude: -3.7102 }
 // About 60 m north of HERE: outside the capture radius.
 const SIXTY_M_NORTH = { latitude: 40.4116 + 60 / 111_195, longitude: -3.7102 }
+// About 90 m north of HERE: 68 m from a pin placed 22 m north.
+const NINETY_M_NORTH = { latitude: 40.4116 + 90 / 111_195, longitude: -3.7102 }
 
 function geoFix(
   { latitude, longitude }: { latitude: number; longitude: number },
@@ -187,10 +203,13 @@ async function walkToLocation(user: ReturnType<typeof userEvent.setup>) {
 
 async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
   await walkToLocation(user)
-  // step 3 opens on the position the watch already has: no tap
+  // step 3 opens on the position the watch already has: no tap. The way on
+  // opens once the (lazy) picker has reported its opening centre, and the
+  // review once the reticle's stamp has played.
   expect(await screen.findByText('Tu posición')).toBeInTheDocument()
   await waitFor(() => expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
+  await screen.findByRole('button', { name: /Enviar al registro/ })
 }
 
 describe('capture flow (Cazar)', () => {
@@ -292,7 +311,7 @@ describe('capture flow (Cazar)', () => {
       expect(await screen.findByText('Pin ajustado a mano · a 22 m de ti')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
-      await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+      await user.click(await screen.findByRole('button', { name: /Enviar al registro/ }))
       await waitFor(() => expect(submitMock).toHaveBeenCalled())
       expect(submitMock.mock.calls[0][0]).toMatchObject({
         lat: 40.4118,
@@ -336,19 +355,62 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
     })
 
-    it('walking away re-judges the pin where it is; «Volver a mi posición» brings it back with its accuracy', async () => {
+    it('the map follows the neighbour until they take it: each fix recentres the pin with its accuracy', async () => {
+      const user = userEvent.setup()
+      submitMock.mockResolvedValue({ kind: 'created', id: 'followed' })
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+
+      // the neighbour walks 22 m north: the pin goes with them
+      act(() => watcher().success(geoFix({ latitude: 40.4118, longitude: -3.7102 }, 7)))
+      expect(await screen.findByText('± 7 m')).toBeInTheDocument()
+      expect(screen.getByText('Tu posición')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
+      )
+      await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
+      await user.click(await screen.findByRole('button', { name: /Enviar al registro/ }))
+      await waitFor(() => expect(submitMock).toHaveBeenCalled())
+      expect(submitMock.mock.calls[0][0]).toMatchObject({
+        lat: 40.4118,
+        lng: -3.7102,
+        accuracyM: 7,
+      })
+    })
+
+    it('the map zoomed out past the street places no creature, and says so', async () => {
+      const user = userEvent.setup()
+      renderHunt()
+      await walkToLocation(user)
+      await screen.findByText('Tu posición')
+
+      await user.click(screen.getByRole('button', { name: 'pinch the map out' }))
+      expect(await screen.findByText('Acerca el mapa hasta ver la calle')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(screen.getByTestId('reticle')).toHaveClass('is-far')
+    })
+
+    it('walking away from a pin placed by hand re-judges it; «Volver a mi posición» brings it back with its accuracy', async () => {
       const user = userEvent.setup()
       submitMock.mockResolvedValue({ kind: 'created', id: 'returned' })
       renderHunt()
       await walkToLocation(user)
       await screen.findByText('Tu posición')
 
-      // the phone reports the neighbour 60 m north of the pin
-      act(() => watcher().success(geoFix(SIXTY_M_NORTH, 7)))
+      // the pin is placed by hand 22 m north; the map is the neighbour's now
+      drag.to = { lat: 40.4118, lng: -3.7102 }
+      await user.click(screen.getByRole('button', { name: 'drag the map' }))
+      await screen.findByText('Pin ajustado a mano · a 22 m de ti')
+      expect(screen.getByTestId('reticle')).not.toHaveClass('is-far')
+
+      // the phone reports the neighbour 90 m north of where they stood
+      act(() => watcher().success(geoFix(NINETY_M_NORTH, 7)))
       expect(
-        await screen.findByText(/Ese punto está a 6\d m de ti\. El máximo son 50 m\./),
+        await screen.findByText(/Ese punto está a \d\d m de ti\. El máximo son 50 m\./),
       ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeDisabled()
+      expect(screen.getByTestId('reticle')).toHaveClass('is-far')
 
       await user.click(screen.getByRole('button', { name: /Volver a mi posición/ }))
       expect(await screen.findByText('Tu posición')).toBeInTheDocument()
@@ -356,12 +418,12 @@ describe('capture flow (Cazar)', () => {
         expect(screen.getByRole('button', { name: /Revisa y envía/ })).toBeEnabled(),
       )
       await user.click(screen.getByRole('button', { name: /Revisa y envía/ }))
-      await user.click(screen.getByRole('button', { name: /Enviar al registro/ }))
+      await user.click(await screen.findByRole('button', { name: /Enviar al registro/ }))
       await waitFor(() => expect(submitMock).toHaveBeenCalled())
       // the pin went back to the newest position, with that position's accuracy
       expect(submitMock.mock.calls[0][0]).toMatchObject({
-        lat: SIXTY_M_NORTH.latitude,
-        lng: SIXTY_M_NORTH.longitude,
+        lat: NINETY_M_NORTH.latitude,
+        lng: NINETY_M_NORTH.longitude,
         accuracyM: 7,
       })
     })

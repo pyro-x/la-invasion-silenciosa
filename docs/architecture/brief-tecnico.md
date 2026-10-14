@@ -1594,17 +1594,34 @@ sistema / galería (D-050) → pipeline §17.1 → previsualización
 ↓
 Elige especie (catálogo real)
 ↓
-«¿Dónde está la criatura?»: mapa MapLibre con pin fijo al centro —
-arrastra el mapa debajo del pin (D-052). Abre YA centrado en la
-posición viva de la observación, sin vuelo desde el encuadre del
-barrio; las posiciones siguientes no mueven el mapa (el seguimiento
-en este paso es LCHP-36) pero sí re-juzgan el pin en vivo: alejarse
-60 m retira «Revisa y envía» con «Ese punto está a 60 m de ti. El
-máximo son 50 m.», y «Volver a mi posición» recentra. Una posición
-perdida (permiso retirado, pausa al volver de segundo plano, sin
-señal) muestra el mismo aviso que la puerta y que /mapa
-(LocationNotice), con «Reintentar» / «Usar mi ubicación» como el
-toque que reinicia la observación.
+«¿Dónde está la criatura?» (LCHP-36, D-071): el mapa ES la pantalla.
+Es el mismo controlador de /mapa en modo selector (createBarrioMap,
+mode: 'picker'): abre YA centrado en la posición viva de la
+observación a zoom 17, sin vuelo desde el encuadre del barrio, no
+recuerda ninguna vista, no dibuja avistamientos y sí la posición del
+vecino con su círculo de precisión y el anillo de 50 m en el que puede
+moverse el pin. El pin es la retícula de Alcorqueando, fija en el
+centro del mapa que el dock deja libre (top: calc((100% − dock) / 2));
+la cabecera (título, ✕, indicador de pasos) flota arriba en una
+tarjeta y el dock flota abajo con la línea de estado, la precisión,
+«📡 Volver a mi posición», «▸ Revisa y envía» y la frase de
+privacidad; la altura del dock es el padding inferior del mapa, así
+que el centro del mapa — el pin (D-052) — es el centro de lo visible.
+El mapa SIGUE al vecino: cada posición nueva lo recentra (ignorando
+saltos de menos de 0,7 m) y re-etiqueta el pin como GPS con la
+precisión de esa posición, hasta que el vecino arrastra el mapa — desde
+entonces el pin es suyo (manual, sin precisión) y la observación solo
+lo juzga: alejarse 60 m retira «Revisa y envía» con «Ese punto está a
+60 m de ti. El máximo son 50 m.» y pone la retícula en rojo;
+«Volver a mi posición» recentra y devuelve el seguimiento. El
+seguimiento no vuelve solo: aquí el vecino está apuntando. Con el mapa
+alejado por debajo del zoom 16 no se continúa («Acerca el mapa hasta
+ver la calle»), como el minMarkZoom de Alcorqueando. Al confirmar, la
+retícula hace el sello (420 ms; sin animación con reduced motion) y
+pasa a la revisión. Una posición perdida (permiso retirado, pausa al
+volver de segundo plano, sin señal) muestra en el dock el mismo aviso
+que la puerta y que /mapa (LocationNotice), con «Reintentar» /
+«Usar mi ubicación» como el toque que reinicia la observación.
 Desde LCHP-49 (D-069) hace falta posición: el pin se puede ajustar a mano
 solo a menos de 50 m del vecino; sin posición, o con una peor que ± 150 m,
 no se continúa; una posición vieja avisa y no bloquea. Lo enviado no
