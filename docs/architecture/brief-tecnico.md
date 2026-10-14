@@ -1255,7 +1255,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   ahí al cambiar de app y volver; no se anotó la versión de iOS ni si la
   observación se reanudó o nunca llegó a pausarse, así que no está medido
   cuántas veces ocurre la pausa en otros iPhone. Al salir de la pantalla se deja
-  de observar y se olvida la posición (también en memoria). Los avisos
+  de observar; desde LCHP-56 la última posición puede esperar en memoria,
+  sin mostrarse, a que se vuelva (ver «Volver al mapa», más abajo; hasta
+  entonces se olvidaba también en memoria). Los avisos
   (denegado → cómo permitirlo, texto por plataforma; sin señal; **fuera de
   La Latina no se muestra ni se sigue la posición**) se ven en la cabecera
   de la hoja, plegada o no. Hasta LCHP-49 solo tras tocar el botón; desde
@@ -1265,8 +1267,9 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 * **Privacidad de la posición del vecino:** no se envía a nuestros
   servidores ni se guarda. La vista recordada (abajo) solo registra
   movimientos hechos por el vecino, nunca los de la app, y **no registra
-  nada desde que su posición aparece en el mapa hasta que se sale de la
-  pantalla**: aunque el punto desaparezca (permiso retirado, pausa, salir
+  nada desde que su posición aparece en el mapa hasta que se recarga la
+  página** (hasta LCHP-56, hasta que se salía de la pantalla; ahora el mapa
+  vuelve a abrirse sobre la vista que tenía, ver «Volver al mapa»): aunque el punto desaparezca (permiso retirado, pausa, salir
   del barrio), el mapa puede seguir centrado en, o al lado de, donde está. Lo único que sale del dispositivo son las peticiones de
   teselas del basemap, como en cualquier mapa: OpenFreeMap sirve teselas
   hasta z14, así que ve, como mucho, qué celda de ~1,7×1,3 km se está
@@ -1277,13 +1280,15 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
   inicial, cambio de altura de la hoja, ir a un pin, seguir la posición)
   no se guardan; los botones +/− sí cuentan como elección del vecino.
   Consecuencia aceptada: quien ha visto su posición en el mapa no ve
-  recordada la vista de esa visita a la pantalla. Al aparecer la posición
-  se borra además la vista guardada: como ya no se va a guardar otra, la
-  antigua volvería en cada visita. Tras una visita en la que apareció el
-  punto, la siguiente abre encuadrada al barrio. (Si el punto no llega a
-  aparecer — posición fuera del barrio, navegador que no reanuda sin
-  toque, salir antes de la primera posición — la vista se sigue
-  recordando.)
+  recordada en `localStorage` ninguna vista de esa sesión de la app. Al
+  aparecer la posición se borra además la vista guardada: como ya no se va
+  a guardar otra, la antigua volvería en cada visita. Tras una sesión en la
+  que apareció el punto, la siguiente (al recargar o volver a abrir la app)
+  abre encuadrada al barrio. (Si el punto no llega a aparecer — posición
+  fuera del barrio, navegador que no reanuda sin toque, salir antes de la
+  primera posición — la vista se sigue recordando.) Dentro de una misma
+  sesión, volver al mapa desde otra pantalla abre la vista que tenía, desde
+  la memoria (LCHP-56, ver «Volver al mapa»).
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setSelected`,
@@ -1548,6 +1553,87 @@ evidencia» no cambia: abierta a cualquiera, desde cualquier sitio.
 **No verificado:** GPS real en las calles de La Latina, ni el aviso de
 permiso en iPhone y Android con este flujo. Queda para el paseo de David
 con la preview.
+
+### Volver al mapa (LCHP-56 — enmienda 2026-10-14, D-071) `Decidido`
+
+Pedido por David (issue #56): el mapa localizaba al vecino, pero ir a
+cazar, a Especies, a Ranking o a Perfil y volver a «Mapa» lo devolvía al
+encuadre del barrio, a esperar una posición nueva (o un toque, en Safari).
+Era lo que decía este apartado: salir de la pantalla olvidaba la posición,
+también en memoria. Se cambia la regla: **dentro de una misma sesión de
+la app, volver al mapa es volver a donde estaba.**
+
+Se guardan dos cosas **solo en memoria** (`src/lib/mapSession.ts`, donde
+vive toda la política y sus constantes). Nada de esto se escribe en
+`localStorage`, `sessionStorage` ni IndexedDB, ni va a un registro ni a
+ninguna petición; recargar o cerrar la app lo borra.
+
+**La vista del mapa** (centro, zoom, si seguía al vecino y si ya se le
+había dado el acercamiento a z17):
+
+* al salir se guarda la vista que tenía el mapa, o a la que iba si estaba
+  moviéndose; al volver, el mapa se abre ahí y no se encuadra el barrio;
+* el seguimiento vuelve como estaba. Un mapa movido a mano vuelve donde se
+  dejó y sin seguir; la primera posición que llega no lo mueve, y la regla
+  de siempre (vuelve a seguir tras 10 s sin tocarlo y a más de 85 m del
+  centro, nunca con una ficha abierta) cuenta desde la vuelta;
+* una posición que llega después solo recentra: el acercamiento a z17 no
+  se da dos veces (el que quedó pendiente por una posición poco precisa sí
+  se da con la primera buena);
+* dura lo que dure la sesión; no caduca ni se borra si cambia el permiso:
+  es lo que ya estaba en la pantalla del vecino, y dentro de una visita ya
+  se aceptaba que la cámara se quede donde estaba cuando el punto se va;
+* **desde que una posición aparece en un mapa, no se guarda ninguna vista
+  en `localStorage` hasta recargar** (antes, hasta salir de la pantalla):
+  la vista recuperada puede estar sobre el vecino.
+
+**La última posición** (latitud, longitud, precisión y la hora en que se
+leyó):
+
+* al salir se deja de observar, como antes. La posición puede quedarse en
+  memoria con su hora y su precisión originales, pero **ninguna pantalla la
+  ve mientras no haya una observación en marcha**;
+* solo vuelve a mostrarse **cuando el navegador dice que el permiso sigue
+  concedido** y la observación se reanuda al llegar: el punto aparece al
+  instante y la primera posición nueva lo sustituye;
+* se descarta, lo que ocurra antes: al cumplir **2 minutos desde que se
+  leyó** (`stalePositionMs`: no se recupera nunca una posición que la app
+  ya llamaría antigua); si el navegador responde cualquier cosa que no sea
+  «concedido» (denegado, preguntaría otra vez, no sabe decirlo —Safari—, o
+  no hay API de permisos); con un error de permiso denegado; si la página
+  pasa a segundo plano sin observación en marcha; si está fuera de La
+  Latina; con un toque en «Usar mi ubicación» (un toque siempre busca de
+  nuevo); al recargar o cerrar la app;
+* con el permiso dudoso o denegado, el mapa vuelve igualmente a su vista,
+  sin punto, sin observación y sin aviso nativo: la hoja pide la ubicación
+  como siempre, y solo un toque arranca la observación.
+
+**Lo que no cambia de «Se juega donde estás».** Una posición recuperada
+sigue las reglas de siempre: la insignia dice su precisión y, a partir de
+los 2 minutos, su edad; una posición poco precisa bloquea; una antigua
+avisa y no bloquea (D-069, Addendum 2). Puede dejar «Verificar» disponible
+al volver solo si tiene menos de 2 minutos, el navegador confirmó el
+permiso y hay una observación en marcha que la va a sustituir: menos de lo
+que ya permite quedarse en el mapa (allí la última posición sigue valiendo
+aunque la observación calle, y hasta diez minutos tras volver de segundo
+plano). Ningún radio cambia. La captura en `main` usa su propia lectura
+puntual y no se toca.
+
+**Alternativas descartadas:** dejar la observación encendida en todas las
+pantallas (GPS gastando batería en Ranking o Perfil, sin necesidad);
+guardar la posición diez minutos (lo permitiría D-069, pero no hace
+falta); guardar solo la vista y nunca la posición (el punto desaparecería
+unos segundos en cada vuelta, también con el permiso concedido); mostrar
+la posición guardada con el permiso dudoso o tras un toque (un punto que
+nadie actualiza, quizá tras retirar el permiso); devolver el mapa al
+barrio al retirar el permiso (la vista no afirma dónde está nadie y no
+sale de la memoria); `sessionStorage` para sobrevivir a una recarga (datos
+derivados de la posición en almacenamiento, fuera de alcance).
+
+**No verificado:** un Android y un iPhone reales. Lo comprobado está en
+las pruebas (rutas reales que se desmontan y se vuelven a montar, la
+posición que llega tarde, el permiso denegado o dudoso) y en Chromium sin
+cabeza con posiciones simuladas.
 
 ## 19. Flujo de captura
 
