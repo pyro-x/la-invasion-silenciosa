@@ -390,8 +390,8 @@ describe('createBarrioMap', () => {
   it('opens on the barrio and fits it once above the sheet', () => {
     const { controller } = mount()
     expect(recorded.options[0]?.bounds).toBeDefined()
-    controller.setBottomPadding(300)
-    controller.setBottomPadding(120)
+    controller.setPadding(300)
+    controller.setPadding(120)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([300, 120])
     expect(recorded.fits).toHaveLength(1)
     // the sheet is in the map's own padding; the fit only adds margins
@@ -401,16 +401,16 @@ describe('createBarrioMap', () => {
 
   it('waits for a measured sheet before fitting: zero is not a height', () => {
     const { controller } = mount()
-    controller.setBottomPadding(0)
+    controller.setPadding(0)
     expect(recorded.fits).toHaveLength(0)
-    controller.setBottomPadding(310)
+    controller.setPadding(310)
     expect(recorded.fits).toHaveLength(1)
     expect(recorded.paddings.at(-1)?.bottom).toBe(310)
   })
 
   it('never stores a view the user did not choose — the opening fit, a pin, following', () => {
     const { controller } = mount()
-    controller.setBottomPadding(310)
+    controller.setPadding(310)
     emit('moveend')
     controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
     emit('movestart')
@@ -428,9 +428,9 @@ describe('createBarrioMap', () => {
 
   it('a gesture that moved nothing does not make a sheet resize look chosen', () => {
     const { controller } = mount()
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     emit('wheel')
-    controller.setBottomPadding(120)
+    controller.setPadding(120)
     expect(stored()).toBeNull()
   })
 
@@ -453,7 +453,7 @@ describe('createBarrioMap', () => {
     emit('moveend')
     userDrag()
     emit('wheel')
-    controller.setBottomPadding(200)
+    controller.setPadding(200)
     expect(stored()).toBeNull()
   })
 
@@ -478,7 +478,7 @@ describe('createBarrioMap', () => {
     // the ease has ended by the time the sheet says how tall it is
     emit('moveend')
     const before = recorded.eases.length
-    controller.setBottomPadding(280)
+    controller.setPadding(280)
     expect(recorded.fits).toHaveLength(1)
     // one more ease, after the fit, back to where following had sent the map
     expect(recorded.eases).toHaveLength(before + 1)
@@ -492,14 +492,14 @@ describe('createBarrioMap', () => {
     controller.goTo({ lat: 40.411, lng: -3.709 })
     emit('moveend')
     const before = recorded.eases.length
-    controller.setBottomPadding(280)
+    controller.setPadding(280)
     expect(recorded.fits).toHaveLength(1)
     expect(recorded.eases).toHaveLength(before)
   })
 
   it("tells when a move of the user's has ended, and says nothing of the app's own", () => {
     const { controller, calls } = mount()
-    controller.setBottomPadding(200)
+    controller.setPadding(200)
     controller.follow({ lat: 40.4115, lng: -3.712 }, 17)
     emit('moveend')
     expect(calls.userSettled).toBe(0)
@@ -517,17 +517,17 @@ describe('createBarrioMap', () => {
     emit('moveend')
     userDrag()
     const before = recorded.eases.length
-    controller.setBottomPadding(280)
+    controller.setPadding(280)
     expect(recorded.fits).toHaveLength(1)
     expect(recorded.eases).toHaveLength(before)
   })
 
   it('two sheet resizes during one move to a pin both send it again', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.goTo({ lat: 40.4115, lng: -3.712 })
-    controller.setBottomPadding(200)
-    controller.setBottomPadding(300)
+    controller.setPadding(200)
+    controller.setPadding(300)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([80])
     expect(recorded.eases.map((e) => e.padding?.bottom)).toEqual([80, 200, 300])
     expect(recorded.eases.at(-1)?.center).toEqual([-3.712, 40.4115])
@@ -538,7 +538,7 @@ describe('createBarrioMap', () => {
     const { controller } = mount()
     controller.goTo({ lat: 40.4115, lng: -3.712 })
     expect(stored()).toBeNull()
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([300])
     userDrag()
     expect(stored()).not.toBeNull()
@@ -546,9 +546,9 @@ describe('createBarrioMap', () => {
 
   it('a resize of the map after a gesture that moved nothing stores nothing', () => {
     const { controller } = mount()
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     emit('wheel')
-    controller.setBottomPadding(120)
+    controller.setPadding(120)
     emit('movestart')
     emit('moveend')
     expect(stored()).toBeNull()
@@ -573,16 +573,16 @@ describe('createBarrioMap', () => {
 
   it('a sheet resize during a move to a pin sends the move again, with the new padding', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.goTo({ lat: 40.4115, lng: -3.712 })
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([80])
     expect(recorded.eases.at(-1)).toMatchObject({
       center: [-3.712, 40.4115],
       padding: { bottom: 300 },
     })
     emit('moveend')
-    controller.setBottomPadding(120)
+    controller.setPadding(120)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([80, 120])
     expect(stored()).toBeNull()
   })
@@ -617,7 +617,7 @@ describe('createBarrioMap', () => {
     emit('moveend')
     const { controller } = mount()
     expect(recorded.options[1]).toMatchObject({ center: [-3.71, 40.411], zoom: 15 })
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.fits).toHaveLength(0)
   })
 
@@ -640,10 +640,10 @@ describe('createBarrioMap', () => {
 
   it('a pin picked during a zoom-in, then a sheet resize, still keeps the zoom it found', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.follow({ lat: 40.411, lng: -3.71 }, 17)
     controller.goTo({ lat: 40.4125, lng: -3.7135 })
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
     controller.follow({ lat: 40.4111, lng: -3.71 })
     expect(recorded.eases.at(-1)?.zoom).toBeUndefined()
@@ -713,9 +713,9 @@ describe('createBarrioMap', () => {
 
   it('a sheet resize during a zoom-button step lets the step finish, in both directions', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.zoomBy(1)
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.paddings.at(-1)?.bottom).toBe(300)
     expect(recorded.eases.at(-1)?.zoom).toBe(16)
     // the step was stopped part-way: that zoom is not the user's view
@@ -723,18 +723,18 @@ describe('createBarrioMap', () => {
     emit('moveend')
     expect(stored()).not.toBeNull()
     controller.zoomBy(-1)
-    controller.setBottomPadding(120)
+    controller.setPadding(120)
     expect(recorded.eases.at(-1)?.zoom).toBe(15)
     emit('moveend')
-    controller.setBottomPadding(200)
+    controller.setPadding(200)
     expect(recorded.eases).toHaveLength(4)
   })
 
   it('a sheet resize during the zoom-in to the position re-sends that move, not a zoom step', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.71, 40.4111], zoom: 17 })
     emit('moveend')
     expect(stored()).toBeNull()
@@ -742,7 +742,7 @@ describe('createBarrioMap', () => {
 
   it('a zoom step cut by a move to a pin, or by a second press, does not store its half-made zoom', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.zoomBy(1)
     controller.goTo({ lat: 40.4125, lng: -3.7135 })
     emit('moveend')
@@ -756,7 +756,7 @@ describe('createBarrioMap', () => {
 
   it('a zoom step that ends at the zoom limit still counts as arrived', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     recorded.zoom = 19.6
     controller.zoomBy(1)
     expect(recorded.eases.at(-1)?.zoom).toBe(20)
@@ -766,7 +766,7 @@ describe('createBarrioMap', () => {
 
   it('a zoom-out step that the pan limit stops short still counts as arrived', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     recorded.boundsMinZoom = 14.4
     controller.zoomBy(-1)
     expect(recorded.eases.at(-1)?.zoom).toBe(14.4)
@@ -776,7 +776,7 @@ describe('createBarrioMap', () => {
 
   it('a zoom-out step at the lowest zoom still counts as arrived', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     recorded.zoom = 0.4
     controller.zoomBy(-1)
     expect(recorded.eases.at(-1)?.zoom).toBe(0)
@@ -786,7 +786,7 @@ describe('createBarrioMap', () => {
 
   it('a zoom-out step that is cut stores nothing either, however close it got', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.zoomBy(-1)
     recorded.zoom = 14.3
     interrupt()
@@ -795,7 +795,7 @@ describe('createBarrioMap', () => {
 
   it('a drag that takes over a zoom step stores the drag, not the half-made zoom', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.zoomBy(1)
     interrupt()
     expect(stored()).toBeNull()
@@ -805,7 +805,7 @@ describe('createBarrioMap', () => {
 
   it('the wheel taking over a zoom step stores the wheel zoom, not the half-made one', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.zoomBy(1)
     emit('wheel')
     interrupt()
@@ -816,17 +816,17 @@ describe('createBarrioMap', () => {
 
   it('a sheet resize that cuts the glide of a user drag still stores where it stopped', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     emit('movestart', { originalEvent: new Event('touchstart') })
     recorded.easing = true
-    controller.setBottomPadding(120)
+    controller.setPadding(120)
     expect(stored()).not.toBeNull()
   })
 
   it('the opening fit replaces a move started before the sheet was measured', () => {
     const { controller } = mount()
     controller.goTo({ lat: 40.4125, lng: -3.7135 })
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.paddings.map((p) => p.bottom)).toEqual([300])
     expect(recorded.fits).toHaveLength(1)
     expect(recorded.eases).toHaveLength(1)
@@ -838,7 +838,7 @@ describe('createBarrioMap', () => {
     const { controller } = mount()
     controller.zoomBy(1)
     controller.zoomBy(1)
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     expect(recorded.fits).toHaveLength(1)
     expect(recorded.eases).toHaveLength(2)
     expect(stored()).toBeNull()
@@ -846,10 +846,10 @@ describe('createBarrioMap', () => {
 
   it('a zoom-out step is carried on too, and a sheet resize keeps it', () => {
     const { controller } = mount()
-    controller.setBottomPadding(80)
+    controller.setPadding(80)
     controller.zoomBy(-1)
     controller.follow({ lat: 40.4111, lng: -3.71 })
-    controller.setBottomPadding(300)
+    controller.setPadding(300)
     controller.follow({ lat: 40.4112, lng: -3.71 })
     expect(recorded.eases.at(-1)).toMatchObject({ zoom: 14, padding: { bottom: 300 } })
   })
@@ -1008,14 +1008,14 @@ describe('createBarrioMap', () => {
       tap(-3.711, 40.412)
       await vi.waitFor(() => expect(recorded.eases).toHaveLength(2))
       emit('moveend')
-      controller.setBottomPadding(280)
+      controller.setPadding(280)
       expect(recorded.fits).toHaveLength(1)
       expect(recorded.eases).toHaveLength(2)
     })
 
     it('a sheet resize while a cluster opens sends the move again, centre included', async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       recorded.hits = [
         {
           geometry: { type: 'Point', coordinates: [-3.711, 40.412] },
@@ -1024,7 +1024,7 @@ describe('createBarrioMap', () => {
       ]
       tap(-3.711, 40.412)
       await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
-      controller.setBottomPadding(300)
+      controller.setPadding(300)
       expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 17 })
       expect(stored()).toBeNull()
     })
@@ -1206,7 +1206,7 @@ describe('createBarrioMap', () => {
 
     it('a later tap, a picked pin, a zoom button or fresh sightings also win over a late cluster', async () => {
       const { controller, calls } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       recorded.holdExpansion = true
       const late = async () => {
         recorded.answerExpansion.splice(0).forEach((answer) => answer())
@@ -1254,7 +1254,7 @@ describe('createBarrioMap', () => {
 
     it('a tap on the locate button wins over a cluster still opening; a position update does not', async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       recorded.holdExpansion = true
       recorded.hits = [cluster(9)]
       tap(-3.711, 40.412)
@@ -1268,12 +1268,12 @@ describe('createBarrioMap', () => {
 
     it('a sheet resize re-sending a zoom step does not cancel a cluster that is opening', async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       controller.zoomBy(1)
       recorded.holdExpansion = true
       recorded.hits = [cluster(9)]
       tap(-3.711, 40.412)
-      controller.setBottomPadding(300)
+      controller.setPadding(300)
       recorded.answerExpansion.splice(0).forEach((answer) => answer())
       await vi.waitFor(() =>
         expect(recorded.eases.at(-1)).toMatchObject({ center: [-3.711, 40.412], zoom: 17 }),
@@ -1282,7 +1282,7 @@ describe('createBarrioMap', () => {
 
     it('the camera stays with a picked pin when a refresh moves where it is drawn', async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       const alone = [sighting('n', 'approved')]
       controller.setSightings(alone)
       controller.setSelected('n')
@@ -1311,11 +1311,11 @@ describe('createBarrioMap', () => {
 
     it("the app's own re-sends do not cancel a cluster that is opening", async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       recorded.holdExpansion = true
       recorded.hits = [cluster(9)]
       tap(-3.711, 40.412)
-      controller.setBottomPadding(300)
+      controller.setPadding(300)
       controller.follow({ lat: 40.4111, lng: -3.71 })
       recorded.answerExpansion.splice(0).forEach((answer) => answer())
       await vi.waitFor(() =>
@@ -1335,7 +1335,7 @@ describe('createBarrioMap', () => {
 
     it('goes to where a sighting is drawn, not to the point it shares', async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       controller.setSightings([sighting('m', 'approved'), sighting('n', 'approved')])
       const [lng, lat] = coordinatesOf('sightings', 'n') ?? [0, 0]
       expect([lng, lat]).not.toEqual([-3.71, 40.411])
@@ -1347,7 +1347,7 @@ describe('createBarrioMap', () => {
 
     it('a zoom button pressed while a cluster opens keeps heading for the cluster', async () => {
       const { controller } = await mountReady()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       recorded.hits = [cluster(9)]
       tap(-3.711, 40.412)
       await vi.waitFor(() => expect(recorded.eases).toHaveLength(1))
@@ -1474,7 +1474,7 @@ describe('createBarrioMap', () => {
       expect(undrawn()).toEqual([])
 
       // in sight is the part of the map above the sheet
-      controller.setBottomPadding(300)
+      controller.setPadding(300)
       recorded.looks.length = 0
       emit('idle')
       expect(recorded.looks.at(0)).toEqual({
@@ -1710,7 +1710,7 @@ describe('createBarrioMap', () => {
         }
         expect(looked(() => userDrag())).toBe(true)
         expect(looked(() => controller.setSelected('a'))).toBe(true)
-        expect(looked(() => controller.setBottomPadding(300))).toBe(true)
+        expect(looked(() => controller.setPadding(300))).toBe(true)
         expect(looked(() => controller.setHeat(true))).toBe(false)
         expect(looked(() => controller.setHeat(false))).toBe(true)
       })
@@ -1744,7 +1744,7 @@ describe('createBarrioMap', () => {
   describe('leftovers of the LCHP-34 review (LCHP-38)', () => {
     it('a second press of a zoom button adds to where the first was heading', () => {
       const { controller } = mount()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       controller.zoomBy(1)
       controller.zoomBy(1)
       expect(recorded.eases.map((e) => e.zoom)).toEqual([16, 17])
@@ -1755,7 +1755,7 @@ describe('createBarrioMap', () => {
 
     it("a step that the window's own resize moved the limit for still counts as arrived", () => {
       const { controller } = mount()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       recorded.boundsMinZoom = 14.4
       controller.zoomBy(-1)
       expect(recorded.eases.at(-1)?.zoom).toBe(14.4)
@@ -1768,7 +1768,7 @@ describe('createBarrioMap', () => {
 
     it('a zoom-in to the position cut by a gesture leaves the next drag to be stored', () => {
       const { controller } = mount()
-      controller.setBottomPadding(80)
+      controller.setPadding(80)
       controller.follow({ lat: 40.4111, lng: -3.71 }, 17)
       recorded.zoom = 15.6
       interrupt()
@@ -1831,14 +1831,14 @@ describe('circlePolygon', () => {
 
 describe('picker mode (LCHP-36)', () => {
   const HERE = { lat: 40.4116, lng: -3.7102 }
-  function mountPicker(center: { lat: number; lng: number } | null = HERE) {
+  function mountPicker(center: { lat: number; lng: number } | null = HERE, onUserMove = () => {}) {
     const centres: { center: { lat: number; lng: number }; byUser: boolean; zoom: number }[] = []
     const controller = createBarrioMap(
       document.createElement('div'),
       {
         onPick: () => {},
         onMapTap: () => {},
-        onUserMove: () => {},
+        onUserMove,
         onUserSettled: () => {},
         onCenterChanged: (at, byUser, zoom) => centres.push({ center: at, byUser, zoom }),
       },
@@ -1863,7 +1863,7 @@ describe('picker mode (LCHP-36)', () => {
     const { controller } = mountPicker(null)
     expect(recorded.options.at(-1)).toMatchObject({ bounds: expect.anything() })
     emit('load')
-    controller.setBottomPadding(200)
+    controller.setPadding(200)
     expect(recorded.fits).toHaveLength(0)
     expect(recorded.paddings.at(-1)).toEqual({ top: 0, left: 0, right: 0, bottom: 200 })
   })
@@ -1910,6 +1910,30 @@ describe('picker mode (LCHP-36)', () => {
     expect(centres.at(-1)?.byUser).toBe(true)
   })
 
+  it('a press is the neighbour taking the map, before any move; the barrio map waits for the move', () => {
+    const onUserMove = vi.fn()
+    mountPicker(HERE, onUserMove)
+    emit('load')
+    emit('touchstart')
+    expect(onUserMove).toHaveBeenCalledTimes(1)
+    emit('mousedown')
+    expect(onUserMove).toHaveBeenCalledTimes(2)
+
+    const onBarrioMove = vi.fn()
+    mounted.push(
+      createBarrioMap(document.createElement('div'), {
+        onPick: () => {},
+        onMapTap: () => {},
+        onUserMove: onBarrioMove,
+        onUserSettled: () => {},
+      }),
+    )
+    emit('load')
+    emit('touchstart')
+    emit('mousedown')
+    expect(onBarrioMove).not.toHaveBeenCalled()
+  })
+
   it('a stored view is neither read for the opening nor forgotten by the position', () => {
     const remembered = JSON.stringify({ center: [-3.709, 40.412], zoom: 14 })
     localStorage.setItem('lis.map.view', remembered)
@@ -1923,7 +1947,7 @@ describe('picker mode (LCHP-36)', () => {
   it('the header card is padding too: the map centres between it and the dock', () => {
     const { controller } = mountPicker()
     emit('load')
-    controller.setBottomPadding(220, 80)
+    controller.setPadding(220, 80)
     expect(recorded.paddings.at(-1)).toEqual({ top: 80, left: 0, right: 0, bottom: 220 })
     controller.follow(HERE, 17)
     expect(recorded.eases.at(-1)).toMatchObject({ padding: { top: 80, bottom: 220 } })
@@ -1932,7 +1956,7 @@ describe('picker mode (LCHP-36)', () => {
   it('«Volver a mi posición» eases to the position at street zoom, above the dock', () => {
     const { controller } = mountPicker()
     emit('load')
-    controller.setBottomPadding(220)
+    controller.setPadding(220)
     recorded.zoom = 14
     controller.follow(HERE, 17)
     expect(recorded.eases.at(-1)).toMatchObject({

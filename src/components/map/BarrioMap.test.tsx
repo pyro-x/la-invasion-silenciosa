@@ -27,7 +27,7 @@ const controllerStub = vi.hoisted((): BarrioMapController => ({
   setMe: (me, rangeM) => calls.log.push(`me ${me ? me.lat : null} ${rangeM}`),
   metresFromCentre: () => calls.fromCentreM,
   isMoving: () => calls.moving,
-  setBottomPadding: (px) => calls.log.push(`padding ${px}`),
+  setPadding: (px) => calls.log.push(`padding ${px}`),
   goTo: (target) => calls.log.push(`goTo ${target.id} ${target.lat}`),
   follow: (target, minZoom) => calls.log.push(`follow ${target.lat} ${minZoom}`),
   zoomBy: (delta) => calls.log.push(`zoomBy ${delta}`),

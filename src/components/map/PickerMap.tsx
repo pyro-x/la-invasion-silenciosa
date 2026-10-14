@@ -75,7 +75,7 @@ export function PickerMap({
   }, [me, rangeM])
 
   useEffect(() => {
-    controller.current?.setBottomPadding(padding.bottom, padding.top)
+    controller.current?.setPadding(padding.bottom, padding.top)
   }, [padding.bottom, padding.top])
 
   useEffect(() => {

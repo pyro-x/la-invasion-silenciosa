@@ -68,7 +68,7 @@ export type BarrioMapController = {
   /** The map is moving: a gesture in progress, or an ease of the app's. */
   isMoving: () => boolean
   /** Space covered by the bottom sheet (and, for a picker, the header card): the map centres between them. */
-  setBottomPadding: (px: number, topPx?: number) => void
+  setPadding: (px: number, topPx?: number) => void
   /**
    * Eases to a point, at the zoom the map has. With the id of a sighting, to
    * where that sighting is drawn, which need not be its own coordinate.
@@ -813,6 +813,16 @@ export function createBarrioMap(
     if (event.originalEvent) userMoved()
   })
   map.on('wheel', userMoved)
+  // In the picker the map is the neighbour's from the press: a fix arriving
+  // before the first move must not ease it out from under the finger.
+  if (picker) {
+    const pressed = () => {
+      followed = null
+      handlers.onUserMove()
+    }
+    map.on('mousedown', pressed)
+    map.on('touchstart', pressed)
+  }
   map.on('moveend', () => {
     lookSoon()
     report(gesture)
@@ -932,7 +942,7 @@ export function createBarrioMap(
       drawMe()
     },
 
-    setBottomPadding(px, top = 0) {
+    setPadding(px, top = 0) {
       bottomPx = px
       topPx = top
       lookSoon()

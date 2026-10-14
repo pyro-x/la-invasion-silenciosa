@@ -1287,7 +1287,7 @@ David). Medido a 390×780: el canvas pasa de 358×216 px a 390×704 px.
 * **Arquitectura:** `createBarrioMap()` (`src/components/map/`) es el
   único módulo que habla con MapLibre para esta pantalla — una factoría
   sin React que devuelve una API pequeña (`setSightings`, `setSelected`,
-  `setHeat`, `setMe`, `setBottomPadding`, `goTo`, `follow`, `zoomBy`,
+  `setHeat`, `setMe`, `setPadding`, `goTo`, `follow`, `zoomBy`,
   `destroy`), al estilo del `mapview.js` de Alcorqueando. `BarrioMap.tsx` es
   un envoltorio fino.
 
@@ -1601,7 +1601,8 @@ observación a zoom 17, sin vuelo desde el encuadre del barrio, no
 recuerda ninguna vista, no dibuja avistamientos y sí la posición del
 vecino con su círculo de precisión y el anillo de 50 m en el que puede
 moverse el pin. El pin es la retícula de Alcorqueando, fija en el
-centro del mapa que el dock deja libre (top: calc((100% − dock) / 2));
+centro del mapa que dejan libre la tarjeta y el dock (top: calc(tarjeta +
+(100% − tarjeta − dock) / 2));
 la cabecera (título, ✕, indicador de pasos) flota arriba en una
 tarjeta y el dock flota abajo con la línea de estado, la precisión,
 «📡 Volver a mi posición», «▸ Revisa y envía» y la frase de
@@ -1613,9 +1614,10 @@ la posición a la que se le envió es GPS con esa precisión; si no, es a
 mano. El mapa SIGUE al vecino: cada posición nueva lo recentra
 (ignorando saltos menores de 0,7 m o de la mitad del error de esa
 posición) y re-etiqueta el pin como GPS, hasta que el vecino toma el
-mapa — arrastre, pellizco o rueda; el seguimiento se corta al empezar
-el gesto, así que una posición que llegue a mitad de gesto o durante
-su inercia no mueve nada. Desde entonces el pin es suyo (manual, sin
+mapa — lo pulsa, lo arrastra, lo pellizca o usa la rueda; el
+seguimiento se corta al pulsarlo, antes de que se mueva, así que una
+posición que llegue a mitad de gesto o durante su inercia no mueve
+nada. Desde entonces el pin es suyo (manual, sin
 precisión) y la observación solo lo juzga: alejarse 60 m retira
 «Revisa y envía» con «Ese punto está a 60 m de ti. El máximo son
 50 m.» y pone la retícula en naranja (el color de aviso del tema);
