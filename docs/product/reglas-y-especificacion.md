@@ -194,7 +194,7 @@ Flujo de **4 pasos**:
 - **Recordatorio** de cómo se suman los puntos.
 
 ### 7 · Verificación (modal)
-- **Qué hace:** muestra el avistamiento de otro vecino (foto, criatura, «Ubicación aproximada · La Latina · hace X»; ni calle ni autor) y pregunta si está bien clasificado. **Confirmar** solo se activa cuando la foto se ha cargado: se verifica mirando la prueba.
+- **Qué hace:** muestra el avistamiento de otro vecino (foto, criatura, «Ubicación aproximada · La Latina · hace X»; ni calle ni autor) y pregunta si está bien clasificado. **Confirmar** no se activa hasta que la app tiene la foto: sin prueba no se verifica.
 - **Acciones:** **Confirmar (+5)** · Reclasificar · Saltar.
 - **Recordatorio:** comprobar que no aparezcan personas ni datos privados.
 - **Solo se abre estando cerca** de la criatura (§3.2).
