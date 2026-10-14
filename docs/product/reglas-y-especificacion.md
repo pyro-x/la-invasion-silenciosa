@@ -156,10 +156,11 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Comportamiento:** se muestra solo la **primera vez** (se recuerda en el dispositivo). Forzable con `?onboarding=1` o desde Tweaks.
 
 ### 2 · Mapa
-- **Contenido:** cartografía real de La Latina (OpenStreetMap) con los **avistamientos anclados a calles reales**; leyenda de las 5 criaturas.
+- **Contenido:** cartografía real de La Latina (datos de OpenStreetMap, servidos por OpenFreeMap) con cada **avistamiento en su ubicación aproximada**: por privacidad, el mapa lo redondea a una cuadrícula de unos 55 m. Los pendientes parpadean; donde los pines se pisan, un círculo con el número los agrupa.
+- **Sin leyenda:** lo que una leyenda explicaría se dice donde surge la duda. La ficha de cada pin dice qué es la criatura, y la etiqueta «Por verificar» lleva un aro que parpadea al ritmo de los pines pendientes. La referencia completa es la pestaña **Especies**.
 - **Interacciones:**
   - Toggle **Avistamientos / Mapa de calor**.
-  - Tocar un pin → ficha rápida (criatura, calle, autor, estado); si está pendiente, botón **Verificar**.
+  - Tocar un pin → ficha rápida: criatura, estado («Por verificar» / «Validado»), «Ubicación aproximada · La Latina · hace 35 min» y qué es esa criatura. **Ni calle ni autor**: el mapa público no los muestra nunca. Botones **Ver evidencia** (la foto, solo si la pides) y, si está pendiente, **Verificar**.
   - Lista **"Cerca de ti · por verificar"** con scroll propio (el mapa queda fijo y se adapta a la altura disponible), **ordenada por distancia a ti**, con la distancia en cada fila («a 80 m · hace 35 min»). Sin posición se ordena por fecha y se titula «En el barrio».
   - **El mapa te sigue:** se abre sobre tu posición, a nivel de calle, y se mueve contigo. Si lo arrastras para mirar otra zona deja de seguirte, y vuelve solo cuando llevas un rato sin tocarlo y te has alejado más de 85 m del centro del mapa (nunca mientras tengas una ficha abierta). Alrededor de tu punto se dibuja el círculo dentro del cual puedes verificar, y junto al título la precisión de tu posición («± 12 m»; «Posición de hace 3 min» si es antigua).
   - **Sin posición el mapa la pide**, nunca al cargar por su cuenta: «Para jugar, el mapa tiene que saber dónde estás.» + **Usar mi ubicación**. Quien solo quiera mirar puede cerrar el aviso.
@@ -195,7 +196,7 @@ Flujo de **4 pasos**:
 - **Recordatorio** de cómo se suman los puntos.
 
 ### 7 · Verificación (modal)
-- **Qué hace:** muestra el avistamiento de otro vecino (foto, criatura, calle, autor) y pregunta si está bien clasificado.
+- **Qué hace:** muestra el avistamiento de otro vecino (foto, criatura, «Ubicación aproximada · La Latina · hace X»; ni calle ni autor) y pregunta si está bien clasificado. **Confirmar** no se activa hasta que la app tiene la foto: sin prueba no se verifica.
 - **Acciones:** **Confirmar (+5)** · Reclasificar · Saltar.
 - **Recordatorio:** comprobar que no aparezcan personas ni datos privados.
 - **Solo se abre estando cerca** de la criatura (§3.2).
