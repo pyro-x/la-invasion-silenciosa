@@ -1,4 +1,5 @@
-// Geolocation + neighborhood bounds, shared by the capture flow.
+// Neighborhood bounds, shared by the map and the capture flow. The position
+// itself comes from the live watch (src/lib/geoWatch.ts).
 
 // Client-side mirror of `isWithinNeighborhood` in the Edge Function
 // (supabase/functions/api/lib/validation.ts): same LCHP-4 frame, same GPS
@@ -20,38 +21,4 @@ export function isWithinLaLatina(lat: number, lng: number): boolean {
     lng >= LA_LATINA_BBOX.minLng - BBOX_MARGIN &&
     lng <= LA_LATINA_BBOX.maxLng + BBOX_MARGIN
   )
-}
-
-export type GeoFix =
-  | { kind: 'ok'; lat: number; lng: number; accuracyM: number; /** When it was read. */ at: number }
-  | { kind: 'denied' }
-  | { kind: 'unavailable' }
-
-/**
- * One-shot position fix. Must be called from a user gesture (LCHP-5/LCHP-14
- * decision: the native permission prompt fires on tap, never on load).
- * Never rejects — denial and absence are ordinary outcomes the caller
- * explains, not exceptions.
- */
-export function getGeoFix(): Promise<GeoFix> {
-  return new Promise((resolve) => {
-    if (!('geolocation' in navigator)) {
-      resolve({ kind: 'unavailable' })
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) =>
-        resolve({
-          kind: 'ok',
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracyM: position.coords.accuracy,
-          at: Date.now(),
-        }),
-      // code 1 = PERMISSION_DENIED (the constant itself may be absent in
-      // non-browser test environments).
-      (error) => resolve(error.code === 1 ? { kind: 'denied' } : { kind: 'unavailable' }),
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
-    )
-  })
 }

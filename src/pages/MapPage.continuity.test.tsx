@@ -256,8 +256,10 @@ describe('map continuity across the app’s screens (LCHP-56)', () => {
       expect(map.options).toMatchObject({ center: HOME, zoom: 17 })
       expect(map.options.bounds).toBeUndefined()
       // the browser confirmed the grant: the watch is running again and the
-      // position kept from before is on screen, not a search
-      await waitFor(() => expect(watchPosition).toHaveBeenCalledTimes(watchesBefore + 1))
+      // position kept from before is on screen, not a search. Cazar resumes
+      // the watch on its own arrival too (D-070), so it counts one more.
+      const resumes = screenName === 'Cazar' ? 2 : 1
+      await waitFor(() => expect(watchPosition).toHaveBeenCalledTimes(watchesBefore + resumes))
       expect(await screen.findByText('± 12 m')).toBeInTheDocument()
       expect(screen.getByText('Cerca de ti')).toBeInTheDocument()
       expect(screen.queryByText(/Buscando tu posición/)).not.toBeInTheDocument()

@@ -171,10 +171,12 @@ Navegación por **barra inferior** de 5 destinos, con el botón central (Cazar) 
 - **Ficha de detalle:** sprite grande, qué es, hábitat, pista de rastreo, rareza y puntos que otorga.
 
 ### 4 · Cazar / Registrar (botón central)
+**La puerta:** al entrar, la app necesita la cámara y tu ubicación. Si falta alguna, una pantalla lo explica («¡Prepara tu equipo!») y un solo toque pide las dos; el permiso nunca se pide al cargar. Si eres tú quien la pide con ese toque, la app espera la respuesta antes de seguir; si el navegador ya la tenía concedida de otra vez, el flujo sigue mientras el móvil la busca y el paso 3 espera a tenerla. **Sin ubicación no se puede cazar:** si la deniegas, la app explica cómo activarla y te deja volver al mapa. Sin cámara sí se puede seguir (cámara del sistema o galería).
+
 Flujo de **4 pasos**:
 1. **Captura** — visor de cámara + recordatorio de privacidad → disparar / repetir / usar foto.
 2. **Identificar** — elegir la especie (Candadín / Turistox / Checkinchu / Keymon / Localín).
-3. **Ubicación** — mapa con ubicación aproximada + toggle de privacidad ("solo guardamos ubicación aproximada"). **Hace falta tu posición:** el pin se puede ajustar a mano, pero solo a menos de 50 m de donde estás («Ese punto está a 120 m de ti. El máximo son 50 m.»). Sin posición, o con una poco precisa, no se puede continuar.
+3. **¿Dónde está la criatura?** — mapa que abre centrado en tu posición, con el pin fijo al centro («Por privacidad, en el mapa solo se muestra una ubicación aproximada»). **Hace falta tu posición:** el pin se puede ajustar a mano, pero solo a menos de 50 m de donde estás («Ese punto está a 120 m de ti. El máximo son 50 m.»). Sin posición, o con una poco precisa, no se puede continuar; si te alejas con el paso abierto, la app te lo dice en el momento.
 4. **Revisar y enviar** — resumen (foto, especie, ubicación, estado pendiente) → enviar.
 - **Salida:** pantalla de éxito con **+10 pts pendientes de validación** y vuelta al mapa; el avistamiento queda **pendiente**. Los puntos se consolidan solo cuando se valida.
 

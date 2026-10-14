@@ -1,6 +1,6 @@
-// Live position for the map's «dónde estoy» (LCHP-34), ported from
-// Alcorqueando's geo.js. A watch, not a one-shot fix: the capture flow keeps
-// its own getGeoFix() (src/lib/geo.ts) until LCHP-36.
+// Live position for the map's «dónde estoy» (LCHP-34) and for the capture
+// flow (LCHP-54), ported from Alcorqueando's geo.js. A watch, not a one-shot
+// fix: one module, one position, whichever screen is asking.
 //
 // The native permission prompt fires only from startGeoWatch(), which must
 // be called from a tap (D-052) — iOS shows its question reliably only on a

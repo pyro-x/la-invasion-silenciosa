@@ -31,8 +31,6 @@ export type CaptureFlowState = {
   photo: CapturePhoto | null
   speciesId: SpeciesId | null
   position: CapturePosition | null
-  /** Informational privacy toggle of the location step. */
-  approxOnly: boolean
   sending: boolean
   done: boolean
   /** Spanish message from a failed submit; cleared on retry or navigation. */
@@ -44,7 +42,6 @@ export const initialCaptureFlowState: CaptureFlowState = {
   photo: null,
   speciesId: null,
   position: null,
-  approxOnly: true,
   sending: false,
   done: false,
   submitError: null,
@@ -55,7 +52,6 @@ export type CaptureFlowAction =
   | { type: 'PHOTO_CLEARED' }
   | { type: 'SPECIES_SELECTED'; speciesId: SpeciesId }
   | { type: 'POSITION_CHANGED'; position: CapturePosition }
-  | { type: 'APPROX_TOGGLED' }
   | { type: 'NEXT' }
   | { type: 'STEP_SELECTED'; step: CaptureStep }
   | { type: 'SUBMIT_STARTED' }
@@ -89,8 +85,6 @@ export function captureFlowReducer(
       return state.step === 1 ? { ...state, speciesId: action.speciesId } : state
     case 'POSITION_CHANGED':
       return state.step === 2 ? { ...state, position: action.position } : state
-    case 'APPROX_TOGGLED':
-      return state.step === 2 ? { ...state, approxOnly: !state.approxOnly } : state
     case 'NEXT': {
       if (state.sending || state.done || state.step === 3) return state
       if (!isStepComplete(state, state.step)) return state
