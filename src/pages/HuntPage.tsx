@@ -131,12 +131,14 @@ export function HuntPage() {
   // light on behind the guidance: it is released, and the viewfinder opens
   // again by itself once the door passes (the permission is already given).
   // Judged again when a stream arrives (`cameraArmed`): the refusal may
-  // have come first.
+  // have come first. A watch paused on return from the background waits
+  // for a tap the same way.
   const refused =
     geo.kind === 'denied' ||
     geo.kind === 'unavailable' ||
     geo.kind === 'timeout' ||
-    geo.kind === 'unsupported'
+    geo.kind === 'unsupported' ||
+    geo.kind === 'paused'
   useEffect(() => {
     if (passed || !refused) return
     primedStreamRef.current?.getTracks().forEach((track) => track.stop())
@@ -396,7 +398,7 @@ export function HuntPage() {
             {sendBlock && (
               <div
                 className="panel panel-2 pad stack"
-                role="note"
+                role="status"
                 style={{ padding: 12, gap: 10, fontSize: 12.5, color: 'var(--ink-dim)' }}
               >
                 <span>{sendBlock}</span>

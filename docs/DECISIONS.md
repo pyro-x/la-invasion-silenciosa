@@ -848,3 +848,10 @@ Checked by both seats with nothing found: `askedForPosition` telling the tap's s
 On `7653914`, Sol and Terra on Codex (Claude still at its session limit). Both asked for changes, for the same single finding; both said nothing else in `35a99b0..7653914` blocks the merge, and both confirmed the fake-timer test of Addendum 2 fails without its continuation and that D-070, brief §19 and rules §6 match the code.
 
 - **A camera granted after the position was refused, but before the 15 s limit, stayed live behind the guidance** (MEDIUM, both): the release effect ran on the refusal with an empty ref, the stream was parked afterwards, and nothing judged it again. Fixed after the budget, as the smallest change there is: the release effect also runs when a stream arrives (`cameraArmed`), so a refusal that came first still releases it. Test: tap, refusal, then the grant; the track is stopped. **This commit is after the budget and no seat has seen it**; it is one dependency in an effect and one test, and the PR says so.
+
+### D-070 · Addendum 4 · 2026-10-14 · CodeRabbit on PR #58
+
+Two comments, both Minor, both agreed and both cheap; taken without a further round.
+
+- **A camera parked while the first fix was awaited stayed live when the watch paused in the background** (Minor): back from the background, a browser that does not say outright that the grant holds gets a paused watch and the gate's «Activar mi ubicación» again, but the release effect only knew the refusals, so the camera light stayed on behind the gate. `paused` now counts as a refusal for the parked stream; the viewfinder still reopens by itself once the door passes. Test: tap, stream granted, `visibilitychange` with the Permissions API answering 'prompt'; the track is stopped.
+- **The send block at the review was not announced** (Minor): it appears while the neighbour is on the review, when a fix moves them away, and `role="note"` is not a live region. It is `role="status"` now, as the location notices are.

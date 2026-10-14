@@ -447,7 +447,7 @@ describe('capture flow (Cazar)', () => {
       expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeEnabled()
 
       act(() => watcher().success(geoFix(SIXTY_M_NORTH, 9)))
-      expect(await screen.findByRole('note')).toHaveTextContent(
+      expect(await screen.findByRole('status')).toHaveTextContent(
         /El pin está a 6\d m de ti\. Acércate a menos de 50 m, o vuelve a situarlo\./,
       )
       expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeDisabled()
@@ -460,7 +460,7 @@ describe('capture flow (Cazar)', () => {
 
       // a position lost at the review blocks too, and «Volver a situarla» goes back to the map
       act(() => watcher().fail(geoFailure(1)))
-      expect(await screen.findByRole('note')).toHaveTextContent(/Activa tu ubicación para enviar/)
+      expect(await screen.findByRole('status')).toHaveTextContent(/Activa tu ubicación para enviar/)
       expect(screen.getByRole('button', { name: /Enviar al registro/ })).toBeDisabled()
       await user.click(screen.getByRole('button', { name: /Volver a situarla/ }))
       expect(await screen.findByText('¿Dónde está la criatura?')).toBeInTheDocument()
@@ -630,6 +630,27 @@ describe('capture flow (Cazar)', () => {
       act(() => grant(fakeCamera(stopTrack)))
       await waitFor(() => expect(stopTrack).toHaveBeenCalled())
       expect(screen.getByText(/candado de la barra/)).toBeInTheDocument()
+    })
+
+    it('a camera waiting for the first fix is released when the watch pauses in the background', async () => {
+      const user = userEvent.setup()
+      firstVisit()
+      cameraStateMock.mockResolvedValue('prompt')
+      phoneHolds()
+      const stopTrack = vi.fn()
+      const getUserMedia = vi.fn(() => Promise.resolve(fakeCamera(stopTrack)))
+      stubNavigator({ mediaDevices: { getUserMedia } })
+      renderHunt()
+
+      await user.click(await screen.findByRole('button', { name: /Activar cámara y ubicación/ }))
+      await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1))
+      // back from the background, the browser will not say the grant still holds
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await waitFor(() => expect(stopTrack).toHaveBeenCalled())
+      expect(screen.getByRole('button', { name: /Activar mi ubicación/ })).toBeEnabled()
+      expect(screen.queryByLabelText(/Galería/)).not.toBeInTheDocument()
     })
 
     it('a camera the browser grants after the door gave up on it is stopped on arrival', async () => {
